@@ -1,0 +1,177 @@
+version: "0.4.0"
+project:
+  title: "FlowCache: Decoupling Reuse Value and Fidelity Risk for Prefix Caching in Memory-Constrained Agent Workflows"
+  short_name: "FlowCache"
+  root: "."
+  source_documents:
+    - "IDEA.rewritten.md"
+target_venue:
+  name: "IEEE ICWS"
+  year: "2027"
+  mode: "review"
+  cfp_status: "TBD - not yet published as of 2026-07-24"
+  backup_venue: "IEEE EDGE 2026"
+  venue_guide: "missing - no icws.md or edge.md in ccf-paper-writer/references/venue-guides/"
+  template_fallback: "IEEE conference (IEEEtran.cls)"
+stage:
+  current: "scaffolded"
+  gate: "G0"
+  next_week: "W1"
+  plan: "execution-plan.md"
+  route: "A"
+  updated_at: "2026-07-24"
+artifacts:
+  manuscript: "manuscript/main.tex"
+  bibliography: "manuscript/references.bib"
+  figures: "figures/"
+  tables: "tables/"
+  experiments: "experiments/"
+  reviews: "reviews/"
+  submission: "submission/"
+  execution_plan: "execution-plan.md"
+hardware:
+  gpu: "NVIDIA RTX 4090D 24GB"
+  constraint: "memory-constrained GPU emulation; not equivalent to real mobile/edge devices"
+claims:
+  - id: "C1"
+    description: "Cache-compatible agent workflow abstraction and trace protocol"
+    status: "planned"
+    source: "IDEA.rewritten.md Section 9"
+  - id: "C2"
+    description: "Reuse-value/fidelity-risk decoupled joint residency controller"
+    status: "planned"
+    source: "IDEA.rewritten.md Section 9"
+  - id: "C3"
+    description: "Systematic empirical study on reuse-fidelity misalignment"
+    status: "planned"
+    source: "IDEA.rewritten.md Section 9"
+routes:
+  - id: "A"
+    description: "Exact-prefix reuse value + fidelity risk + joint precision/residency (推荐主线)"
+    status: "active"
+    requires_gates: ["G0", "G1", "G2", "G3", "G4"]
+    source: "IDEA.rewritten.md Section 11"
+  - id: "B"
+    description: "When Does Workflow Structure Create Physical KV Reuse? (保守回退)"
+    status: "fallback"
+    trigger: "G0/G1/G2/G3/G4 任一关键门槛失败"
+    source: "IDEA.rewritten.md Section 11"
+  - id: "C"
+    description: "Model-Scoped Shadow Frontiers for Heterogeneous Edge-Cloud Agents (高风险扩展)"
+    status: "deferred"
+    trigger: "具备真实双端点后，作为 TSC 扩展；不与路线 A 同时塞入首篇会议论文"
+    source: "IDEA.rewritten.md Section 11"
+status_schema:
+  allowed_values: ["not_started", "in_progress", "passed", "failed"]
+  note: "适用于 gates.status 和 experiments.status；passed=通过门槛/完成实验，failed=触发失败动作"
+gates:
+  - id: "G0"
+    description: "Exactness and Loadability"
+    status: "not_started"
+    week: "W1-W2"
+    depends_on: []
+    failure_action: "允许切换一次受支持的模型/后端；仍失败则路线 A No-Go，转路线 B，不进入预测器开发"
+    fallback_route: "B"
+    triggers_route_switch: true
+    source: "IDEA.rewritten.md Section 7"
+  - id: "G1"
+    description: "Opportunity"
+    status: "not_started"
+    week: "W5"
+    depends_on: ["G0", "E1"]
+    failure_action: "转向'何时工作流结构产生物理 KV 复用'的 benchmark/characterization 论文"
+    fallback_route: "B"
+    triggers_route_switch: true
+    source: "IDEA.rewritten.md Section 7"
+  - id: "G2"
+    description: "Two-Axis Necessity"
+    status: "not_started"
+    week: "W9-W10"
+    depends_on: ["G1", "G3", "G4"]
+    failure_action: "若 joint policy 无净收益，reuse-fidelity 主线不成立，转路线 B；不把低相关分析单独包装成方法贡献"
+    fallback_route: "B"
+    triggers_route_switch: true
+    source: "IDEA.rewritten.md Section 7"
+  - id: "G3"
+    description: "Lossless Residency"
+    status: "not_started"
+    week: "W7-W8"
+    depends_on: ["G0", "G1"]
+    failure_action: "路线 A No-Go；可保留实现作为工程基线，但不以无损 residency 单独投稿该主张"
+    fallback_route: "B"
+    triggers_route_switch: true
+    source: "IDEA.rewritten.md Section 7"
+  - id: "G4"
+    description: "Quantization"
+    status: "not_started"
+    week: "W9-W10"
+    depends_on: ["G0"]
+    failure_action: "在 G0 已允许的一次模型/后端切换后仍失败，则路线 A No-Go 并转路线 B；不能删除量化后继续使用 reuse-fidelity 主标题投稿"
+    fallback_route: "B"
+    triggers_route_switch: true
+    source: "IDEA.rewritten.md Section 7"
+  - id: "G5"
+    description: "Learning"
+    status: "not_started"
+    week: "W7-W8"
+    depends_on: ["G1", "G3"]
+    failure_action: "保留简单、可解释的 controller，不为论文形式强行加入 GNN"
+    fallback_route: null
+    triggers_route_switch: false
+    source: "IDEA.rewritten.md Section 7"
+experiments:
+  - id: "E1"
+    description: "Cache opportunity and workload characterization"
+    status: "not_started"
+    week: "W6"
+    gates: ["G1"]
+    scripts:
+      - "experiments/e1/trace_utils.py"
+      - "experiments/e1/record_trajectories.py"
+      - "experiments/e1/characterize_workload.py"
+      - "experiments/e1/compare_oracle.py"
+      - "experiments/e1/plot_characterization.py"
+    source: "IDEA.rewritten.md Section 8"
+  - id: "E2"
+    description: "Reuse-value prediction"
+    status: "not_started"
+    week: "W7-W8"
+    gates: ["G5"]
+    source: "IDEA.rewritten.md Section 8"
+  - id: "E3"
+    description: "Fidelity-risk estimation"
+    status: "not_started"
+    week: "W9, W11"
+    gates: ["G4"]
+    source: "IDEA.rewritten.md Section 8"
+  - id: "E4"
+    description: "End-to-end main results"
+    status: "not_started"
+    week: "W11"
+    gates: ["G2", "G3", "G4"]
+    source: "IDEA.rewritten.md Section 8"
+  - id: "E5"
+    description: "Mechanism ablation"
+    status: "not_started"
+    week: "W11"
+    gates: ["G2"]
+    source: "IDEA.rewritten.md Section 8"
+  - id: "E6"
+    description: "Generalization and robustness"
+    status: "not_started"
+    week: "W12"
+    gates: ["G5"]
+    source: "IDEA.rewritten.md Section 8"
+  - id: "E7"
+    description: "Failure and overhead"
+    status: "not_started"
+    week: "W12"
+    gates: []
+    source: "IDEA.rewritten.md Section 8"
+reviews: []
+revision_ledger:
+  path: "reviews/revision-ledger.md"
+  status: "not_started"
+submission_checks:
+  path: "submission/checks.md"
+  status: "not_started"

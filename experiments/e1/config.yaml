@@ -1,0 +1,39 @@
+# E1: Workload Characterization & Cache Opportunity Analysis
+# ===========================================================
+# Purpose: Prove that real Agent workloads have non-trivial exact-prefix
+#   re-access and that offline oracle significantly outperforms LRU/heuristics.
+# Gate: G1 (Opportunity)
+# Week: W6
+
+# --- Model ---
+model:
+  name: "Qwen/Qwen3-8B-Instruct"
+  dtype: "bfloat16"
+  trust_remote_code: true
+  device_map: "auto"
+
+# --- Workload ---
+workload:
+  dataset: "tau-bench"
+  subset_file: "../g2-pilot-subset.json"  # 80 workflows (55 retail + 25 airline)
+  max_workflows: 80
+  concurrency: 4
+
+# --- Cache ---
+cache:
+  block_size: 16  # tokens per block
+  kv_budgets: [0.10, 0.25, 0.50, 1.00]  # fraction of peak working set
+  scheduling_window_h: 1000  # steps
+
+# --- Replay ---
+replay:
+  arrival_process: "poisson"
+  arrival_lambda: 4  # avg workflows per scheduling window
+  tool_wait_tolerance: 1.0  # multiplier for recorded tool wait time
+
+# --- Output ---
+output:
+  trace_dir: "traces/bf16"
+  report_dir: "outputs"
+  figure_dir: "figures"
+  report_format: ["json", "markdown"]

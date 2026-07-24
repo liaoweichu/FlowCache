@@ -1,0 +1,183 @@
+% FlowCache references - entries from IDEA.rewritten.md Section 15
+% Verification status as of 2026-07-24:
+%   - 6 core 2026 prior-art papers VERIFIED via WebFetch: PBKV, ARKV, QKVShare,
+%     GraphFlow, CacheWise, ThunderAgent (see reviews/prior-art-verification.md).
+%   - GraphFlow confirmed as ICML 2026 (PMLR 306); ARKV claims CCGRID 2025
+%     (year anomaly flagged); others are arXiv preprints.
+%   - STILL UNVERIFIED (URL-only placeholders): TokenCake, Helium, Agent Memory,
+%     HybridFlow, Continuum -- require independent literature verification
+%     before submission.
+
+@misc{vllm-apc,
+  title = {{vLLM Automatic Prefix Caching design}},
+  url = {https://docs.vllm.ai/en/v0.14.0/design/prefix_caching/}
+}
+
+@misc{hf-kv-cache,
+  title = {{Hugging Face KV cache strategies}},
+  url = {https://huggingface.co/docs/transformers/kv_cache}
+}
+
+@misc{gemma4-overview,
+  title = {{Gemma 4 official overview}},
+  url = {https://ai.google.dev/gemma/docs/core}
+}
+
+@misc{pbkv,
+  title = {{Efficient Serving for Dynamic Agent Workflows with Prediction-based KV-Cache Management}},
+  author = {Zheng, Haoyu and Fu, Fangcheng and Wu, Jia and Yuan, Binhang and Zhang, Yongqiang and Wang, Hao and Zhu, Yuanyuan and Yan, Xiao and Jiang, Jiawei},
+  year = {2026},
+  note = {arXiv:2605.06472 (verified 2026-07-24; arXiv preprint cs.LG, no formal venue listed)},
+  url = {https://arxiv.org/abs/2605.06472}
+}
+
+@misc{kvflow,
+  title = {{KVFlow}},
+  note = {arXiv:2507.07400 (2025)},
+  url = {https://arxiv.org/abs/2507.07400}
+}
+
+@misc{cachewise,
+  title = {{CacheWise: Understanding Workloads and Optimizing KVCache Management for Efficiently Serving LLM Coding Agents}},
+  author = {Tiwari, Shubham and Chugh, Tapan and Rickert, Nash and Peter, Simon and Mahajan, Ratul and Shen, Haiying},
+  year = {2026},
+  note = {arXiv:2606.16824 (verified 2026-07-24; arXiv preprint cs.DC/cs.OS, no formal venue listed)},
+  url = {https://arxiv.org/abs/2606.16824}
+}
+
+@misc{learned-prefix-caching,
+  title = {{Learned Prefix Caching}},
+  note = {NeurIPS 2025},
+  url = {https://papers.neurips.cc/paper_files/paper/2025/hash/414f642a1ea9350006669774cba9bcd4-Abstract-Conference.html}
+}
+
+@inproceedings{infercept,
+  title = {{InferCept}},
+  booktitle = {ICML},
+  series = {PMLR},
+  volume = {235},
+  url = {https://proceedings.mlr.press/v235/abhyankar24a.html}
+}
+
+@misc{continuum,
+  title = {{Continuum}},
+  note = {arXiv:2511.02230 (2025, unverified)},
+  url = {https://arxiv.org/abs/2511.02230}
+}
+
+@misc{thunderagent,
+  title = {{ThunderAgent: A Simple, Fast and Program-Aware Agentic Inference System}},
+  author = {Kang, Hao and Li, Ziyang and Xu, Weili and Yang, Xinyu and Chen, Yinfang and Wang, Junxiong and Chen, Beidi and Krishna, Tushar and Xu, Chenfeng and Arora, Simran},
+  year = {2026},
+  note = {arXiv:2602.13692 (verified 2026-07-24; arXiv preprint cs.OS/cs.MA, v3 submitted 2026-06-30; open-sourced at github.com/Agentic-Kinetics/ThunderAgent; no formal venue listed)},
+  url = {https://arxiv.org/abs/2602.13692}
+}
+
+@misc{tokencake,
+  title = {{TokenCake}},
+  note = {arXiv:2510.18586 (2025, unverified)},
+  url = {https://arxiv.org/abs/2510.18586}
+}
+
+@misc{helium,
+  title = {{Helium}},
+  note = {arXiv:2603.16104 (2026, unverified)},
+  url = {https://arxiv.org/abs/2603.16104}
+}
+
+@misc{arkv,
+  title = {{ARKV: Adaptive and Resource-Efficient KV Cache Management under Limited Memory Budget for Long-Context Inference in LLMs}},
+  author = {Lei, Jianlong and Ilager, Shashikant},
+  year = {2026},
+  note = {arXiv:2603.08727 (verified 2026-07-24; arXiv Comments field states "Accepted in ACM/IEEE CCGRID 2025 conference" -- year anomaly flagged, pending further verification)},
+  url = {https://arxiv.org/abs/2603.08727}
+}
+
+@misc{qkvshare,
+  title = {{QKVShare: Quantized KV-Cache Handoff for Multi-Agent On-Device LLMs}},
+  author = {Honavar, Pratik and GVSL, Tejpratap},
+  year = {2026},
+  note = {arXiv:2605.03884 (verified 2026-07-24; arXiv preprint cs.AI/cs.MA, 12 pages, no formal venue listed)},
+  url = {https://arxiv.org/abs/2605.03884}
+}
+
+@inproceedings{graphflow,
+  title = {{GraphFlow: A Graph-Based Workflow Management for Efficient LLM-Agent Serving}},
+  author = {Li, Ao and Yang, Shangpeng and Chen, Fahao and Xu, Tianheng and Li, Peng and Su, Zhou},
+  year = {2026},
+  booktitle = {Proceedings of the 43rd International Conference on Machine Learning (ICML 2026)},
+  series = {PMLR},
+  volume = {306},
+  note = {arXiv:2605.22566 (verified 2026-07-24; ICML 2026 acceptance confirmed via arXiv Comments field and PDF front matter "Proceedings of the 43rd ICML, Seoul, South Korea. PMLR 306, 2026")},
+  url = {https://arxiv.org/abs/2605.22566}
+}
+
+@misc{icml2026-papers,
+  title = {{ICML 2026 official paper list}},
+  url = {https://icml.cc/Downloads/2026}
+}
+
+@misc{agent-memory,
+  title = {{Agent Memory}},
+  note = {arXiv:2603.04428 (2026, unverified)},
+  url = {https://arxiv.org/abs/2603.04428}
+}
+
+@misc{hybridflow,
+  title = {{HybridFlow}},
+  note = {arXiv:2512.22137 (2025, unverified)},
+  url = {https://arxiv.org/abs/2512.22137}
+}
+
+@misc{musique,
+  title = {{MuSiQue}},
+  url = {https://github.com/StonyBrookNLP/musique}
+}
+
+@misc{2wikimultihopqa,
+  title = {{2WikiMultihopQA}},
+  note = {COLING 2020},
+  url = {https://aclanthology.org/2020.coling-main.580/}
+}
+
+@misc{lmsys-chat-1m,
+  title = {{LMSYS-Chat-1M}},
+  note = {ICLR 2024},
+  url = {https://proceedings.iclr.cc/paper_files/paper/2024/hash/5f9bfdfe3685e4ccdbc0e7fb29cccf2a-Abstract-Conference.html}
+}
+
+@misc{tau-bench,
+  title = {{$\tau$-bench}},
+  note = {ICLR 2025},
+  url = {https://proceedings.iclr.cc/paper_files/paper/2025/hash/1b126cc38b8638e07bef37e7b2bb72bf-Abstract-Conference.html}
+}
+
+@misc{bfcl,
+  title = {{Berkeley Function Calling Leaderboard (BFCL)}},
+  url = {https://gorilla.cs.berkeley.edu/leaderboard}
+}
+
+@misc{stabletoolbench,
+  title = {{StableToolBench}},
+  url = {https://github.com/THUNLP-MT/StableToolBench}
+}
+
+@misc{rtx4090d,
+  title = {{NVIDIA GeForce RTX 4090 D}},
+  url = {https://www.nvidia.cn/geforce/graphics-cards/40-series/rtx-4090-d/}
+}
+
+@misc{icws2026-cfp,
+  title = {{IEEE ICWS 2026 Call for Papers}},
+  url = {https://services.conferences.computer.org/2026/icws/icws-call-for-papers/}
+}
+
+@misc{edge2026-cfp,
+  title = {{IEEE EDGE 2026 Call for Papers}},
+  url = {https://services.conferences.computer.org/2026/edge/edge-call-for-papers/}
+}
+
+@misc{tsc-scope,
+  title = {{IEEE Transactions on Services Computing (TSC) scope}},
+  url = {https://www.computer.org/digital-library/journals/sc/cfp-services-computing}
+}

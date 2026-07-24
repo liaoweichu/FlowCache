@@ -1,0 +1,81 @@
+% FlowCache - IEEE ICWS 2027 submission stub
+% Template: IEEE conference (IEEEtran.cls)
+% Venue guide: MISSING - no icws.md in ccf-paper-writer/references/venue-guides/
+% CFP status: TBD as of 2026-07-24
+% Source: IDEA.rewritten.md
+
+\documentclass[conference]{IEEEtran}
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{hyperref}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{FlowCache: Decoupling Reuse Value and Fidelity Risk for Prefix Caching in Memory-Constrained Agent Workflows}
+
+\author{
+\IEEEauthorblockN{Author Name}
+\IEEEauthorblockA{\textit{Affiliation} \\
+\textit{Department}\\
+City, Country \\
+email@example.com}
+}
+
+\maketitle
+
+\begin{abstract}
+% TODO: Write abstract after G1/G2 gates pass and main results are available.
+% Do not fill in claims before evidence per IDEA.rewritten.md Section 14 writing-readiness conditions.
+\end{abstract}
+
+\begin{IEEEkeywords}
+prefix caching, KV cache, LLM agent service, memory-constrained GPU, fidelity risk
+\end{IEEEkeywords}
+
+\section{Introduction}
+% Mirrors IDEA.rewritten.md Sections 0-1.
+% TODO: Problem motivation, memory-constrained agent service setting, central claim.
+
+\section{Related Work}
+% Mirrors IDEA.rewritten.md Section 3.
+% TODO: Closest-work table, novelty delta after subtracting PBKV/ARKV/QKVShare/KVFlow/GraphFlow.
+% WARNING: 6 core 2026 arXiv prior-art works require independent verification before writing.
+
+\section{Problem Formulation}
+% Mirrors IDEA.rewritten.md Section 2.
+% TODO: Reuse value S_{b,a}(t), fidelity risk D_{b,q}, action space, optimization objective.
+
+\section{Method}
+% Mirrors IDEA.rewritten.md Section 4.
+% TODO: Workflow compiler, reuse-value estimator, fidelity-risk estimator, joint residency controller.
+
+\section{Experimental Setup}
+% Mirrors IDEA.rewritten.md Section 6.
+% TODO: Workloads (BFCL/tau-bench, StableToolBench, synthetic DAG, MuSiQue, LMSYS-Chat-1M),
+% cache-compatible serialization, data split, open-loop vs closed-loop protocol.
+
+\section{Results}
+% Mirrors IDEA.rewritten.md Section 8 (E1-E7).
+% TODO: Populate only after G0-G5 gates pass and experiments are executed.
+% Do NOT fill in expected numbers; use real results only.
+
+\section{Discussion}
+% TODO: Limitations (single-GPU emulation, lineage isolation rules), failure cases (E7).
+
+\section{Conclusion}
+% TODO: Write after results are frozen.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
