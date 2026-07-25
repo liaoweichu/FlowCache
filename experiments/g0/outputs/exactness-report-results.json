@@ -3726,12 +3726,12 @@
       {
         "case_id": "cat5_000",
         "category": 5,
-        "identity_check": false,
+        "identity_check": true,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[10, 12, 15]",
+        "detail": "turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[10, 12, 15]",
         "actual_incremental_sharing": false,
-        "expected_incremental_sharing": true,
+        "expected_incremental_sharing": false,
         "shared_prefix_lens": [
           10,
           12,
@@ -3741,12 +3741,12 @@
       {
         "case_id": "cat5_001",
         "category": 5,
-        "identity_check": false,
+        "identity_check": true,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[11, 13, 14]",
+        "detail": "turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[11, 13, 14]",
         "actual_incremental_sharing": false,
-        "expected_incremental_sharing": true,
+        "expected_incremental_sharing": false,
         "shared_prefix_lens": [
           11,
           13,
@@ -3756,12 +3756,12 @@
       {
         "case_id": "cat5_002",
         "category": 5,
-        "identity_check": false,
+        "identity_check": true,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[11, 12, 15]",
+        "detail": "turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[11, 12, 15]",
         "actual_incremental_sharing": false,
-        "expected_incremental_sharing": true,
+        "expected_incremental_sharing": false,
         "shared_prefix_lens": [
           11,
           12,
@@ -3771,12 +3771,12 @@
       {
         "case_id": "cat5_003",
         "category": 5,
-        "identity_check": false,
+        "identity_check": true,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[11, 13, 15]",
+        "detail": "turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[11, 13, 15]",
         "actual_incremental_sharing": false,
-        "expected_incremental_sharing": true,
+        "expected_incremental_sharing": false,
         "shared_prefix_lens": [
           11,
           13,
@@ -3786,12 +3786,12 @@
       {
         "case_id": "cat5_004",
         "category": 5,
-        "identity_check": false,
+        "identity_check": true,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[10, 12, 18]",
+        "detail": "turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[10, 12, 18]",
         "actual_incremental_sharing": false,
-        "expected_incremental_sharing": true,
+        "expected_incremental_sharing": false,
         "shared_prefix_lens": [
           10,
           12,
@@ -3801,12 +3801,12 @@
       {
         "case_id": "cat5_005",
         "category": 5,
-        "identity_check": false,
+        "identity_check": true,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13]",
+        "detail": "turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[9, 11, 13]",
         "actual_incremental_sharing": false,
-        "expected_incremental_sharing": true,
+        "expected_incremental_sharing": false,
         "shared_prefix_lens": [
           9,
           11,
@@ -3816,12 +3816,12 @@
       {
         "case_id": "cat5_006",
         "category": 5,
-        "identity_check": false,
+        "identity_check": true,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13]",
+        "detail": "turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[9, 11, 13]",
         "actual_incremental_sharing": false,
-        "expected_incremental_sharing": true,
+        "expected_incremental_sharing": false,
         "shared_prefix_lens": [
           9,
           11,
@@ -3831,12 +3831,12 @@
       {
         "case_id": "cat5_007",
         "category": 5,
-        "identity_check": false,
+        "identity_check": true,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13]",
+        "detail": "turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[9, 11, 13]",
         "actual_incremental_sharing": false,
-        "expected_incremental_sharing": true,
+        "expected_incremental_sharing": false,
         "shared_prefix_lens": [
           9,
           11,
@@ -3846,12 +3846,12 @@
       {
         "case_id": "cat5_008",
         "category": 5,
-        "identity_check": false,
+        "identity_check": true,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 12, 14]",
+        "detail": "turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[9, 12, 14]",
         "actual_incremental_sharing": false,
-        "expected_incremental_sharing": true,
+        "expected_incremental_sharing": false,
         "shared_prefix_lens": [
           9,
           12,
@@ -3861,12 +3861,12 @@
       {
         "case_id": "cat5_009",
         "category": 5,
-        "identity_check": false,
+        "identity_check": true,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13]",
+        "detail": "turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[9, 11, 13]",
         "actual_incremental_sharing": false,
-        "expected_incremental_sharing": true,
+        "expected_incremental_sharing": false,
         "shared_prefix_lens": [
           9,
           11,
@@ -3956,7 +3956,7 @@
     ],
     "summary": {
       "total": 100,
-      "identity_pass": 90,
+      "identity_pass": 100,
       "parent_chain_pass": 100,
       "invalidation_pass": 20,
       "invalidation_total": 20

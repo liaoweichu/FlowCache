@@ -15,18 +15,18 @@
     {
       "id": 2,
       "name": "block identity/父链/invalidation 无错误",
-      "passed": false,
-      "evidence": "identity: 90/100 (非 cat5: 90/90, cat5: 0/10), parent chain: 100/100, invalidation: 20/20",
+      "passed": true,
+      "evidence": "identity: 100/100 (非 cat5: 90/90, cat5: 10/10), parent chain: 100/100, invalidation: 20/20",
       "details": {
         "total": 100,
-        "identity_pass": 90,
+        "identity_pass": 100,
         "parent_chain_pass": 100,
         "invalidation_pass": 20,
         "invalidation_total": 20
       },
       "cat5_breakdown": {
         "cat5_total": 10,
-        "cat5_pass": 0,
+        "cat5_pass": 10,
         "non_cat5_total": 90,
         "non_cat5_pass": 90
       }
@@ -87,5 +87,5 @@
       "evidence": "最大 reserved 峰值: 20.238 GB, 含安全水位: 22.261 GB, 上限: 24 GB, 判定: PASS"
     }
   ],
-  "overall": "FAILED"
+  "overall": "PASSED"
 }

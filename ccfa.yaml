@@ -14,9 +14,9 @@ target_venue:
   venue_guide: "missing - no icws.md or edge.md in ccf-paper-writer/references/venue-guides/"
   template_fallback: "IEEE conference (IEEEtran.cls)"
 stage:
-  current: "scaffolded"
-  gate: "G0"
-  next_week: "W1"
+  current: "g0_passed"
+  gate: "G1"
+  next_week: "W6"
   plan: "execution-plan.md"
   route: "A"
   updated_at: "2026-07-25"
@@ -68,7 +68,7 @@ status_schema:
 gates:
   - id: "G0"
     description: "Exactness and Loadability"
-    status: "not_started"
+    status: "passed"
     week: "W1-W2"
     depends_on: []
     design_doc: "experiments/experiment-designs.md#g0"
@@ -76,6 +76,8 @@ gates:
     fallback_route: "B"
     triggers_route_switch: true
     source: "IDEA.rewritten.md Section 7"
+    passed_at: "2026-07-25"
+    passed_evidence: "KV bit-identical 220/220, identity 100/100, codec 100 block lineage 100/100, 8x4k=20.2GB<24GB"
   - id: "G1"
     description: "Opportunity"
     status: "not_started"

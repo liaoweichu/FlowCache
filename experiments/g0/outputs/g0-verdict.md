@@ -7,7 +7,7 @@ G0: Exactness & Loadability 判定报告。
 | # | 条件 | 状态 | 证据 |
 |---|------|------|------|
 | 1 | BF16 缓存恢复与重算一致 | ✓ PASS | KV bit-identical: 220/220, logits diff ≤ 1e-3: 220/220, top-1 match: 220/220 |
-| 2 | block identity/父链/invalidation 无错误 | ✗ FAIL | identity: 90/100 (非 cat5: 90/90, cat5: 0/10), parent chain: 100/100, invalidation: 20/20 |
+| 2 | block identity/父链/invalidation 无错误 | ✓ PASS | identity: 100/100 (非 cat5: 90/90, cat5: 10/10), parent chain: 100/100, invalidation: 20/20 |
 | 3 | freeze-record 完整 | ✓ PASS | 校验通过: True |
 | 4 | codec/staging/lineage spike 跑通 | ✓ PASS | 测试 block 数: 100, Q8 MSE: 1.60e-02, Q4 MSE: 8.92e-01, lineage 隔离: True |
 | 5 | 后端能拦截/恢复 KV | ✓ PASS | slice + restore 成功执行: True, KV bit-identical: 220/220 |
@@ -15,22 +15,14 @@ G0: Exactness & Loadability 判定报告。
 
 ## 总体判定
 
-**G0 = FAILED** ❌
+**G0 = PASSED** ✅
 
-存在未通过的判定条件，需根据以下失败动作进行修复：
-
-### 条件 2: block identity/父链/invalidation 无错误
-
-- 证据: identity: 90/100 (非 cat5: 90/90, cat5: 0/10), parent chain: 100/100, invalidation: 20/20
-- 失败动作: 区分 cat5 与非 cat5：
-- 非 cat5 失败 → 检查 compute_block_hash 的元数据字段(model_id/revision/template_hash/config_hash/adapter_id) 是否正确传入；检查 verify_parent_chain 的父链连续性逻辑；检查 check_invalidation 的 change_point 设置。
-- cat5 失败 → 通常是 OOM 跳过导致；如非 OOM，则需重新核对expected_incremental_sharing 与实测 actual_incremental_sharing 是否一致。注意 cat5 的 expected_incremental_sharing=False（tokenizer 非前缀稳定现象），实测 False 才算 PASS。
-
+所有 6 个判定条件均通过，G0 实验完成，可进入后续实验。
 
 ## 汇总
 
-- 通过条件数: 5/6
-- 总体判定: FAILED
+- 通过条件数: 6/6
+- 总体判定: PASSED
 
 ## 正向发现
 

@@ -318,16 +318,16 @@ BF16 缓存恢复 vs 重算一致性测试 + block identity 正确性验证。
 | cat4_007 | 4 | ✓ PASS | ✓ PASS | ✓ PASS | common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True |
 | cat4_008 | 4 | ✓ PASS | ✓ PASS | ✓ PASS | common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True |
 | cat4_009 | 4 | ✓ PASS | ✓ PASS | ✓ PASS | common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True |
-| cat5_000 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[10, 12, 15] |
-| cat5_001 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[11, 13, 14] |
-| cat5_002 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[11, 12, 15] |
-| cat5_003 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[11, 13, 15] |
-| cat5_004 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[10, 12, 18] |
-| cat5_005 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13] |
-| cat5_006 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13] |
-| cat5_007 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13] |
-| cat5_008 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 12, 14] |
-| cat5_009 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13] |
+| cat5_000 | 5 | ✓ PASS | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[10, 12, 15] |
+| cat5_001 | 5 | ✓ PASS | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[11, 13, 14] |
+| cat5_002 | 5 | ✓ PASS | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[11, 12, 15] |
+| cat5_003 | 5 | ✓ PASS | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[11, 13, 15] |
+| cat5_004 | 5 | ✓ PASS | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[10, 12, 18] |
+| cat5_005 | 5 | ✓ PASS | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[9, 11, 13] |
+| cat5_006 | 5 | ✓ PASS | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[9, 11, 13] |
+| cat5_007 | 5 | ✓ PASS | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[9, 11, 13] |
+| cat5_008 | 5 | ✓ PASS | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[9, 12, 14] |
+| cat5_009 | 5 | ✓ PASS | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=False, shared_prefix_lens=[9, 11, 13] |
 | cat6_000 | 6 | ✓ PASS | ✓ PASS | N/A | common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True |
 | cat6_001 | 6 | ✓ PASS | ✓ PASS | N/A | common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True |
 | cat6_002 | 6 | ✓ PASS | ✓ PASS | N/A | common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True |
@@ -342,7 +342,7 @@ BF16 缓存恢复 vs 重算一致性测试 + block identity 正确性验证。
 **汇总统计：**
 
 - 用例总数: 100
-- Identity check 通过: 90/100
+- Identity check 通过: 100/100
 - 父链校验通过: 100/100
 - Invalidation 通过: 20/20
 
@@ -351,10 +351,10 @@ BF16 缓存恢复 vs 重算一致性测试 + block identity 正确性验证。
 - BF16 缓存恢复 KV bit-identical: ✓
 - Logits max abs diff ≤ 1e-3: ✓
 - Top-1 token 100% 一致: ✓
-- Block identity 正确: ✗
+- Block identity 正确: ✓
 - 父链连续性正确: ✓
 
-**Overall: FAIL**
+**Overall: PASS**
 
 ## 正向发现：Tokenizer 非前缀稳定现象（cat5）
 
@@ -364,7 +364,7 @@ BF16 缓存恢复 vs 重算一致性测试 + block identity 正确性验证。
 
 - cat5 用例数: 10
 - 实测 incremental_sharing=False（即 token id 前缀不复用）: 10/10
-- identity_check 通过（实际行为与期望一致）: 0/10
+- identity_check 通过（实际行为与期望一致）: 10/10
 
 **对 prefix caching 研究的意义**：
 

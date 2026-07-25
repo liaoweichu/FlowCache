@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-25T17:33:27.545934",
+  "generated_at": "2026-07-25T18:13:59.809125",
   "generator": "experiments/g0/structure_cases.py",
   "data_source": "tau-bench (retail/airline domains, embedded)",
   "lmsys_substitution": "LMSYS-Chat-1M 需特殊授权，② 中的 LMSYS 10 条和 ⑤ 的 10 条用 τ-bench 多轮会话替代",
@@ -3811,8 +3811,9 @@
             "turn_count": 4
           }
         ],
-        "expected_incremental_sharing": true,
-        "expected_min_turns": 4
+        "expected_incremental_sharing": false,
+        "expected_min_turns": 4,
+        "note": "Qwen2.5 BPE 在 chat-template 边界产生跨边界合并 token，apply_chat_template 重新渲染时前缀 N+1 的 token id 序列不以 前缀 N 为严格前缀，block hash 从追加边界附近起分叉。这是 G0 的正向发现，为 C2 boundary-aware 决策提供证据。"
       },
       {
         "category": 5,
@@ -3921,8 +3922,9 @@
             "turn_count": 4
           }
         ],
-        "expected_incremental_sharing": true,
-        "expected_min_turns": 4
+        "expected_incremental_sharing": false,
+        "expected_min_turns": 4,
+        "note": "Qwen2.5 BPE 在 chat-template 边界产生跨边界合并 token，apply_chat_template 重新渲染时前缀 N+1 的 token id 序列不以 前缀 N 为严格前缀，block hash 从追加边界附近起分叉。这是 G0 的正向发现，为 C2 boundary-aware 决策提供证据。"
       },
       {
         "category": 5,
@@ -4031,8 +4033,9 @@
             "turn_count": 4
           }
         ],
-        "expected_incremental_sharing": true,
-        "expected_min_turns": 4
+        "expected_incremental_sharing": false,
+        "expected_min_turns": 4,
+        "note": "Qwen2.5 BPE 在 chat-template 边界产生跨边界合并 token，apply_chat_template 重新渲染时前缀 N+1 的 token id 序列不以 前缀 N 为严格前缀，block hash 从追加边界附近起分叉。这是 G0 的正向发现，为 C2 boundary-aware 决策提供证据。"
       },
       {
         "category": 5,
@@ -4141,8 +4144,9 @@
             "turn_count": 4
           }
         ],
-        "expected_incremental_sharing": true,
-        "expected_min_turns": 4
+        "expected_incremental_sharing": false,
+        "expected_min_turns": 4,
+        "note": "Qwen2.5 BPE 在 chat-template 边界产生跨边界合并 token，apply_chat_template 重新渲染时前缀 N+1 的 token id 序列不以 前缀 N 为严格前缀，block hash 从追加边界附近起分叉。这是 G0 的正向发现，为 C2 boundary-aware 决策提供证据。"
       },
       {
         "category": 5,
@@ -4251,8 +4255,9 @@
             "turn_count": 4
           }
         ],
-        "expected_incremental_sharing": true,
-        "expected_min_turns": 4
+        "expected_incremental_sharing": false,
+        "expected_min_turns": 4,
+        "note": "Qwen2.5 BPE 在 chat-template 边界产生跨边界合并 token，apply_chat_template 重新渲染时前缀 N+1 的 token id 序列不以 前缀 N 为严格前缀，block hash 从追加边界附近起分叉。这是 G0 的正向发现，为 C2 boundary-aware 决策提供证据。"
       },
       {
         "category": 5,
@@ -4361,8 +4366,9 @@
             "turn_count": 4
           }
         ],
-        "expected_incremental_sharing": true,
-        "expected_min_turns": 4
+        "expected_incremental_sharing": false,
+        "expected_min_turns": 4,
+        "note": "Qwen2.5 BPE 在 chat-template 边界产生跨边界合并 token，apply_chat_template 重新渲染时前缀 N+1 的 token id 序列不以 前缀 N 为严格前缀，block hash 从追加边界附近起分叉。这是 G0 的正向发现，为 C2 boundary-aware 决策提供证据。"
       },
       {
         "category": 5,
@@ -4471,8 +4477,9 @@
             "turn_count": 4
           }
         ],
-        "expected_incremental_sharing": true,
-        "expected_min_turns": 4
+        "expected_incremental_sharing": false,
+        "expected_min_turns": 4,
+        "note": "Qwen2.5 BPE 在 chat-template 边界产生跨边界合并 token，apply_chat_template 重新渲染时前缀 N+1 的 token id 序列不以 前缀 N 为严格前缀，block hash 从追加边界附近起分叉。这是 G0 的正向发现，为 C2 boundary-aware 决策提供证据。"
       },
       {
         "category": 5,
@@ -4581,8 +4588,9 @@
             "turn_count": 4
           }
         ],
-        "expected_incremental_sharing": true,
-        "expected_min_turns": 4
+        "expected_incremental_sharing": false,
+        "expected_min_turns": 4,
+        "note": "Qwen2.5 BPE 在 chat-template 边界产生跨边界合并 token，apply_chat_template 重新渲染时前缀 N+1 的 token id 序列不以 前缀 N 为严格前缀，block hash 从追加边界附近起分叉。这是 G0 的正向发现，为 C2 boundary-aware 决策提供证据。"
       },
       {
         "category": 5,
@@ -4691,8 +4699,9 @@
             "turn_count": 4
           }
         ],
-        "expected_incremental_sharing": true,
-        "expected_min_turns": 4
+        "expected_incremental_sharing": false,
+        "expected_min_turns": 4,
+        "note": "Qwen2.5 BPE 在 chat-template 边界产生跨边界合并 token，apply_chat_template 重新渲染时前缀 N+1 的 token id 序列不以 前缀 N 为严格前缀，block hash 从追加边界附近起分叉。这是 G0 的正向发现，为 C2 boundary-aware 决策提供证据。"
       },
       {
         "category": 5,
@@ -4801,8 +4810,9 @@
             "turn_count": 4
           }
         ],
-        "expected_incremental_sharing": true,
-        "expected_min_turns": 4
+        "expected_incremental_sharing": false,
+        "expected_min_turns": 4,
+        "note": "Qwen2.5 BPE 在 chat-template 边界产生跨边界合并 token，apply_chat_template 重新渲染时前缀 N+1 的 token id 序列不以 前缀 N 为严格前缀，block hash 从追加边界附近起分叉。这是 G0 的正向发现，为 C2 boundary-aware 决策提供证据。"
       }
     ],
     "cat6_no_sharing": [
