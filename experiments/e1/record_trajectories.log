@@ -1222,3 +1222,51 @@ LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
 2026-07-25 22:27:39,082 [INFO] 
 LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
 2026-07-25 22:27:42,035 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:27:53,033 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:27:55,835 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:28:08,131 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:28:10,483 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:28:11,128 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:28:13,058 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:28:13,096 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:28:15,073 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:28:15,074 [WARNING] 无法替换 env 的 user simulator，seed 注入可能失效。tau-bench 版本可能已变更 user simulator 属性名。
+2026-07-25 22:28:15,075 [INFO] TauBenchAdapter(domain=airline, seed=101112, user_model=deepseek/deepseek-v4-flash, task_split=test) 初始化完成
+2026-07-25 22:28:15,080 [INFO] Loaded 50 tasks from airline/test
+2026-07-25 22:28:15,129 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:28:16,943 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:28:18,143 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:28:20,438 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:28:21,743 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:28:23,287 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:28:33,445 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:28:41,348 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:28:51,899 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:28:53,981 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:29:04,117 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:29:08,092 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:29:18,482 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:29:20,657 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:29:31,680 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:29:33,924 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:29:44,671 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:29:49,412 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:30:00,595 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:30:02,892 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:30:14,456 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
+2026-07-25 22:30:17,977 [INFO] Wrapper: Completed Call, calling success_handler
