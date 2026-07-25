@@ -318,16 +318,16 @@ BF16 缓存恢复 vs 重算一致性测试 + block identity 正确性验证。
 | cat4_007 | 4 | ✓ PASS | ✓ PASS | ✓ PASS | common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True |
 | cat4_008 | 4 | ✓ PASS | ✓ PASS | ✓ PASS | common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True |
 | cat4_009 | 4 | ✓ PASS | ✓ PASS | ✓ PASS | common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True |
-| cat5_000 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, incremental_sharing=False |
-| cat5_001 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, incremental_sharing=False |
-| cat5_002 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, incremental_sharing=False |
-| cat5_003 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, incremental_sharing=False |
-| cat5_004 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, incremental_sharing=False |
-| cat5_005 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, incremental_sharing=False |
-| cat5_006 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, incremental_sharing=False |
-| cat5_007 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, incremental_sharing=False |
-| cat5_008 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, incremental_sharing=False |
-| cat5_009 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, incremental_sharing=False |
+| cat5_000 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[10, 12, 15] |
+| cat5_001 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[11, 13, 14] |
+| cat5_002 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[11, 12, 15] |
+| cat5_003 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[11, 13, 15] |
+| cat5_004 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[10, 12, 18] |
+| cat5_005 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13] |
+| cat5_006 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13] |
+| cat5_007 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13] |
+| cat5_008 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 12, 14] |
+| cat5_009 | 5 | ✗ FAIL | ✓ PASS | N/A | turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13] |
 | cat6_000 | 6 | ✓ PASS | ✓ PASS | N/A | common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True |
 | cat6_001 | 6 | ✓ PASS | ✓ PASS | N/A | common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True |
 | cat6_002 | 6 | ✓ PASS | ✓ PASS | N/A | common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True |
@@ -355,3 +355,21 @@ BF16 缓存恢复 vs 重算一致性测试 + block identity 正确性验证。
 - 父链连续性正确: ✓
 
 **Overall: FAIL**
+
+## 正向发现：Tokenizer 非前缀稳定现象（cat5）
+
+**核心结论**：Qwen2.5 BPE tokenizer 在 chat-template 边界（如 `\n` 与 `\nI`、`<|im_start|>assistant\n` 与紧接其后的回复首字符）会产生跨边界的合并 token。
+
+对纯追加多轮会话（cat5）用 `apply_chat_template` 重新渲染每个前缀时，虽然文本上前缀 N+1 严格包含前缀 N，但 token id 序列并不以前缀 N 为严格前缀。分叉点通常落在追加边界（即上一轮 assistant 末尾与下一轮 user 起始的交界）附近，导致 block hash 从该点起全部不同。
+
+- cat5 用例数: 10
+- 实测 incremental_sharing=False（即 token id 前缀不复用）: 10/10
+- identity_check 通过（实际行为与期望一致）: 0/10
+
+**对 prefix caching 研究的意义**：
+
+1. 朴素按 token id 做前缀匹配，在 chat-template 边界会丢失复用机会；
+2. vLLM/HF 现行的 text-prefix-then-retokenize 方案能恢复部分复用，但牺牲了 token id 严格前缀不变性；
+3. 这为 IDEA 中 C2 联合控制器需要做 boundary-aware 复用决策提供了实证依据，也支撑了 C3 "reuse value 与 fidelity 风险错位" 的核心主张。
+
+本发现已写入 cat5 用例的 `expected_incremental_sharing=False`，作为 G0 的正向输出而非失败。

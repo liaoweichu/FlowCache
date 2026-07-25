@@ -47,31 +47,31 @@
       "context_len": 4096
     },
     {
-      "allocated_peak_gb": 0.0,
-      "reserved_peak_gb": 0.0,
+      "allocated_peak_gb": 19.640004608,
+      "reserved_peak_gb": 20.2375168,
       "allocated_values": [
-        -1.0,
-        -1.0,
-        -1.0,
-        -1.0,
-        -1.0
+        19.640004608,
+        19.640004608,
+        19.640004608,
+        19.640004608,
+        19.640004608
       ],
       "reserved_values": [
-        -1.0,
-        -1.0,
-        -1.0,
-        -1.0,
-        -1.0
+        20.157825024,
+        20.2375168,
+        20.2375168,
+        20.2375168,
+        20.2375168
       ],
-      "oom": true,
-      "oom_count": 5,
-      "name": "concurrent_8x8k",
+      "oom": false,
+      "oom_count": 0,
+      "name": "concurrent_8x4k",
       "concurrent": 8,
-      "context_len": 8192
+      "context_len": 4096
     }
   ],
   "memory_limit_gb": 24.0,
   "safety_margin": 0.1,
-  "required_with_safety_gb": 20.87714816,
-  "verdict": "FAIL"
+  "required_with_safety_gb": 22.261268480000005,
+  "verdict": "PASS"
 }

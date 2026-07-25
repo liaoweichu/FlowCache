@@ -3729,7 +3729,14 @@
         "identity_check": false,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, incremental_sharing=False"
+        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[10, 12, 15]",
+        "actual_incremental_sharing": false,
+        "expected_incremental_sharing": true,
+        "shared_prefix_lens": [
+          10,
+          12,
+          15
+        ]
       },
       {
         "case_id": "cat5_001",
@@ -3737,7 +3744,14 @@
         "identity_check": false,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, incremental_sharing=False"
+        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[11, 13, 14]",
+        "actual_incremental_sharing": false,
+        "expected_incremental_sharing": true,
+        "shared_prefix_lens": [
+          11,
+          13,
+          14
+        ]
       },
       {
         "case_id": "cat5_002",
@@ -3745,7 +3759,14 @@
         "identity_check": false,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, incremental_sharing=False"
+        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[11, 12, 15]",
+        "actual_incremental_sharing": false,
+        "expected_incremental_sharing": true,
+        "shared_prefix_lens": [
+          11,
+          12,
+          15
+        ]
       },
       {
         "case_id": "cat5_003",
@@ -3753,7 +3774,14 @@
         "identity_check": false,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, incremental_sharing=False"
+        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[11, 13, 15]",
+        "actual_incremental_sharing": false,
+        "expected_incremental_sharing": true,
+        "shared_prefix_lens": [
+          11,
+          13,
+          15
+        ]
       },
       {
         "case_id": "cat5_004",
@@ -3761,7 +3789,14 @@
         "identity_check": false,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, incremental_sharing=False"
+        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[10, 12, 18]",
+        "actual_incremental_sharing": false,
+        "expected_incremental_sharing": true,
+        "shared_prefix_lens": [
+          10,
+          12,
+          18
+        ]
       },
       {
         "case_id": "cat5_005",
@@ -3769,7 +3804,14 @@
         "identity_check": false,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, incremental_sharing=False"
+        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13]",
+        "actual_incremental_sharing": false,
+        "expected_incremental_sharing": true,
+        "shared_prefix_lens": [
+          9,
+          11,
+          13
+        ]
       },
       {
         "case_id": "cat5_006",
@@ -3777,7 +3819,14 @@
         "identity_check": false,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, incremental_sharing=False"
+        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13]",
+        "actual_incremental_sharing": false,
+        "expected_incremental_sharing": true,
+        "shared_prefix_lens": [
+          9,
+          11,
+          13
+        ]
       },
       {
         "case_id": "cat5_007",
@@ -3785,7 +3834,14 @@
         "identity_check": false,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, incremental_sharing=False"
+        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13]",
+        "actual_incremental_sharing": false,
+        "expected_incremental_sharing": true,
+        "shared_prefix_lens": [
+          9,
+          11,
+          13
+        ]
       },
       {
         "case_id": "cat5_008",
@@ -3793,7 +3849,14 @@
         "identity_check": false,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, incremental_sharing=False"
+        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 12, 14]",
+        "actual_incremental_sharing": false,
+        "expected_incremental_sharing": true,
+        "shared_prefix_lens": [
+          9,
+          12,
+          14
+        ]
       },
       {
         "case_id": "cat5_009",
@@ -3801,7 +3864,14 @@
         "identity_check": false,
         "parent_chain": true,
         "invalidation": null,
-        "detail": "turns=4, incremental_sharing=False"
+        "detail": "turns=4, actual_incremental_sharing=False, expected=True, shared_prefix_lens=[9, 11, 13]",
+        "actual_incremental_sharing": false,
+        "expected_incremental_sharing": true,
+        "shared_prefix_lens": [
+          9,
+          11,
+          13
+        ]
       },
       {
         "case_id": "cat6_000",
