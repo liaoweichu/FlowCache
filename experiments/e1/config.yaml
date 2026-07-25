@@ -7,7 +7,7 @@
 
 # --- Model ---
 model:
-  name: "Qwen/Qwen3-8B-Instruct"
+  name: "Qwen/Qwen2.5-7B-Instruct"  # 2026-07-25 变更：Qwen3-8B → Qwen2.5-7B-Instruct（见 experiment-designs.md Part 0.3）
   dtype: "bfloat16"
   trust_remote_code: true
   device_map: "auto"

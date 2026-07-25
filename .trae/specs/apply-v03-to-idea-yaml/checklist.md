@@ -1,0 +1,20 @@
+- [ ] IDEA.rewritten.md §6.1 主表 workload 严格限定为 τ-bench + BFCL 两个；合成 DAG、MuSiQue、2WikiMultihopQA、LMSYS 不再作为主 workload
+- [ ] IDEA.rewritten.md §6.1 新增 Ch.3 质量面（LongBench/GSM8K）和 Ch.5 压力面（STB/SWE/Toolathlon）的 workload 描述
+- [ ] IDEA.rewritten.md §7 G5（Learning）整节已删除，且有说明"GNN 不启用是设计选择"
+- [ ] IDEA.rewritten.md §7 G1/G2/G4 各注明数据来源改为复用正式实验数据（Ch.x）
+- [ ] IDEA.rewritten.md §7 G3 包含 W8 冒烟前置与主表最终确认两时点描述
+- [ ] IDEA.rewritten.md §8 E1–E7 已重构为 Ch.1–Ch.5 五个小节，指标和成功标准保留
+- [ ] IDEA.rewritten.md §8 Ch.4 写明 10 对照 × 6 cell、核心 4 变体 + 2 设计消融同表
+- [ ] IDEA.rewritten.md §8 Ch.3 写明 reuse 2 变体 + fidelity 2 变体，GNN 删除
+- [ ] IDEA.rewritten.md §8 Ch.5 写明 3 轴（family-out、到达扰动、branch 噪声）
+- [ ] IDEA.rewritten.md §11 route A 切换条件不再包含 G5
+- [ ] IDEA.rewritten.md §12 周次表更新为 v0.3 的 10 行版本（含 W8 G3 冒烟、W9 末样本量标定）
+- [ ] IDEA.rewritten.md §14 写作就绪条件移除 G5 相关项
+- [ ] ccfa.yaml gates 段：G5 条目已删除
+- [ ] ccfa.yaml gates 段：G1/G2/G3/G4 的 design_doc 指向新章节锚点（#ch1/#ch4/#ch3 等）
+- [ ] ccfa.yaml gates 段：G3 包含 smoke_check 子字段
+- [ ] ccfa.yaml experiments 段：E1–E7 重构为 Ch.1–Ch.5 五个条目
+- [ ] ccfa.yaml stage 段：updated_at 为 2026-07-25
+- [ ] ccfa.yaml stage 段：新增 scope_spec 字段指向 experiment-scope-redesign/spec.md
+- [ ] ccfa.yaml routes[A].requires_gates 仍为 ["G0","G1","G2","G3","G4"]（G5 本不在其中，确认未被误加）
+- [ ] IDEA.rewritten.md 与 ccfa.yaml 之间无引用矛盾（Gate 周次、实验 ID、design_doc 路径一致）

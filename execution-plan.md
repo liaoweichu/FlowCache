@@ -34,10 +34,10 @@
 | 周次 | 目标 | 对应 Gate / Experiment | 产物 | 失败动作 |
 |---|---|---|---|---|
 | W1 | 冻结一个主模型、后端和主机配置；完成 Q-storage codec/staging spike | G0（loadability/codec） | 模型/后端/主机配置冻结记录；Q-storage codec spike 报告；allocated/reserved 峰值测量 | G0 失败：允许切换一次受支持的模型/后端；仍失败则路线 A No-Go，转路线 B，不进入预测器开发 |
-| W2 | 实现 block identity、precision lineage、父链、invalidation 和 exactness tests；冻结两个主工具 workload | G0（exactness） | block identity/lineage/父链实现；exactness test 通过证据；两个主工具 workload 冻结 | 同 W1（G0 失败动作） |
-| W3–W4 | 两个主 workload 的 compiler/trace/replay；合成 DAG 仅作受控测试 | —（可重放 trace） | 可重放 trace；cache-compatible 序列化规则；合成 DAG 受控测试 | trace 不可重放则阻塞 G1，间接触发 G1 失败动作 |
-| W5 | LRU/GDSF、同引擎 APC、offline oracle；至少一个 PBKV/KVFlow closest baseline | G1（opportunity/comparability） | LRU/GDSF/APC/oracle 实现；至少一个 closest baseline 可公平运行；oracle headroom 测量 | G1 失败：转向"何时工作流结构产生物理 KV 复用"的 benchmark/characterization 论文（即路线 B） |
-| W6 | workload characterization 与无泄漏 split | E1 | E1 画像报告（workflow 长度/深度/宽度/分支率/工具等待、exact-prefix overlap、LCP tokens、next-use distance、working-set size、KV 占比、oracle vs LRU/heuristic headroom）；无泄漏 split | E1 画像若显示 exact-prefix overlap 过低或 oracle headroom 很小，反映 G1 未真正通过，需回溯 |
+| W2 | 实现 block identity、precision lineage、父链、invalidation 和 exactness tests；冻结主工具 workload（τ-bench/BFCL/StableToolBench）与真实轨迹子集 | G0（exactness） | block identity/lineage/父链实现；exactness test 通过证据；主工具 workload 与真实轨迹子集冻结 | 同 W1（G0 失败动作） |
+| W3–W5 | Tier 1 主 workload（τ-bench 495/BFCL 800/STB 500）rollout 录制与 compiler/trace/replay；Tier 2 真实轨迹（SWE/Toolathlon/CATraces）整理；Tier 4 静态集整理 | —（可重放 trace） | 可重放 trace；cache-compatible 序列化规则；0.4.3 核验报告 | trace 不可重放则阻塞 G1，间接触发 G1 失败动作 |
+| W6 | LRU/GDSF、同引擎 APC、offline oracle；至少一个 PBKV/KVFlow closest baseline | G1（opportunity/comparability） | LRU/GDSF/APC/oracle 实现；至少一个 closest baseline 可公平运行；oracle headroom 测量 | G1 失败：转向"何时工作流结构产生物理 KV 复用"的 benchmark/characterization 论文（即路线 B） |
+| W7 | workload characterization 与无泄漏 split | E1 | E1 画像报告（workflow 长度/深度/宽度/分支率/工具等待、exact-prefix overlap、LCP tokens、next-use distance、working-set size、KV 占比、oracle vs LRU/heuristic headroom）；无泄漏 split | E1 画像若显示 exact-prefix overlap 过低或 oracle headroom 很小，反映 G1 未真正通过，需回溯 |
 | W7–W8 | GPU BF16↔CPU BF16↔evict、heuristic/survival reuse estimator 与简单 controller | G3 / G5 | 无损 residency 控制器；heuristic/survival reuse estimator；简单 controller；G3/G5 评估 | G3 失败：路线 A No-Go；可保留实现作为工程基线，但不以无损 residency 单独投稿该主张。G5 失败：保留简单、可解释的 controller，不为论文形式强行加入 GNN（不触发路线切换） |
 | W9 | 离线量化与组合干预、fidelity estimator、质量界功效分析 | G2 / G4 | 离线量化干预回放；fidelity estimator；质量非劣界/δ/样本量预注册；功效分析 | G4 失败：在 G0 已允许的一次模型/后端切换后仍失败，则路线 A No-Go 并转路线 B；不能删除量化后继续使用 reuse–fidelity 主标题投稿 |
 | W10 | Q-storage 集成和 joint controller；与最强解耦组合直接比较 | G2 / G4 | Q-storage 集成；joint controller；joint vs 最强解耦组合对比 | G2 失败：若 joint policy 无净收益，reuse–fidelity 主线不成立，转路线 B；不把低相关分析单独包装成方法贡献 |
@@ -50,7 +50,8 @@
 
 - GNN 和第二模型只有在主结果已稳定且仍有时间时加入（W12 后移项）。
 - 14 周是否为真实时间约束仍需确认（见 IDEA Section 14"仍需确认"）。
-- 若 W3–W4 的 trace 不可重放，则 G1 缺少输入，间接触发 G1 失败动作。
+- 若 W3–W5 的 trace 不可重放，则 G1 缺少输入，间接触发 G1 失败动作。
+- **v0.2（2026-07-25）**：数据集体系重构（详见 `experiments/experiment-designs.md` 0.4）——禁自建数据集、样本总量 ~880 → ~8,800；trace 录制窗由 W3–W4 延至 W3–W5（rollout ~33–40 GPU 小时），G1 顺延至 W6、E1 顺延至 W7；G3/E2/G5（W7–W8）及之后周次不变，顺延由 W9 后缓冲吸收。
 
 ---
 
@@ -65,7 +66,7 @@
         ▼           ▼           ▼
        G1          G4          G3
    Opportunity  Quantization  Lossless
-     [W5]       [W9–W10]     Residency
+     [W6]       [W9–W10]     Residency
         │                       [W7–W8]
         │           │           │
         └─────►G3───┘           │
@@ -98,7 +99,7 @@ G0 ──► G1 ──► G3 ──► G4 ──► G2
 | Gate | 周次 | 依赖前置 Gate | 关键路径上？ |
 |---|---|---|---|
 | G0 | W1–W2 | 无 | 是 |
-| G1 | W5 | G0 | 是 |
+| G1 | W6 | G0 | 是 |
 | G2 | W9–W10 | G1, G3, G4 | 是 |
 | G3 | W7–W8 | G0, G1 | 是 |
 | G4 | W9–W10 | G0 | 是 |
@@ -110,7 +111,7 @@ G0 ──► G1 ──► G3 ──► G4 ──► G2
 
 | Experiment | 描述 | 周次 | 对应 Gate | 说明 |
 |---|---|---|---|---|
-| E1 | 缓存机会与工作负载画像 | W6 | G1 | E1 报告 exact-prefix overlap、next-use distance、oracle headroom，是 G1 opportunity 判定的中心证据，不应放在附录 |
+| E1 | 缓存机会与工作负载画像 | W7 | G1 | E1 报告 exact-prefix overlap、next-use distance、oracle headroom，是 G1 opportunity 判定的中心证据，不应放在附录 |
 | E2 | 复用价值预测 | W7–W8 | G5 | E2 的 GNN 变体仅在 G1/G5 有必要时启用；准确率提升若不能转换为系统收益，不构成贡献 |
 | E3 | 保真风险估计 | W9, W11 | G4 | E3 需要量化干预回放，依赖 G4 的量化支持；指标包括 logit KL、QA EM/F1、工具调用正确率、风险校准 |
 | E4 | 端到端主结果 | W11 | G2, G3, G4 | E4 在多 budget/并发/workload 上比较 joint policy 与最强解耦组合，是 G2 双轴必要性的端到端验证 |
@@ -233,7 +234,7 @@ Gate 与 Experiment 的 `status` 字段在 `ccfa.yaml` 中追踪以下四种状�
 | Gate | 状态 | 周次 |
 |---|---|---|
 | G0 | not_started | W1–W2 |
-| G1 | not_started | W5 |
+| G1 | not_started | W6 |
 | G2 | not_started | W9–W10 |
 | G3 | not_started | W7–W8 |
 | G4 | not_started | W9–W10 |
@@ -241,7 +242,7 @@ Gate 与 Experiment 的 `status` 字段在 `ccfa.yaml` 中追踪以下四种状�
 
 | Experiment | 状态 | 周次 |
 |---|---|---|
-| E1 | not_started | W6 |
+| E1 | not_started | W7 |
 | E2 | not_started | W7–W8 |
 | E3 | not_started | W9, W11 |
 | E4 | not_started | W11 |
