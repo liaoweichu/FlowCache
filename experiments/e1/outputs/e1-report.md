@@ -59,7 +59,7 @@
 
 ## 4. Block Working-Set Size and KV/VRAM Ratio
 
-- **Model**: Qwen3-8B (36 layers, 32 Q heads, 8 KV heads, head_dim=128, BF16)
+- **Model**: Qwen2.5-7B-Instruct (28 layers, 28 Q heads, 4 KV heads, head_dim=128, BF16)
 - **Per-Block KV**: 0.875 MB (block_size=16 tokens)
 - **Working Set Size (peak)**: 39 blocks
 - **KV Memory Estimate**: 0.0333 GB

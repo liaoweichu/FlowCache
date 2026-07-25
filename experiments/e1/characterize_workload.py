@@ -448,7 +448,11 @@ def _write_markdown_report(results: Dict, f):
     # 4. Working Set
     ws2 = results.get("working_set", {})
     f.write("\n## 4. Block Working-Set Size and KV/VRAM Ratio\n\n")
-    f.write(f"- **Model**: Qwen3-8B (36 layers, 32 Q heads, 8 KV heads, head_dim=128, BF16)\n")
+    f.write(
+        f"- **Model**: Qwen2.5-7B-Instruct "
+        f"({NUM_LAYERS} layers, {NUM_Q_HEADS} Q heads, {NUM_KV_HEADS} KV heads, "
+        f"head_dim={HEAD_DIM}, BF16)\n"
+    )
     f.write(f"- **Per-Block KV**: {ws2.get('per_block_kv_mb', '-')} MB (block_size=16 tokens)\n")
     f.write(f"- **Working Set Size (peak)**: {ws2.get('working_set_size', '-')} blocks\n")
     f.write(f"- **KV Memory Estimate**: {ws2.get('kv_memory_gb', '-')} GB\n")

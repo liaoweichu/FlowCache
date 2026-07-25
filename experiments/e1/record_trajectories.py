@@ -269,7 +269,7 @@ def _simulate_tool_result(tool_call: Dict) -> str:
 
 class TrajectoryRecorder:
     """
-    Records full BF16 trajectories for tau-bench workflows using Qwen3-8B-Instruct.
+    Records full BF16 trajectories for tau-bench workflows using Qwen2.5-7B-Instruct.
 
     For each workflow we:
       1. Build a conversation from (system, user, assistant, tool) messages.
@@ -334,11 +334,11 @@ class TrajectoryRecorder:
     # ------------------------------------------------------------------
 
     def _init_model(self):
-        """Load Qwen3-8B-Instruct in BF16 with device_map='auto'."""
+        """Load Qwen2.5-7B-Instruct in BF16 with device_map='auto'."""
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         model_cfg = self._config.get("model", {})
-        model_name = model_cfg.get("name", "Qwen/Qwen3-8B-Instruct")
+        model_name = model_cfg.get("name", "Qwen/Qwen2.5-7B-Instruct")
         dtype_str = model_cfg.get("dtype", "bfloat16")
         trust_remote = model_cfg.get("trust_remote_code", True)
         device_map = model_cfg.get("device_map", "auto")
@@ -587,7 +587,7 @@ class TrajectoryRecorder:
                 add_generation_prompt=False,
             )
         except Exception:
-            # Fallback: manual construction for Qwen3-style format
+            # Fallback: manual construction for Qwen2.5-style format
             parts = []
             for msg in messages:
                 role = msg.get("role", "user")
@@ -890,7 +890,7 @@ class TrajectoryRecorder:
             "meta": {
                 "workflow_id": task_id,
                 "domain": domain,
-                "model": self._config.get("model", {}).get("name", "Qwen/Qwen3-8B-Instruct"),
+                "model": self._config.get("model", {}).get("name", "Qwen/Qwen2.5-7B-Instruct"),
                 "block_size": self._block_size,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "num_steps": len(steps),
