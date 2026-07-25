@@ -567,9 +567,11 @@ G1 验证 FlowCache 的**第一核心假设**（IDEA §0.3-1）：
 | 数据集 | 样本数 | 说明 |
 |---|---|---|
 | τ-bench | **1,320 episodes（165 任务 × 8 seeds，retail + airline 两域）** | 主判定 workload ①；LLM 用户模拟器（`llm_user`）+ 真实工具 backend；8 seeds 与原论文 pass^k（k≤8）对齐 |
-| BFCL v3 multi-turn | 800（4 子集 × 200：`multi_turn_base` / `miss_func` / `miss_param` / `long_context`） | 主判定 workload ②；scripted user turns（1–7 轮/episode）+ 8 个真实 sim 工具类 + 状态验证 |
+| BFCL v3 multi-turn | **6,400 episodes（4 子集 × 200 × 8 decode seeds：`multi_turn_base` / `miss_func` / `miss_param` / `long_context`）** | 主判定 workload ②；scripted user turns（1–7 轮/episode）+ 8 个真实 sim 工具类 + 状态验证；8 decode seeds 与 τ-bench 对齐（seed 在 agent decode 而非 user simulator，方法论互补） |
 
 **τ-bench seeds 数冻结依据（2026-07-25 调研后冻结）**：τ-bench 原论文（arXiv 2406.12045, ICLR 2025）主表用 165 任务全量，pass^k 指标用 k∈{1,2,4,8}。3 seeds 只能算 pass^3，统计上不足以区分 consistency；8 seeds 与原论文 pass^8 完全对齐，最稳健。相比 3 seeds 增量 660 episodes，按 4090D ~30s/episode 估算约 5.5 GPU 小时。原 v0.3 的 495（3 seeds）已升级为 1320（8 seeds）。
+
+**BFCL 8 decode seeds 依据（2026-07-26 用户确认）**：BFCL 默认 temperature=0（greedy），单 seed 跑出的 800 episodes 无法做 pass^k 分析。用户确认 BFCL 也用 8 decode seeds（do_sample=True, temperature=0.7），与 τ-bench 的 8 user simulator seeds 对齐。二者方法论互补：τ-bench seed 在 user simulator（变整个对话轨迹），BFCL seed 在 agent decode（变 agent 输出，user turns 固定）。总量从 800 升级为 6400，按 4090D ~20s/episode 估算约 36 GPU 小时。
 
 **v0.3 移出主表的数据集**（仅在 Ch.5 鲁棒性章节使用，不参与 G1 判定）：
 
@@ -595,13 +597,13 @@ trace 来源：E1 录制的可重放 trace（τ-bench 与 BFCL 均为 rollout �
 
 | 项 | 值 | 依据 |
 |---|---|---|
-| 判定单元 | 1,320 episodes（τ-bench，165 任务 × 8 seeds）+ 800（BFCL） | workflow/episode 为统计单位 |
+| 判定单元 | 1,320 episodes（τ-bench，165 任务 × 8 seeds）+ 6,400（BFCL，4 子集 × 200 × 8 decode seeds） | workflow/episode 为统计单位 |
 | unique block 数（估计） | 随 episode 量上升（原 80 任务 ~300–600；全量 ×8 后 TBD） | g2-pilot §2.4 外推 |
 | 判定效应量 | oracle vs 最佳简单策略的 miss-cost 或 p95 TTFT 差距 ≥ 10% | IDEA §7 G1 内部参考阈值 |
-| 功效 | 1,320 paired episodes 下 CI 半宽显著小于 80 单元情形（0.8.3）；8 seeds 支持 pass^k（k≤8）分析 | 0.8.3 预注册规则 + τ-bench 原论文 pass^k 对齐 |
-| v0.3 样本量封顶 | τ-bench 1,320 + BFCL 800 = 2,120 episodes（不再追加 STB/SWE/Toolathlon） | spec v0.3 §5：主表仅 τ-bench + BFCL；STB/SWE/Toolathlon 仅 Ch.5 |
-| 报告补充指标 | total LLM calls（预计 5K–15K）、平均 turn/episode、pass^k（k∈{1,2,4,8}） | BFCL 单 episode turn 数较少（1–7），需补 total LLM calls 才能跨论文对比；pass^k 与 τ-bench 原论文对齐 |
-| seeds 数冻结 | 8 seeds（2026-07-25 调研后冻结） | τ-bench 原论文（arXiv 2406.12045, ICLR 2025）用 k≤8；3 seeds 只能算 pass^3 不足以区分 consistency |
+| 功效 | 7,720 paired episodes 下 CI 半宽显著小于 80 单元情形（0.8.3）；8 seeds 支持 pass^k（k≤8）分析 | 0.8.3 预注册规则 + τ-bench 原论文 pass^k 对齐 |
+| 样本量封顶 | τ-bench 1,320 + BFCL 6,400 = 7,720 episodes（不再追加 STB/SWE/Toolathlon） | spec v0.3 §5 主表仅 τ-bench + BFCL；STB/SWE/Toolathlon 仅 Ch.5 |
+| 报告补充指标 | total LLM calls（预计 15K–50K）、平均 turn/episode、pass^k（k∈{1,2,4,8}） | BFCL 单 episode turn 数较少（1–7），需补 total LLM calls 才能跨论文对比；pass^k 与 τ-bench 原论文对齐 |
+| seeds 数冻结 | 8 seeds（2026-07-25 调研后冻结，2026-07-26 用户确认 BFCL 也用 8 decode seeds） | τ-bench 原论文（arXiv 2406.12045, ICLR 2025）用 k≤8；3 seeds 只能算 pass^3 不足以区分 consistency；BFCL 8 decode seeds 与 τ-bench 对齐，方法论互补（前者 seed 在 agent decode，后者 seed 在 user simulator） |
 
 ## G1.4 Baseline / 对照
 

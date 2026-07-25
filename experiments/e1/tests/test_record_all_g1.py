@@ -303,3 +303,85 @@ def test_record_all_g1_init_error_logged_not_raised(tmp_path):
 
     assert len(recorder._oom_log) > 0
     assert "init" in recorder._oom_log[0]["error"]
+
+
+def test_trace_output_excludes_global_block_index(tmp_path):
+    """Trace JSON files must NOT contain the global_block_index field.
+
+    Background: The global block index accumulates across all episodes
+    (up to 7720). Writing it into every trace file causes O(n²) disk
+    usage (~300GB for 7720 episodes) and leaks cross-episode metadata
+    into per-episode traces. The index is kept in RAM
+    (``self._global_block_index``) for the lifetime of the recorder and
+    can be reconstructed from per-episode ``block_assignments`` during
+    characterization if needed.
+    """
+    config = {
+        "workload": {
+            "datasets": ["tau-bench"],
+            "seeds": [42],
+        },
+        "output": {"resume": True},
+    }
+    recorder = _make_recorder(tmp_path, config=config)
+
+    def mock_run_episode_tau_bench(adapter, task_idx, task_id, seed, domain):
+        return {
+            "meta": {"workflow_id": f"{task_id}_seed{seed}"},
+            "steps": [{"role": "system", "block_assignments": []}],
+        }
+
+    recorder._init_adapter = lambda dataset, seed, domain="retail", subset=None: _MockTauAdapter(domain=domain, seed=seed)
+    recorder._run_episode_tau_bench = mock_run_episode_tau_bench
+
+    recorder._record_all_g1(
+        dataset_filter="tau-bench",
+        seed_filter=42,
+        max_episodes=1,
+    )
+
+    trace_files = list((tmp_path / "tau_bench").glob("*.json"))
+    assert len(trace_files) >= 1  # retail-0 + airline-0 with max_episodes=1
+    for tf in trace_files:
+        with open(tf, "r", encoding="utf-8") as f:
+            trace = json.load(f)
+        assert "global_block_index" not in trace, (
+            f"Trace file {tf.name} contains global_block_index (causes O(n²) "
+            f"disk usage + cross-episode metadata leak)."
+        )
+        assert "meta" in trace
+        assert "steps" in trace
+
+
+def test_trace_output_excludes_global_block_index_bfcl(tmp_path):
+    """Same as above but for BFCL path."""
+    config = {
+        "workload": {
+            "datasets": ["bfcl_v3"],
+            "seeds": [42],
+            "bfcl_v3": {"subsets": ["multi_turn_base"]},
+        },
+        "output": {"resume": True},
+    }
+    recorder = _make_recorder(tmp_path, config=config)
+
+    def mock_run_episode_bfcl(adapter, episode, seed):
+        return {
+            "meta": {"workflow_id": f"{episode.entry_id}_seed{seed}"},
+            "steps": [{"role": "system", "block_assignments": []}],
+        }
+
+    recorder._init_adapter = lambda dataset, seed, domain="retail", subset=None: _MockBFCLAdapter(subset=subset or "multi_turn_base", seed=seed)
+    recorder._run_episode_bfcl = mock_run_episode_bfcl
+
+    recorder._record_all_g1(
+        dataset_filter="bfcl_v3",
+        seed_filter=42,
+    )
+
+    trace_files = list((tmp_path / "bfcl_v3").glob("*.json"))
+    assert len(trace_files) >= 1
+    for tf in trace_files:
+        with open(tf, "r", encoding="utf-8") as f:
+            trace = json.load(f)
+        assert "global_block_index" not in trace

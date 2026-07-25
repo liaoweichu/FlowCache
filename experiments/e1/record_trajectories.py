@@ -1,8 +1,8 @@
 """
 E1 Trajectory Recording Script
 ================================
-Records BF16 trajectories for tau-bench workflows using Qwen3-8B-Instruct.
-For each workflow, records:
+Records BF16 trajectories for tau-bench / BFCL v3 workflows using
+Qwen2.5-7B-Instruct. For each workflow, records:
 - Token IDs per step (system prompt, user message, assistant response, tool call, tool result)
 - Tool call parameters and results
 - Block assignments (token range -> block hash mapping)
@@ -11,9 +11,9 @@ For each workflow, records:
 Output: One JSON file per workflow in experiments/e1/traces/bf16/
 
 Design notes:
-- The simplified workflow loop uses direct model calls with message-based
-  conversation management. Real tau-bench tool execution is pending W3 integration.
-- Block identity uses SHA-256 (16 hex chars) over (token_ids, parent_hash, block_idx).
+- G1 path (_run_episode_tau_bench / _run_episode_bfcl) uses real adapters.
+- Legacy run_workflow path uses mock simulators (kept for backward compat).
+- Block identity uses G0 8-tuple SHA-256 (16 hex chars).
 - Timing uses time.perf_counter() for wall-clock measurement on the critical path.
 """
 
@@ -435,16 +435,34 @@ class TrajectoryRecorder:
         tokenizer = AutoTokenizer.from_pretrained(
             model_name, trust_remote_code=trust_remote
         )
-        # Qwen3 uses <|im_start|> / <|im_end|> chat template; ensure pad_token is set
+        # Qwen2.5 uses <|im_start|> / <|im_end|> chat template; ensure pad_token is set
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
         logger.info("Loading model: %s (dtype=%s, device_map=%s)", model_name, dtype_str, device_map)
+
+        # Cap GPU memory at 18GB on 4090D (24GB total, leaving ~6GB for
+        # KV cache + activation tensors during generate). Without this,
+        # device_map="auto" may load the entire model on GPU, leaving
+        # insufficient room for generate's KV cache → OOM mid-episode.
+        max_memory = {}
+        if torch.cuda.is_available():
+            gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+            # Reserve ~25% of GPU for KV cache + activations
+            model_budget_gb = max(1.0, gpu_mem_gb * 0.75)
+            max_memory = {0: f"{model_budget_gb:.1f}GB", "cpu": "64GB"}
+            logger.info(
+                "GPU memory budget: %.1fGB model / %.1fGB total (reserving %.1fGB for KV+activations)",
+                model_budget_gb, gpu_mem_gb, gpu_mem_gb - model_budget_gb,
+            )
+
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=torch_dtype,
             device_map=device_map,
             trust_remote_code=trust_remote,
+            low_cpu_mem_usage=True,
+            max_memory=max_memory if max_memory else None,
         )
         model.eval()
         logger.info("Model loaded. Parameters: %s",
@@ -722,7 +740,7 @@ class TrajectoryRecorder:
         """
         Build the full message list for the model's chat template.
 
-        Qwen3 uses:
+        Qwen2.5 uses:
           <|im_start|>system\n...<|im_end|>\n<|im_start|>user\n...<|im_end|>...
         """
         messages = [{"role": "system", "content": system_policy}]
@@ -757,6 +775,11 @@ class TrajectoryRecorder:
         """
         Generate assistant response from the current conversation.
 
+        Prefill timing is measured with a cold forward pass BEFORE
+        ``model.generate()`` (not after), so the measurement is not
+        polluted by warm GPU caches. The forward-pass KV cache is freed
+        before generate to avoid doubling GPU memory.
+
         Args:
             messages: Chat messages (system + conversation so far).
             seed: Optional decode seed. When provided, switches to
@@ -769,13 +792,18 @@ class TrajectoryRecorder:
         Returns:
             generated_text: Decoded assistant output.
             num_prefill_tokens: Number of tokens processed in the prefill pass.
-            prefill_ms: Wall-clock time for the prefill forward pass.
-            decode_ms: Wall-clock time for the decode (generation) phase.
+            prefill_ms: Wall-clock time for the cold prefill forward pass.
+            decode_ms: Wall-clock time for the decode (generation) phase
+                (``total_generate_ms - prefill_ms``).
         """
         prompt_text = self._apply_chat_template(messages)
         inputs = self._tokenizer(prompt_text, return_tensors="pt").to(self._device)
         num_prefill_tokens = inputs.input_ids.shape[1]
 
+        # --- Cold prefill measurement (KV cache freed after) ---
+        prefill_ms = self._measure_prefill(inputs)
+
+        # --- Generate (prefill + decode) ---
         gen_kwargs = dict(
             max_new_tokens=MAX_NEW_TOKENS,
             pad_token_id=self._tokenizer.eos_token_id,
@@ -792,25 +820,35 @@ class TrajectoryRecorder:
         t1 = time.perf_counter()
         total_ms = (t1 - t0) * 1000.0
 
-        # Separate prefill and decode timing using a forward-only pass
-        prefill_ms = self._measure_prefill(inputs)
-
         generated_ids = outputs[0][num_prefill_tokens:]
         generated_text = self._tokenizer.decode(generated_ids, skip_special_tokens=True)
 
-        decode_ms = max(0.0, total_ms - prefill_ms)
+        # Free GPU tensors before returning (4090D 24GB cannot afford
+        # accumulation across 30-turn episodes).
+        del outputs, inputs
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
+        decode_ms = max(0.0, total_ms - prefill_ms)
         return generated_text, num_prefill_tokens, prefill_ms, decode_ms
 
     @torch.no_grad()
     def _measure_prefill(self, inputs) -> float:
         """
-        Estimate prefill latency by running a single forward pass
-        (no generation). This isolates the KV computation time for the prefix.
+        Run a cold forward pass to measure prefill latency.
+
+        The returned KV cache is explicitly freed before return to avoid
+        GPU memory accumulation (the caller, ``_generate_response``, runs
+        ``model.generate()`` immediately after, which builds its own KV
+        cache).
         """
         t0 = time.perf_counter()
-        _ = self._model(**inputs, use_cache=True)
+        forward_out = self._model(**inputs, use_cache=True)
         t1 = time.perf_counter()
+        # Explicitly free logits + KV cache from this forward pass.
+        del forward_out
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         return (t1 - t0) * 1000.0
 
     # ------------------------------------------------------------------
@@ -1065,7 +1103,6 @@ class TrajectoryRecorder:
                 "num_turns": turn + 1,
             },
             "steps": steps,
-            "global_block_index": self._global_block_index,
         }
 
         logger.info(
@@ -1309,7 +1346,6 @@ class TrajectoryRecorder:
                 "num_turns": turn,
             },
             "steps": steps,
-            "global_block_index": self._global_block_index,
         }
 
     def _run_episode_bfcl(
@@ -1530,7 +1566,6 @@ class TrajectoryRecorder:
                 "num_steps": len(steps),
             },
             "steps": steps,
-            "global_block_index": self._global_block_index,
         }
 
     # ------------------------------------------------------------------
@@ -1735,6 +1770,11 @@ class TrajectoryRecorder:
                                 "Episode failed: %s seed=%d task=%s: %s",
                                 domain, seed, task_id, exc,
                             )
+                        finally:
+                            # Clear GPU cache between episodes to avoid
+                            # fragmentation buildup over 7720 episodes.
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
                 finally:
                     try:
                         adapter.close()
@@ -1780,16 +1820,21 @@ class TrajectoryRecorder:
                         out_path.parent.mkdir(parents=True, exist_ok=True)
                         try:
                             episode = adapter.init_episode(entry, gt, seed=seed)
-                            trace = self._run_episode_bfcl(adapter, episode, seed)
-                            with open(out_path, "w", encoding="utf-8") as f:
-                                json.dump(trace, f, indent=2,
-                                          ensure_ascii=False, default=str)
                             try:
-                                adapter.close_episode(episode)
-                            except Exception:
-                                pass
-                            written += 1
-                            count_this_seed += 1
+                                trace = self._run_episode_bfcl(adapter, episode, seed)
+                                with open(out_path, "w", encoding="utf-8") as f:
+                                    json.dump(trace, f, indent=2,
+                                              ensure_ascii=False, default=str)
+                                written += 1
+                                count_this_seed += 1
+                            finally:
+                                # Always clean up BFCL backend instances
+                                # (they live in module-level globals() and
+                                # leak across episodes if not removed).
+                                try:
+                                    adapter.close_episode(episode)
+                                except Exception:
+                                    pass
                         except torch.cuda.OutOfMemoryError as exc:
                             torch.cuda.empty_cache()
                             self._oom_log.append({
@@ -1801,6 +1846,11 @@ class TrajectoryRecorder:
                                 "BFCL episode failed: %s seed=%d entry=%s: %s",
                                 subset, seed, entry_id, exc,
                             )
+                        finally:
+                            # Clear GPU cache between episodes to avoid
+                            # fragmentation buildup over 7720 episodes.
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
                 finally:
                     try:
                         adapter.close()
