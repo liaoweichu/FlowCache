@@ -3,7 +3,11 @@
 # Purpose: Prove that real Agent workloads have non-trivial exact-prefix
 #   re-access and that offline oracle significantly outperforms LRU/heuristics.
 # Gate: G1 (Opportunity)
-# Week: W6
+# Week: W3-W7
+#
+# G1 v0.3: Multi-dataset (tau-bench + BFCL v3) × 8 seeds = 7720 episodes.
+# Block identity is unified to G0 8-tuple version. Resume flag enables
+# checkpoint/resume for long-running recording (50 GPU hours).
 
 # --- Model ---
 model:
@@ -14,26 +18,43 @@ model:
 
 # --- Workload ---
 workload:
-  dataset: "tau-bench"
-  subset_file: "../g2-pilot-subset.json"  # 80 workflows (55 retail + 25 airline)
-  max_workflows: 80
-  concurrency: 4
+  datasets: ["tau-bench", "bfcl_v3"]
+  seeds: [42, 123, 456, 789, 101112, 131415, 161718, 192021]  # 8 seeds
+  tau_bench:
+    tasks: 165  # full task set (115 retail + 50 airline)
+    user_simulator: "llm_user"
+    user_model: "gpt-4o-mini"
+    user_provider: "openai"
+    user_temperature: 0.7
+  bfcl_v3:
+    subsets:
+      - "multi_turn_base"
+      - "multi_turn_miss_func"
+      - "multi_turn_miss_param"
+      - "multi_turn_long_context"
+    per_subset: 200  # 200 episodes per subset, total 800
+    decode_mode: "sampling"  # do_sample=True, temperature=0.7
+  concurrency: 4  # recording is single-GPU serial; used at replay time
 
 # --- Cache ---
 cache:
   block_size: 16  # tokens per block
   kv_budgets: [0.10, 0.25, 0.50, 1.00]  # fraction of peak working set
-  scheduling_window_h: 1000  # steps
+  scheduling_window_h: 1000  # steps (sliding window for working-set accounting)
 
 # --- Replay ---
 replay:
   arrival_process: "poisson"
   arrival_lambda: 4  # avg workflows per scheduling window
+  arrival_sources: ["burst_gpt", "poisson"]  # BurstGPT = primary evidence, Poisson = modeling reference
+  num_replay_seeds: 3  # 3 replay seeds (arrival-time perturbation), independent of recording seeds
   tool_wait_tolerance: 1.0  # multiplier for recorded tool wait time
 
 # --- Output ---
 output:
   trace_dir: "traces/bf16"
+  trace_subdirs: ["tau_bench", "bfcl_v3"]
   report_dir: "outputs"
   figure_dir: "figures"
   report_format: ["json", "markdown"]
+  resume: true  # checkpoint/resume: skip existing trace files on restart
