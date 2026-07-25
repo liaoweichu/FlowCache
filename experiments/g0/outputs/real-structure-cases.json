@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-25T16:22:29.444997",
+  "generated_at": "2026-07-25T17:33:27.545934",
   "generator": "experiments/g0/structure_cases.py",
   "data_source": "tau-bench (retail/airline domains, embedded)",
   "lmsys_substitution": "LMSYS-Chat-1M 需特殊授权，② 中的 LMSYS 10 条和 ⑤ 的 10 条用 τ-bench 多轮会话替代",

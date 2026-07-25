@@ -7,7 +7,7 @@
 
 # --- Model ---
 model:
-  name: "Qwen/Qwen2.5-7B-Instruct"  # 2026-07-25 变更：Qwen3-8B → Qwen2.5-7B-Instruct（见 experiment-designs.md Part 0.3）
+  name: "/root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master"
   dtype: "bfloat16"
   trust_remote_code: true
   device_map: "auto"

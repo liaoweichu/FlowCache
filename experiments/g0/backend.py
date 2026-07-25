@@ -58,6 +58,38 @@ class Backend:
             )
         return outputs.logits, outputs.past_key_values
 
+    @staticmethod
+    def _pkv_format(past_key_values) -> str:
+        """检测 past_key_values 的格式：'dynamic_new' / 'dynamic_old' / 'tuple'。"""
+        if hasattr(past_key_values, "key_cache"):
+            return "dynamic_old"
+        if hasattr(past_key_values, "layers"):
+            return "dynamic_new"
+        return "tuple"
+
+    @staticmethod
+    def _pkv_layer_kv(past_key_values, layer_idx: int):
+        """从任意格式的 past_key_values 中提取第 layer_idx 层的 (key, value) 张量。"""
+        fmt = Backend._pkv_format(past_key_values)
+        if fmt == "dynamic_old":
+            return past_key_values.key_cache[layer_idx], past_key_values.value_cache[layer_idx]
+        elif fmt == "dynamic_new":
+            layer = past_key_values.layers[layer_idx]
+            return layer.keys, layer.values
+        else:
+            return past_key_values[layer_idx][0], past_key_values[layer_idx][1]
+
+    @staticmethod
+    def _pkv_seq_len(past_key_values) -> int:
+        """从任意格式的 past_key_values 中获取序列长度。"""
+        fmt = Backend._pkv_format(past_key_values)
+        if fmt == "dynamic_old":
+            return past_key_values.key_cache[0].shape[2]
+        elif fmt == "dynamic_new":
+            return past_key_values.layers[0].keys.shape[2]
+        else:
+            return past_key_values[0][0].shape[2]
+
     def slice_kv_into_blocks(
         self, past_key_values, block_size: int = 16
     ) -> List[Dict]:
@@ -70,20 +102,11 @@ class Backend:
         - 'block_idx': 该 block 在序列中的索引
         - 'token_range': (start, end) token 位置区间
 
-        兼容 DynamicCache（transformers >= 4.36）和 legacy tuple 两种格式。
+        兼容 DynamicCache（transformers >= 4.36, >= 5.x）和 legacy tuple 格式。
         最后一个 block 可能不满 block_size。
         """
-        # 判断是否为 DynamicCache 格式
-        is_dynamic = hasattr(past_key_values, "key_cache") and hasattr(
-            past_key_values, "value_cache"
-        )
-
-        # 从第一层获取 seq_len
-        if is_dynamic:
-            seq_len = past_key_values.key_cache[0].shape[2]
-        else:
-            # legacy 格式：tuple of tuples，每层 (key, value)
-            seq_len = past_key_values[0][0].shape[2]
+        fmt = self._pkv_format(past_key_values)
+        seq_len = self._pkv_seq_len(past_key_values)
 
         blocks: List[Dict] = []
         num_full_blocks = seq_len // block_size
@@ -99,15 +122,11 @@ class Backend:
                 "layer_v": [],
             }
             for layer_idx in range(self.num_layers):
-                if is_dynamic:
-                    k = past_key_values.key_cache[layer_idx][:, :, start:end, :]
-                    v = past_key_values.value_cache[layer_idx][:, :, start:end, :]
-                else:
-                    k = past_key_values[layer_idx][0][:, :, start:end, :]
-                    v = past_key_values[layer_idx][1][:, :, start:end, :]
-                # clone 避免 view 被后续 forward 覆盖
-                block["layer_k"].append(k.clone())
-                block["layer_v"].append(v.clone())
+                k_full, v_full = self._pkv_layer_kv(past_key_values, layer_idx)
+                k = k_full[:, :, start:end, :].clone()
+                v = v_full[:, :, start:end, :].clone()
+                block["layer_k"].append(k)
+                block["layer_v"].append(v)
             blocks.append(block)
 
         # 处理剩余 token（最后一个不满 block_size 的 block）
@@ -122,14 +141,11 @@ class Backend:
                 "layer_v": [],
             }
             for layer_idx in range(self.num_layers):
-                if is_dynamic:
-                    k = past_key_values.key_cache[layer_idx][:, :, start:end, :]
-                    v = past_key_values.value_cache[layer_idx][:, :, start:end, :]
-                else:
-                    k = past_key_values[layer_idx][0][:, :, start:end, :]
-                    v = past_key_values[layer_idx][1][:, :, start:end, :]
-                block["layer_k"].append(k.clone())
-                block["layer_v"].append(v.clone())
+                k_full, v_full = self._pkv_layer_kv(past_key_values, layer_idx)
+                k = k_full[:, :, start:end, :].clone()
+                v = v_full[:, :, start:end, :].clone()
+                block["layer_k"].append(k)
+                block["layer_v"].append(v)
             blocks.append(block)
 
         return blocks
@@ -138,26 +154,33 @@ class Backend:
         """
         将 block 列表重组为 past_key_values。
 
-        返回 DynamicCache（transformers >= 4.36）。如果环境不支持
+        返回 DynamicCache（兼容新旧两版 transformers）。如果环境不支持
         DynamicCache，则回退为 legacy tuple 格式。
         """
         try:
-            from transformers.cache_utils import DynamicCache
+            from transformers.cache_utils import DynamicCache, DynamicLayer
             has_dynamic = True
         except ImportError:
             has_dynamic = False
 
         if has_dynamic:
             cache = DynamicCache()
-            # 沿序列维度拼接每个 block
             for layer_idx in range(self.num_layers):
                 k_chunks = [block["layer_k"][layer_idx] for block in blocks]
                 v_chunks = [block["layer_v"][layer_idx] for block in blocks]
                 k_full = torch.cat(k_chunks, dim=2)
                 v_full = torch.cat(v_chunks, dim=2)
-                # 直接写入 cache 的内部列表
-                cache.key_cache.append(k_full)
-                cache.value_cache.append(v_full)
+                # 新版 DynamicCache (>=5.x): layers 中是 DynamicLayer 对象
+                # 旧版 DynamicCache (>=4.36, <5.x): 直接有 key_cache/value_cache
+                if hasattr(cache, "key_cache"):
+                    cache.key_cache.append(k_full)
+                    cache.value_cache.append(v_full)
+                else:
+                    layer = DynamicLayer()
+                    layer.keys = k_full
+                    layer.values = v_full
+                    layer.is_initialized = True
+                    cache.layers.append(layer)
             return cache
         else:
             # legacy tuple 回退路径

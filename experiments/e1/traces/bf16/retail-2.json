@@ -1,0 +1,1023 @@
+{
+  "meta": {
+    "workflow_id": "retail-2",
+    "domain": "retail",
+    "model": "/root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master",
+    "block_size": 16,
+    "timestamp": "2026-07-24T16:12:31.149763+00:00",
+    "num_steps": 3,
+    "total_tokens": 353,
+    "total_prefill_ms": 11.42,
+    "total_decode_ms": 3209.46,
+    "num_tool_calls": 0,
+    "num_turns": 1
+  },
+  "steps": [
+    {
+      "step_id": 0,
+      "role": "system",
+      "content": "You are a helpful customer service assistant for an online retail store. You can help customers with order tracking, returns, product inquiries, and refunds. Always be polite and professional.\n\nAvailable tools:\n- lookup_order(order_id: str): Look up order details by ID.\n- check_return_eligibility(order_id: str, item_id: str): Check if an item can be returned.\n- initiate_refund(order_id: str, item_id: str, reason: str): Start a refund for a returned item.\n- search_products(query: str): Search the product catalog.\n\nWhen you need to use a tool, wrap the call in <function_call>...</function_call> tags with a JSON object inside.",
+      "token_ids": [
+        2610,
+        525,
+        264,
+        10950,
+        6002,
+        2473,
+        17847,
+        369,
+        458,
+        2860,
+        10806,
+        3553,
+        13,
+        1446,
+        646,
+        1492,
+        6310,
+        448,
+        1973,
+        14849,
+        11,
+        4675,
+        11,
+        1985,
+        43883,
+        11,
+        323,
+        72518,
+        13,
+        23240,
+        387,
+        47787,
+        323,
+        6584,
+        382,
+        16485,
+        7375,
+        510,
+        12,
+        18615,
+        7869,
+        19385,
+        842,
+        25,
+        607,
+        1648,
+        9192,
+        705,
+        1973,
+        3565,
+        553,
+        3034,
+        624,
+        12,
+        1779,
+        12511,
+        21602,
+        343,
+        3147,
+        19385,
+        842,
+        25,
+        607,
+        11,
+        1509,
+        842,
+        25,
+        607,
+        1648,
+        4248,
+        421,
+        458,
+        1509,
+        646,
+        387,
+        5927,
+        624,
+        12,
+        38101,
+        7793,
+        1241,
+        19385,
+        842,
+        25,
+        607,
+        11,
+        1509,
+        842,
+        25,
+        607,
+        11,
+        2874,
+        25,
+        607,
+        1648,
+        5145,
+        264,
+        20965,
+        369,
+        264,
+        5927,
+        1509,
+        624,
+        12,
+        2711,
+        29622,
+        10741,
+        25,
+        607,
+        1648,
+        7542,
+        279,
+        1985,
+        16403,
+        382,
+        4498,
+        498,
+        1184,
+        311,
+        990,
+        264,
+        5392,
+        11,
+        15061,
+        279,
+        1618,
+        304,
+        366,
+        1688,
+        13429,
+        29,
+        26418,
+        1688,
+        13429,
+        29,
+        9492,
+        448,
+        264,
+        4718,
+        1633,
+        4766,
+        13
+      ],
+      "token_count": 142,
+      "block_assignments": [
+        {
+          "block_idx": 0,
+          "token_range_start": 0,
+          "token_range_end": 16,
+          "block_hash": "bd6e2a301d9b7025",
+          "parent_hash": ""
+        },
+        {
+          "block_idx": 1,
+          "token_range_start": 16,
+          "token_range_end": 32,
+          "block_hash": "d230e2769e435e57",
+          "parent_hash": "bd6e2a301d9b7025"
+        },
+        {
+          "block_idx": 2,
+          "token_range_start": 32,
+          "token_range_end": 48,
+          "block_hash": "421819c90799c84e",
+          "parent_hash": "d230e2769e435e57"
+        },
+        {
+          "block_idx": 3,
+          "token_range_start": 48,
+          "token_range_end": 64,
+          "block_hash": "a5444ad975934043",
+          "parent_hash": "421819c90799c84e"
+        },
+        {
+          "block_idx": 4,
+          "token_range_start": 64,
+          "token_range_end": 80,
+          "block_hash": "071a116777531048",
+          "parent_hash": "a5444ad975934043"
+        },
+        {
+          "block_idx": 5,
+          "token_range_start": 80,
+          "token_range_end": 96,
+          "block_hash": "c6dd90a8d339cce9",
+          "parent_hash": "071a116777531048"
+        },
+        {
+          "block_idx": 6,
+          "token_range_start": 96,
+          "token_range_end": 112,
+          "block_hash": "ca1f731c44b8e4b7",
+          "parent_hash": "c6dd90a8d339cce9"
+        },
+        {
+          "block_idx": 7,
+          "token_range_start": 112,
+          "token_range_end": 128,
+          "block_hash": "2eaba5f2ebc80429",
+          "parent_hash": "ca1f731c44b8e4b7"
+        },
+        {
+          "block_idx": 8,
+          "token_range_start": 128,
+          "token_range_end": 142,
+          "block_hash": "8348ef984fc159fc",
+          "parent_hash": "2eaba5f2ebc80429"
+        }
+      ],
+      "prefill_ms": 0.0,
+      "decode_ms": 0.0,
+      "tool_call": null,
+      "tool_result": null
+    },
+    {
+      "step_id": 1,
+      "role": "user",
+      "content": "Hi, I want to buy a birthday gift for my daughter. She's 8 years old and loves arts and crafts. Can you recommend something suitable from your store?",
+      "token_ids": [
+        13048,
+        11,
+        358,
+        1366,
+        311,
+        3695,
+        264,
+        15198,
+        8189,
+        369,
+        847,
+        9803,
+        13,
+        2932,
+        594,
+        220,
+        23,
+        1635,
+        2310,
+        323,
+        15803,
+        18560,
+        323,
+        43848,
+        13,
+        2980,
+        498,
+        6934,
+        2494,
+        14452,
+        504,
+        697,
+        3553,
+        30
+      ],
+      "token_count": 34,
+      "block_assignments": [
+        {
+          "block_idx": 0,
+          "token_range_start": 0,
+          "token_range_end": 16,
+          "block_hash": "63f90b911208a679",
+          "parent_hash": "8348ef984fc159fc"
+        },
+        {
+          "block_idx": 1,
+          "token_range_start": 16,
+          "token_range_end": 32,
+          "block_hash": "552ca60ae36fb0d7",
+          "parent_hash": "63f90b911208a679"
+        },
+        {
+          "block_idx": 2,
+          "token_range_start": 32,
+          "token_range_end": 34,
+          "block_hash": "48201ce14eb91d84",
+          "parent_hash": "552ca60ae36fb0d7"
+        }
+      ],
+      "prefill_ms": 0.0,
+      "decode_ms": 0.0,
+      "tool_call": null,
+      "tool_result": null
+    },
+    {
+      "step_id": 2,
+      "role": "assistant",
+      "content": "DISCLAIMER: The store's product offerings may change over time, so availability is not guaranteed. Based on your daughter's interest in arts and crafts, here are a few items that might suit her:\n\n1. **Art Set**: A comprehensive art set with various tools like crayons, markers, colored pencils, and paints.\n2. **Craft Kit**: A themed craft kit, such as a jewelry-making kit or a DIY friendship bracelet kit.\n3. **Modeling Clay**: A pack of modeling clay in different colors for sculpting and creating.\n4. **Scrapbooking Supplies**: Basic supplies for scrapbooking, including stickers, washi tape, and decorative paper.\n5. **Painting Kit**: A beginner's painting kit with brushes, canvas, and paint.\n\nWould you like more detailed information on any of these items, or should I perform a search for you?",
+      "token_ids": [
+        21202,
+        22568,
+        640,
+        25,
+        576,
+        3553,
+        594,
+        1985,
+        32835,
+        1231,
+        2297,
+        916,
+        882,
+        11,
+        773,
+        18048,
+        374,
+        537,
+        19323,
+        13,
+        20205,
+        389,
+        697,
+        9803,
+        594,
+        2734,
+        304,
+        18560,
+        323,
+        43848,
+        11,
+        1588,
+        525,
+        264,
+        2421,
+        3589,
+        429,
+        2578,
+        7781,
+        1059,
+        1447,
+        16,
+        13,
+        3070,
+        9286,
+        2573,
+        95518,
+        362,
+        15817,
+        1947,
+        738,
+        448,
+        5257,
+        7375,
+        1075,
+        88916,
+        2382,
+        11,
+        23962,
+        11,
+        27197,
+        96338,
+        11,
+        323,
+        56848,
+        624,
+        17,
+        13,
+        3070,
+        38849,
+        20951,
+        95518,
+        362,
+        48544,
+        10770,
+        16138,
+        11,
+        1741,
+        438,
+        264,
+        30717,
+        27746,
+        16138,
+        476,
+        264,
+        31458,
+        26509,
+        58419,
+        16138,
+        624,
+        18,
+        13,
+        3070,
+        1712,
+        287,
+        31401,
+        95518,
+        362,
+        3769,
+        315,
+        33479,
+        36048,
+        304,
+        2155,
+        7987,
+        369,
+        26765,
+        287,
+        323,
+        6825,
+        624,
+        19,
+        13,
+        3070,
+        3326,
+        4611,
+        21278,
+        50252,
+        95518,
+        14625,
+        16720,
+        369,
+        20843,
+        21278,
+        11,
+        2670,
+        49296,
+        11,
+        572,
+        6023,
+        16971,
+        11,
+        323,
+        45436,
+        5567,
+        624,
+        20,
+        13,
+        3070,
+        18098,
+        287,
+        20951,
+        95518,
+        362,
+        48948,
+        594,
+        18824,
+        16138,
+        448,
+        61626,
+        11,
+        10041,
+        11,
+        323,
+        6177,
+        382,
+        27989,
+        498,
+        1075,
+        803,
+        11682,
+        1995,
+        389,
+        894,
+        315,
+        1493,
+        3589,
+        11,
+        476,
+        1265,
+        358,
+        2736,
+        264,
+        2711,
+        369,
+        498,
+        30
+      ],
+      "token_count": 177,
+      "block_assignments": [
+        {
+          "block_idx": 0,
+          "token_range_start": 0,
+          "token_range_end": 16,
+          "block_hash": "2843e1a73a2fc78b",
+          "parent_hash": "48201ce14eb91d84"
+        },
+        {
+          "block_idx": 1,
+          "token_range_start": 16,
+          "token_range_end": 32,
+          "block_hash": "c5c9fb291ab6af7c",
+          "parent_hash": "2843e1a73a2fc78b"
+        },
+        {
+          "block_idx": 2,
+          "token_range_start": 32,
+          "token_range_end": 48,
+          "block_hash": "5d34665e810549e0",
+          "parent_hash": "c5c9fb291ab6af7c"
+        },
+        {
+          "block_idx": 3,
+          "token_range_start": 48,
+          "token_range_end": 64,
+          "block_hash": "1ab8ae683ab3df41",
+          "parent_hash": "5d34665e810549e0"
+        },
+        {
+          "block_idx": 4,
+          "token_range_start": 64,
+          "token_range_end": 80,
+          "block_hash": "4bd19f518a467489",
+          "parent_hash": "1ab8ae683ab3df41"
+        },
+        {
+          "block_idx": 5,
+          "token_range_start": 80,
+          "token_range_end": 96,
+          "block_hash": "9f7bd5d029438e9d",
+          "parent_hash": "4bd19f518a467489"
+        },
+        {
+          "block_idx": 6,
+          "token_range_start": 96,
+          "token_range_end": 112,
+          "block_hash": "ebb92fa008288382",
+          "parent_hash": "9f7bd5d029438e9d"
+        },
+        {
+          "block_idx": 7,
+          "token_range_start": 112,
+          "token_range_end": 128,
+          "block_hash": "45c334f980821ded",
+          "parent_hash": "ebb92fa008288382"
+        },
+        {
+          "block_idx": 8,
+          "token_range_start": 128,
+          "token_range_end": 144,
+          "block_hash": "a1a1b73fbcc0170f",
+          "parent_hash": "45c334f980821ded"
+        },
+        {
+          "block_idx": 9,
+          "token_range_start": 144,
+          "token_range_end": 160,
+          "block_hash": "559d8970816e5585",
+          "parent_hash": "a1a1b73fbcc0170f"
+        },
+        {
+          "block_idx": 10,
+          "token_range_start": 160,
+          "token_range_end": 176,
+          "block_hash": "4d43265cc1fb01a2",
+          "parent_hash": "559d8970816e5585"
+        },
+        {
+          "block_idx": 11,
+          "token_range_start": 176,
+          "token_range_end": 177,
+          "block_hash": "c3351cf14bc72df2",
+          "parent_hash": "4d43265cc1fb01a2"
+        }
+      ],
+      "prefill_ms": 11.41812652349472,
+      "decode_ms": 3209.459610283375,
+      "tool_call": null,
+      "tool_result": null
+    }
+  ],
+  "global_block_index": {
+    "bd6e2a301d9b7025": {
+      "token_start": 0,
+      "token_end": 16,
+      "parent_hash": "",
+      "workflow_ids": [
+        "retail-1",
+        "retail-2"
+      ]
+    },
+    "d230e2769e435e57": {
+      "token_start": 16,
+      "token_end": 32,
+      "parent_hash": "bd6e2a301d9b7025",
+      "workflow_ids": [
+        "retail-1",
+        "retail-2"
+      ]
+    },
+    "421819c90799c84e": {
+      "token_start": 32,
+      "token_end": 48,
+      "parent_hash": "d230e2769e435e57",
+      "workflow_ids": [
+        "retail-1",
+        "retail-2"
+      ]
+    },
+    "a5444ad975934043": {
+      "token_start": 48,
+      "token_end": 64,
+      "parent_hash": "421819c90799c84e",
+      "workflow_ids": [
+        "retail-1",
+        "retail-2"
+      ]
+    },
+    "071a116777531048": {
+      "token_start": 64,
+      "token_end": 80,
+      "parent_hash": "a5444ad975934043",
+      "workflow_ids": [
+        "retail-1",
+        "retail-2"
+      ]
+    },
+    "c6dd90a8d339cce9": {
+      "token_start": 80,
+      "token_end": 96,
+      "parent_hash": "071a116777531048",
+      "workflow_ids": [
+        "retail-1",
+        "retail-2"
+      ]
+    },
+    "ca1f731c44b8e4b7": {
+      "token_start": 96,
+      "token_end": 112,
+      "parent_hash": "c6dd90a8d339cce9",
+      "workflow_ids": [
+        "retail-1",
+        "retail-2"
+      ]
+    },
+    "2eaba5f2ebc80429": {
+      "token_start": 112,
+      "token_end": 128,
+      "parent_hash": "ca1f731c44b8e4b7",
+      "workflow_ids": [
+        "retail-1",
+        "retail-2"
+      ]
+    },
+    "8348ef984fc159fc": {
+      "token_start": 128,
+      "token_end": 142,
+      "parent_hash": "2eaba5f2ebc80429",
+      "workflow_ids": [
+        "retail-1",
+        "retail-2"
+      ]
+    },
+    "ff301b266528fec5": {
+      "token_start": 142,
+      "token_end": 158,
+      "parent_hash": "8348ef984fc159fc",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "9a90e932626e77ab": {
+      "token_start": 158,
+      "token_end": 174,
+      "parent_hash": "ff301b266528fec5",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "1a83427f94ae6266": {
+      "token_start": 174,
+      "token_end": 188,
+      "parent_hash": "9a90e932626e77ab",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "80f16dbb5ba0e709": {
+      "token_start": 188,
+      "token_end": 204,
+      "parent_hash": "1a83427f94ae6266",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "8262ae5a172d51ca": {
+      "token_start": 204,
+      "token_end": 220,
+      "parent_hash": "80f16dbb5ba0e709",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "1490f17438b6db27": {
+      "token_start": 220,
+      "token_end": 236,
+      "parent_hash": "8262ae5a172d51ca",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "e96770bc1e9ce2c9": {
+      "token_start": 236,
+      "token_end": 252,
+      "parent_hash": "1490f17438b6db27",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "ce37cfed0d1d8a51": {
+      "token_start": 252,
+      "token_end": 268,
+      "parent_hash": "e96770bc1e9ce2c9",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "375c2a2e99d4b1c0": {
+      "token_start": 268,
+      "token_end": 284,
+      "parent_hash": "ce37cfed0d1d8a51",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "3d1dde69060afaca": {
+      "token_start": 284,
+      "token_end": 300,
+      "parent_hash": "375c2a2e99d4b1c0",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "158e8e6600ddf590": {
+      "token_start": 300,
+      "token_end": 316,
+      "parent_hash": "3d1dde69060afaca",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "01088350cdd1eba5": {
+      "token_start": 316,
+      "token_end": 332,
+      "parent_hash": "158e8e6600ddf590",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "d64e1e6ae19027f9": {
+      "token_start": 332,
+      "token_end": 348,
+      "parent_hash": "01088350cdd1eba5",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "cff6f495e6ff8287": {
+      "token_start": 348,
+      "token_end": 364,
+      "parent_hash": "d64e1e6ae19027f9",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "fc744fe836f7e5df": {
+      "token_start": 364,
+      "token_end": 380,
+      "parent_hash": "cff6f495e6ff8287",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "990af07d43a82a7f": {
+      "token_start": 380,
+      "token_end": 396,
+      "parent_hash": "fc744fe836f7e5df",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "c4ca36643ddaa24b": {
+      "token_start": 396,
+      "token_end": 412,
+      "parent_hash": "990af07d43a82a7f",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "d039af029fb8b526": {
+      "token_start": 412,
+      "token_end": 428,
+      "parent_hash": "c4ca36643ddaa24b",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "cd4645597c3e1463": {
+      "token_start": 428,
+      "token_end": 435,
+      "parent_hash": "d039af029fb8b526",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "dbdce2cbea07e370": {
+      "token_start": 435,
+      "token_end": 448,
+      "parent_hash": "cd4645597c3e1463",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "6655ff9eab23bb2b": {
+      "token_start": 448,
+      "token_end": 454,
+      "parent_hash": "dbdce2cbea07e370",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "a8e1829bf61d46da": {
+      "token_start": 454,
+      "token_end": 470,
+      "parent_hash": "6655ff9eab23bb2b",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "0d33164c7685d9dd": {
+      "token_start": 470,
+      "token_end": 486,
+      "parent_hash": "a8e1829bf61d46da",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "0d0035a85661184f": {
+      "token_start": 486,
+      "token_end": 502,
+      "parent_hash": "0d33164c7685d9dd",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "b2c2c3c886ba112e": {
+      "token_start": 502,
+      "token_end": 518,
+      "parent_hash": "0d0035a85661184f",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "08db636403d6554e": {
+      "token_start": 518,
+      "token_end": 534,
+      "parent_hash": "b2c2c3c886ba112e",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "55b3c45f850787fb": {
+      "token_start": 534,
+      "token_end": 550,
+      "parent_hash": "08db636403d6554e",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "aca6bca07b3203c8": {
+      "token_start": 550,
+      "token_end": 566,
+      "parent_hash": "55b3c45f850787fb",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "d72ff99b5f6d6c0d": {
+      "token_start": 566,
+      "token_end": 582,
+      "parent_hash": "aca6bca07b3203c8",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "c7533b7aaf4c9b02": {
+      "token_start": 582,
+      "token_end": 591,
+      "parent_hash": "d72ff99b5f6d6c0d",
+      "workflow_ids": [
+        "retail-1"
+      ]
+    },
+    "63f90b911208a679": {
+      "token_start": 142,
+      "token_end": 158,
+      "parent_hash": "8348ef984fc159fc",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "552ca60ae36fb0d7": {
+      "token_start": 158,
+      "token_end": 174,
+      "parent_hash": "63f90b911208a679",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "48201ce14eb91d84": {
+      "token_start": 174,
+      "token_end": 176,
+      "parent_hash": "552ca60ae36fb0d7",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "2843e1a73a2fc78b": {
+      "token_start": 176,
+      "token_end": 192,
+      "parent_hash": "48201ce14eb91d84",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "c5c9fb291ab6af7c": {
+      "token_start": 192,
+      "token_end": 208,
+      "parent_hash": "2843e1a73a2fc78b",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "5d34665e810549e0": {
+      "token_start": 208,
+      "token_end": 224,
+      "parent_hash": "c5c9fb291ab6af7c",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "1ab8ae683ab3df41": {
+      "token_start": 224,
+      "token_end": 240,
+      "parent_hash": "5d34665e810549e0",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "4bd19f518a467489": {
+      "token_start": 240,
+      "token_end": 256,
+      "parent_hash": "1ab8ae683ab3df41",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "9f7bd5d029438e9d": {
+      "token_start": 256,
+      "token_end": 272,
+      "parent_hash": "4bd19f518a467489",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "ebb92fa008288382": {
+      "token_start": 272,
+      "token_end": 288,
+      "parent_hash": "9f7bd5d029438e9d",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "45c334f980821ded": {
+      "token_start": 288,
+      "token_end": 304,
+      "parent_hash": "ebb92fa008288382",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "a1a1b73fbcc0170f": {
+      "token_start": 304,
+      "token_end": 320,
+      "parent_hash": "45c334f980821ded",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "559d8970816e5585": {
+      "token_start": 320,
+      "token_end": 336,
+      "parent_hash": "a1a1b73fbcc0170f",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "4d43265cc1fb01a2": {
+      "token_start": 336,
+      "token_end": 352,
+      "parent_hash": "559d8970816e5585",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    },
+    "c3351cf14bc72df2": {
+      "token_start": 352,
+      "token_end": 353,
+      "parent_hash": "4d43265cc1fb01a2",
+      "workflow_ids": [
+        "retail-2"
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "experiment": "E1",
+  "description": "Workload characterization trajectory recording",
+  "total_workflows_recorded": 4,
+  "output_directory": "/root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16",
+  "files": [
+    "/root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16/retail-1.json",
+    "/root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16/retail-2.json",
+    "/root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16/airline-1.json",
+    "/root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16/airline-2.json"
+  ]
+}

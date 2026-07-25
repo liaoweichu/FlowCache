@@ -1,0 +1,811 @@
+{
+  "cases": [
+    {
+      "case_id": "cat1_retail_000",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_001",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=12, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_002",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_003",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_004",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_005",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=12, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_006",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=12, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_007",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_008",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=11, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_009",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_010",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=12, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_011",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=11, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_012",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=11, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_013",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=11, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_retail_014",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=9, blocks_a=11, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_000",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_001",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_002",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_003",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_004",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_005",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_006",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=9, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_007",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_008",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_009",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=9, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_010",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_011",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_012",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_013",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=9, rest_differ=True"
+    },
+    {
+      "case_id": "cat1_airline_014",
+      "category": 1,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=8, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_single_000",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=14, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_single_001",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=13, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_single_002",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=14, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_single_003",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=11, blocks_a=13, blocks_b=13, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_single_004",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=14, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_single_005",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=14, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_single_006",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=13, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_single_007",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=14, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_single_008",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=14, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_single_009",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=14, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_single_010",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=10, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_single_011",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=10, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_single_012",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=10, blocks_a=11, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_single_013",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=10, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_single_014",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=10, blocks_a=11, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_single_015",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=10, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_single_016",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=10, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_single_017",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=10, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_single_018",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=10, blocks_a=11, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_single_019",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=10, blocks_a=11, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_multi_000",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=14, blocks_a=16, blocks_b=16, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_multi_001",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=14, blocks_a=15, blocks_b=15, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_multi_002",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=14, blocks_a=16, blocks_b=16, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_multi_003",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=13, blocks_a=15, blocks_b=15, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_retail_multi_004",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=14, blocks_a=16, blocks_b=16, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_multi_005",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=14, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_multi_006",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=13, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_multi_007",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=14, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_multi_008",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=14, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat2_airline_multi_009",
+      "category": 2,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=12, blocks_a=14, blocks_b=14, rest_differ=True"
+    },
+    {
+      "case_id": "cat3_000",
+      "category": 3,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat3_001",
+      "category": 3,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat3_002",
+      "category": 3,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat3_003",
+      "category": 3,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=11, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat3_004",
+      "category": 3,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat3_005",
+      "category": 3,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat3_006",
+      "category": 3,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat3_007",
+      "category": 3,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat3_008",
+      "category": 3,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat3_009",
+      "category": 3,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat4_000",
+      "category": 4,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat4_001",
+      "category": 4,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat4_002",
+      "category": 4,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat4_003",
+      "category": 4,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=11, blocks_b=11, rest_differ=True"
+    },
+    {
+      "case_id": "cat4_004",
+      "category": 4,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=12, rest_differ=True"
+    },
+    {
+      "case_id": "cat4_005",
+      "category": 4,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat4_006",
+      "category": 4,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat4_007",
+      "category": 4,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat4_008",
+      "category": 4,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat4_009",
+      "category": 4,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": true,
+      "detail": "common_prefix=0, blocks_a=10, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat5_000",
+      "category": 5,
+      "identity_check": false,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "turns=4, incremental_sharing=False"
+    },
+    {
+      "case_id": "cat5_001",
+      "category": 5,
+      "identity_check": false,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "turns=4, incremental_sharing=False"
+    },
+    {
+      "case_id": "cat5_002",
+      "category": 5,
+      "identity_check": false,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "turns=4, incremental_sharing=False"
+    },
+    {
+      "case_id": "cat5_003",
+      "category": 5,
+      "identity_check": false,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "turns=4, incremental_sharing=False"
+    },
+    {
+      "case_id": "cat5_004",
+      "category": 5,
+      "identity_check": false,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "turns=4, incremental_sharing=False"
+    },
+    {
+      "case_id": "cat5_005",
+      "category": 5,
+      "identity_check": false,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "turns=4, incremental_sharing=False"
+    },
+    {
+      "case_id": "cat5_006",
+      "category": 5,
+      "identity_check": false,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "turns=4, incremental_sharing=False"
+    },
+    {
+      "case_id": "cat5_007",
+      "category": 5,
+      "identity_check": false,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "turns=4, incremental_sharing=False"
+    },
+    {
+      "case_id": "cat5_008",
+      "category": 5,
+      "identity_check": false,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "turns=4, incremental_sharing=False"
+    },
+    {
+      "case_id": "cat5_009",
+      "category": 5,
+      "identity_check": false,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "turns=4, incremental_sharing=False"
+    },
+    {
+      "case_id": "cat6_000",
+      "category": 6,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat6_001",
+      "category": 6,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat6_002",
+      "category": 6,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat6_003",
+      "category": 6,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=0, blocks_a=11, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat6_004",
+      "category": 6,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat6_005",
+      "category": 6,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat6_006",
+      "category": 6,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat6_007",
+      "category": 6,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat6_008",
+      "category": 6,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True"
+    },
+    {
+      "case_id": "cat6_009",
+      "category": 6,
+      "identity_check": true,
+      "parent_chain": true,
+      "invalidation": null,
+      "detail": "common_prefix=0, blocks_a=12, blocks_b=10, rest_differ=True"
+    }
+  ],
+  "summary": {
+    "total": 100,
+    "identity_pass": 90,
+    "parent_chain_pass": 100,
+    "invalidation_pass": 20,
+    "invalidation_total": 20
+  }
+}

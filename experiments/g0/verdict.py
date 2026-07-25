@@ -284,9 +284,9 @@ def generate_verdict(config: Dict, output_path: str) -> Dict:
     outputs_dir = os.path.join(base_dir, config["output"]["dir"])
 
     # 加载各模块的 JSON 结果
-    exactness_data = _load_json(os.path.join(outputs_dir, "exactness-results.json"))
-    codec_data = _load_json(os.path.join(outputs_dir, "codec-results.json"))
-    memory_data = _load_json(os.path.join(outputs_dir, "memory-results.json"))
+    exactness_data = _load_json(os.path.join(outputs_dir, "exactness-report-results.json"))
+    codec_data = _load_json(os.path.join(outputs_dir, "codec-spike-report-results.json"))
+    memory_data = _load_json(os.path.join(outputs_dir, "memory-report-results.json"))
     freeze_data = _load_json(os.path.join(base_dir, config["output"]["freeze_record"]))
 
     # 检查 6 个判定条件

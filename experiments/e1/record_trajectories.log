@@ -1,0 +1,33 @@
+2026-07-25 00:07:17,590 [INFO] Loaded config from /root/autodl-tmp/Prefix Caching/experiments/e1/config.yaml
+2026-07-25 00:07:17,616 [INFO] Using device: cpu
+2026-07-25 00:07:23,590 [INFO] Loading tokenizer: /root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master
+2026-07-25 00:07:25,515 [INFO] Loading model: /root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master (dtype=bfloat16, device_map=auto)
+2026-07-25 00:12:03,193 [INFO] Loaded config from /root/autodl-tmp/Prefix Caching/experiments/e1/config.yaml
+2026-07-25 00:12:03,279 [INFO] Using device: cuda
+2026-07-25 00:12:04,907 [INFO] Loading tokenizer: /root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master
+2026-07-25 00:12:05,382 [INFO] Loading model: /root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master (dtype=bfloat16, device_map=auto)
+2026-07-25 00:12:20,014 [INFO] Model loaded. Parameters: 7615616512
+2026-07-25 00:12:20,015 [WARNING] No workflow subset file or tau-bench data found. Using built-in synthetic workflows (4 total).
+2026-07-25 00:12:20,016 [INFO] [1/4] Recording workflow: retail-1
+2026-07-25 00:12:20,016 [INFO] === Running workflow: retail-1 (domain=retail) ===
+2026-07-25 00:12:27,898 [INFO] Workflow retail-1 complete after 2 turns (no tool call).
+2026-07-25 00:12:27,898 [INFO] Workflow retail-1 done: 6 steps, 591 tokens, 27 ms prefill, 7741 ms decode
+2026-07-25 00:12:27,899 [INFO] Saved trajectory to /root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16/retail-1.json
+2026-07-25 00:12:27,899 [INFO] [2/4] Recording workflow: retail-2
+2026-07-25 00:12:27,899 [INFO] === Running workflow: retail-2 (domain=retail) ===
+2026-07-25 00:12:31,149 [INFO] Workflow retail-2 complete after 1 turns (no tool call).
+2026-07-25 00:12:31,149 [INFO] Workflow retail-2 done: 3 steps, 353 tokens, 11 ms prefill, 3209 ms decode
+2026-07-25 00:12:31,150 [INFO] Saved trajectory to /root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16/retail-2.json
+2026-07-25 00:12:31,150 [INFO] [3/4] Recording workflow: airline-1
+2026-07-25 00:12:31,150 [INFO] === Running workflow: airline-1 (domain=airline) ===
+2026-07-25 00:12:31,892 [WARNING] Failed to parse tool call JSON: search_flights(origin="New York", destination="San Francisco", date="2023-10-09")
+2026-07-25 00:12:31,893 [INFO] Workflow airline-1 complete after 1 turns (no tool call).
+2026-07-25 00:12:31,893 [INFO] Workflow airline-1 done: 3 steps, 206 tokens, 11 ms prefill, 703 ms decode
+2026-07-25 00:12:31,894 [INFO] Saved trajectory to /root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16/airline-1.json
+2026-07-25 00:12:31,894 [INFO] [4/4] Recording workflow: airline-2
+2026-07-25 00:12:31,894 [INFO] === Running workflow: airline-2 (domain=airline) ===
+2026-07-25 00:12:33,252 [WARNING] Failed to parse tool call JSON: search_flights(origin="New York", destination="Los Angeles", date="2023-10-15")
+2026-07-25 00:12:33,252 [INFO] Workflow airline-2 complete after 1 turns (no tool call).
+2026-07-25 00:12:33,252 [INFO] Workflow airline-2 done: 3 steps, 249 tokens, 11 ms prefill, 1320 ms decode
+2026-07-25 00:12:33,253 [INFO] Saved trajectory to /root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16/airline-2.json
+2026-07-25 00:12:33,253 [INFO] Recorded 4/4 trajectories to /root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16

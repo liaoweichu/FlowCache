@@ -5,7 +5,7 @@
 # Model: Qwen2.5-7B-Instruct
 
 model:
-  name: "Qwen/Qwen2.5-7B-Instruct"
+  name: "/root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master"
   dtype: "bfloat16"
   trust_remote_code: true
   device_map: "auto"

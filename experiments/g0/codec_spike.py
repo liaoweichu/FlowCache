@@ -130,7 +130,7 @@ def collect_blocks(backend, cases: Dict, block_size: int, max_blocks: int = 500)
                     break
                 # 用第一层 key 张量的内容哈希作为指纹
                 k_tensor = block["layer_k"][0]
-                content_hash = hash(k_tensor.cpu().numpy().tobytes())
+                content_hash = hash(k_tensor.cpu().float().numpy().tobytes())
                 if content_hash not in seen_fingerprints:
                     seen_fingerprints.add(content_hash)
                     # 将 block 的 KV 张量移到 CPU，避免 GPU 显存累积

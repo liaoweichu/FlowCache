@@ -1,0 +1,148 @@
+{
+  "workflow_structure": {
+    "per_workflow": [
+      {
+        "workflow_id": "unknown",
+        "length": 0,
+        "depth": 0,
+        "width": 0,
+        "branch_rate": 0.0,
+        "tool_wait_duration_ms": 0.0
+      },
+      {
+        "workflow_id": "airline-1",
+        "length": 3,
+        "depth": 0,
+        "width": 0,
+        "branch_rate": 0.0,
+        "tool_wait_duration_ms": 0.0
+      },
+      {
+        "workflow_id": "airline-2",
+        "length": 3,
+        "depth": 0,
+        "width": 0,
+        "branch_rate": 0.0,
+        "tool_wait_duration_ms": 0.0
+      },
+      {
+        "workflow_id": "retail-1",
+        "length": 6,
+        "depth": 1,
+        "width": 1,
+        "branch_rate": 0.1667,
+        "tool_wait_duration_ms": 5171.25
+      },
+      {
+        "workflow_id": "retail-2",
+        "length": 3,
+        "depth": 0,
+        "width": 0,
+        "branch_rate": 0.0,
+        "tool_wait_duration_ms": 0.0
+      }
+    ],
+    "summary": {
+      "length": {
+        "mean": 3,
+        "median": 3,
+        "p95": 5.4,
+        "p99": 5.88,
+        "min": 0,
+        "max": 6
+      },
+      "depth": {
+        "mean": 0.2,
+        "median": 0,
+        "p95": 0.8,
+        "p99": 0.96,
+        "min": 0,
+        "max": 1
+      },
+      "width": {
+        "mean": 0.2,
+        "median": 0,
+        "p95": 0.8,
+        "p99": 0.96,
+        "min": 0,
+        "max": 1
+      },
+      "branch_rate": {
+        "mean": 0.03,
+        "median": 0.0,
+        "p95": 0.13,
+        "p99": 0.16,
+        "min": 0.0,
+        "max": 0.1667
+      },
+      "tool_wait_duration_ms": {
+        "mean": 1034.25,
+        "median": 0.0,
+        "p95": 4137.0,
+        "p99": 4964.4,
+        "min": 0.0,
+        "max": 5171.25
+      }
+    },
+    "num_workflows": 5
+  },
+  "exact_prefix_overlap": {
+    "overlap_ratio": 0.2525,
+    "total_tokens": 1117,
+    "shared_tokens": 282,
+    "total_unique_blocks": 76,
+    "shared_blocks": 18,
+    "lcp_tokens": {
+      "mean": 28.8,
+      "median": 0.0,
+      "p95": 144.0,
+      "p99": 144.0,
+      "min": 0,
+      "max": 144,
+      "count": 10
+    },
+    "num_workflow_pairs": 10
+  },
+  "next_use_distance": {
+    "mean": 4.5,
+    "median": 4.5,
+    "p95": 6.0,
+    "p99": 6.0,
+    "min": 3,
+    "max": 6,
+    "count": 18,
+    "singleton_blocks": 58,
+    "multi_use_blocks": 18,
+    "total_unique_blocks": 76
+  },
+  "working_set": {
+    "working_set_size": 39,
+    "per_block_kv_bytes": 917504,
+    "per_block_kv_mb": 0.875,
+    "kv_memory_gb": 0.0333,
+    "kv_vram_ratio": 0.0014,
+    "total_vram_gb": 24.0,
+    "per_workflow_peak": [
+      {
+        "workflow_id": "unknown",
+        "peak_active_blocks": 0
+      },
+      {
+        "workflow_id": "airline-1",
+        "peak_active_blocks": 14
+      },
+      {
+        "workflow_id": "airline-2",
+        "peak_active_blocks": 17
+      },
+      {
+        "workflow_id": "retail-1",
+        "peak_active_blocks": 39
+      },
+      {
+        "workflow_id": "retail-2",
+        "peak_active_blocks": 24
+      }
+    ]
+  }
+}

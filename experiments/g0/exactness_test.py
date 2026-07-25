@@ -86,6 +86,12 @@ def compare_kv_tensors(kv_a, kv_b) -> Dict:
     if hasattr(kv_a, "key_cache") and hasattr(kv_a, "value_cache"):
         a_keys, a_vals = kv_a.key_cache, kv_a.value_cache
         b_keys, b_vals = kv_b.key_cache, kv_b.value_cache
+    elif hasattr(kv_a, "layers"):
+        # 新版 DynamicCache (transformers >= 5.x): layers[i].keys / layers[i].values
+        a_keys = [layer.keys for layer in kv_a.layers]
+        a_vals = [layer.values for layer in kv_a.layers]
+        b_keys = [layer.keys for layer in kv_b.layers]
+        b_vals = [layer.values for layer in kv_b.layers]
     else:
         a_keys = [layer[0] for layer in kv_a]
         a_vals = [layer[1] for layer in kv_a]
@@ -161,7 +167,7 @@ def compare_logits(logits_a: torch.Tensor, logits_b: torch.Tensor) -> Dict:
     cosine_sim = torch.nn.functional.cosine_similarity(
         logits_a_last.flatten().unsqueeze(0),
         logits_b_last.flatten().unsqueeze(0),
-        dim=0,
+        dim=-1,
     ).item()
 
     # top-1 token

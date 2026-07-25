@@ -19,19 +19,20 @@ def encode_q8(tensor: torch.Tensor) -> Dict:
     """
     Per-tensor int8 量化。
 
-    将 BF16 张量按绝对值最大值归一化到 [-127, 127] 范围，
-    四舍五入后转为 int8。
+    将 BF16/FP16 张量按绝对值最大值归一化到 [-127, 127] 范围，
+    四舍五入后转为 int8（内部先转为 float32 以兼容所有 dtype）。
 
     Args:
-        tensor: 待量化的 BF16 张量。
+        tensor: 待量化的 BF16/FP16 张量。
 
     Returns:
         {'data': int8_tensor, 'scale': float, 'lineage': 'approximate_q8'}
     """
-    scale = tensor.abs().max().item() / 127.0
+    tensor_f32 = tensor.float()
+    scale = tensor_f32.abs().max().item() / 127.0
     if scale == 0:
         scale = 1.0
-    int8_data = torch.round(tensor / scale).clamp(-128, 127).to(torch.int8)
+    int8_data = torch.round(tensor_f32 / scale).clamp(-128, 127).to(torch.int8)
     return {"data": int8_data, "scale": scale, "lineage": "approximate_q8"}
 
 
@@ -53,19 +54,20 @@ def encode_q4(tensor: torch.Tensor) -> Dict:
     """
     Per-tensor int4 量化。
 
-    将 BF16 张量按绝对值最大值归一化到 [-7, 7] 范围，
-    四舍五入后转为 int4（以 int8 张量存储）。
+    将 BF16/FP16 张量按绝对值最大值归一化到 [-7, 7] 范围，
+    四舍五入后转为 int4（以 int8 张量存储，内部先转为 float32 以兼容所有 dtype）。
 
     Args:
-        tensor: 待量化的 BF16 张量。
+        tensor: 待量化的 BF16/FP16 张量。
 
     Returns:
         {'data': int8_tensor (存储 int4 值), 'scale': float, 'lineage': 'approximate_q4'}
     """
-    scale = tensor.abs().max().item() / 7.0
+    tensor_f32 = tensor.float()
+    scale = tensor_f32.abs().max().item() / 7.0
     if scale == 0:
         scale = 1.0
-    int4_data = torch.round(tensor / scale).clamp(-8, 7).to(torch.int8)
+    int4_data = torch.round(tensor_f32 / scale).clamp(-8, 7).to(torch.int8)
     return {"data": int4_data, "scale": scale, "lineage": "approximate_q4"}
 
 

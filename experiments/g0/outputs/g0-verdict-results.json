@@ -3,38 +3,82 @@
     {
       "id": 1,
       "name": "BF16 缓存恢复与重算一致",
-      "passed": false,
-      "evidence": "exactness-results.json 中无数值结果"
+      "passed": true,
+      "evidence": "KV bit-identical: 220/220, logits diff ≤ 1e-3: 220/220, top-1 match: 220/220",
+      "details": {
+        "total": 220,
+        "kv_identical": 220,
+        "logits_ok": 220,
+        "top1_ok": 220
+      }
     },
     {
       "id": 2,
       "name": "block identity/父链/invalidation 无错误",
       "passed": false,
-      "evidence": "exactness-results.json 中无 identity 结果"
+      "evidence": "identity: 90/100, parent chain: 100/100, invalidation: 20/20",
+      "details": {
+        "total": 100,
+        "identity_pass": 90,
+        "parent_chain_pass": 100,
+        "invalidation_pass": 20,
+        "invalidation_total": 20
+      }
     },
     {
       "id": 3,
       "name": "freeze-record 完整",
-      "passed": false,
-      "evidence": "freeze-record.json 不存在或为空"
+      "passed": true,
+      "evidence": "校验通过: True",
+      "details": {
+        "missing_fields": []
+      }
     },
     {
       "id": 4,
       "name": "codec/staging/lineage spike 跑通",
-      "passed": false,
-      "evidence": "codec-results.json 不存在或为空"
+      "passed": true,
+      "evidence": "测试 block 数: 100, Q8 MSE: 1.60e-02, Q4 MSE: 8.92e-01, lineage 隔离: True",
+      "details": {
+        "num_blocks": 100,
+        "q8": {
+          "mse_mean": 0.016011736350548693,
+          "mse_max": 0.017181588762696265,
+          "max_abs_err_mean": 2.0,
+          "max_abs_err_max": 2.0,
+          "kl_mean": 0.9665985823329538,
+          "kl_max": 10.428256034851074,
+          "encode_ms_mean": 0.11487892695835658,
+          "decode_ms_mean": 0.02443671226501465
+        },
+        "q4": {
+          "mse_mean": 0.8921640569482023,
+          "mse_max": 0.9858081814018078,
+          "max_abs_err_mean": 29.5775,
+          "max_abs_err_max": 30.0,
+          "kl_mean": 5.226861301064491,
+          "kl_max": 19.18064308166504,
+          "encode_ms_mean": 0.07876013006482806,
+          "decode_ms_mean": 0.023479035922459195
+        },
+        "lineage": {
+          "isolated": 100,
+          "total": 100,
+          "all_isolated": true
+        }
+      }
     },
     {
       "id": 5,
       "name": "后端能拦截/恢复 KV",
-      "passed": false,
-      "evidence": "无 exactness 结果，无法验证后端拦截/恢复"
+      "passed": true,
+      "evidence": "slice + restore 成功执行: True, KV bit-identical: 220/220"
     },
     {
       "id": 6,
       "name": "显存可承载",
       "passed": false,
-      "evidence": "memory-results.json 不存在或为空"
+      "evidence": "最大 reserved 峰值: 18.979 GB, 含安全水位: 20.877 GB, 上限: 24 GB, 判定: FAIL"
     }
   ],
   "overall": "FAILED"

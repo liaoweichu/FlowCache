@@ -19,18 +19,19 @@ from trace_utils import load_all_trajectories
 
 
 # ---------------------------------------------------------------------------
-# Constants for KV memory estimation (Qwen3-8B)
+# Constants for KV memory estimation (Qwen2.5-7B-Instruct)
 # ---------------------------------------------------------------------------
-QWEN3_NUM_LAYERS = 36
-QWEN3_NUM_Q_HEADS = 32
-QWEN3_NUM_KV_HEADS = 8
-QWEN3_HEAD_DIM = 128
+# Qwen2.5-7B-Instruct architecture
+NUM_LAYERS = 28
+NUM_Q_HEADS = 28
+NUM_KV_HEADS = 4   # GQA: 4 KV heads
+HEAD_DIM = 128
 BYTES_PER_ELEMENT = 2  # BF16
 TOTAL_VRAM_GB = 24.0
 
 # Per-token KV bytes = 2 (K+V) * num_layers * num_kv_heads * head_dim * bytes_per_element
 PER_TOKEN_KV_BYTES = (
-    2 * QWEN3_NUM_LAYERS * QWEN3_NUM_KV_HEADS * QWEN3_HEAD_DIM * BYTES_PER_ELEMENT
+    2 * NUM_LAYERS * NUM_KV_HEADS * HEAD_DIM * BYTES_PER_ELEMENT
 )
 
 

@@ -1,0 +1,77 @@
+{
+  "configs": [
+    {
+      "allocated_peak_gb": 15.231234048,
+      "reserved_peak_gb": 15.252586496,
+      "allocated_values": [
+        15.231234048,
+        15.231234048,
+        15.231234048,
+        15.231234048,
+        15.231234048
+      ],
+      "reserved_values": [
+        15.252586496,
+        15.252586496,
+        15.252586496,
+        15.252586496,
+        15.252586496
+      ],
+      "oom": false,
+      "oom_count": 0,
+      "name": "model_only",
+      "concurrent": 0,
+      "context_len": 0
+    },
+    {
+      "allocated_peak_gb": 18.700480512,
+      "reserved_peak_gb": 18.9792256,
+      "allocated_values": [
+        18.700480512,
+        18.700480512,
+        18.700480512,
+        18.700480512,
+        18.700480512
+      ],
+      "reserved_values": [
+        18.912116736,
+        18.920505344,
+        18.83242496,
+        18.9792256,
+        18.824036352
+      ],
+      "oom": false,
+      "oom_count": 0,
+      "name": "concurrent_4x4k",
+      "concurrent": 4,
+      "context_len": 4096
+    },
+    {
+      "allocated_peak_gb": 0.0,
+      "reserved_peak_gb": 0.0,
+      "allocated_values": [
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "reserved_values": [
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "oom": true,
+      "oom_count": 5,
+      "name": "concurrent_8x8k",
+      "concurrent": 8,
+      "context_len": 8192
+    }
+  ],
+  "memory_limit_gb": 24.0,
+  "safety_margin": 0.1,
+  "required_with_safety_gb": 20.87714816,
+  "verdict": "FAIL"
+}
