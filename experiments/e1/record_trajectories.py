@@ -30,7 +30,11 @@ from typing import List, Dict, Optional, Tuple
 
 import torch
 
-from trace_utils import compute_block_hash
+from trace_utils import (
+    compute_block_hash,
+    compute_template_hash,
+    compute_config_hash,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -177,6 +181,30 @@ def parse_tool_call(text: str) -> Optional[Dict]:
     except json.JSONDecodeError:
         logger.warning("Failed to parse tool call JSON: %s", raw[:120])
         return None
+
+
+def _parse_bfcl_tool_calls(text: str) -> List[str]:
+    """Parse BFCL-style tool call strings from model output.
+
+    BFCL emits tool calls as Python-style function calls separated by
+    semicolons, e.g. ``"math(x=1); post_tweet(content=\\"hi\\")"``.
+    This parser splits on semicolons and keeps fragments that look like
+    a function call (contain both ``(`` and ``)``).
+
+    Note:
+        This is a simplified MVP parser. It does not handle semicolons
+        inside string literals; a proper parser would track quote state.
+        Sufficient for G1 recording where model output is well-formed.
+
+    Args:
+        text: Model-generated text potentially containing BFCL tool calls.
+
+    Returns:
+        List of tool-call strings (e.g. ``["math(x=1)", "post_tweet(content=\\"hi\\")"]``).
+        Empty list if no tool calls found.
+    """
+    parts = [p.strip() for p in text.split(";") if p.strip()]
+    return [p for p in parts if "(" in p and ")" in p]
 
 
 def _simulate_tool_result(tool_call: Dict) -> str:
@@ -654,10 +682,19 @@ class TrajectoryRecorder:
 
     @torch.no_grad()
     def _generate_response(
-        self, messages: List[Dict]
+        self, messages: List[Dict], seed: Optional[int] = None
     ) -> Tuple[str, int, float, float]:
         """
         Generate assistant response from the current conversation.
+
+        Args:
+            messages: Chat messages (system + conversation so far).
+            seed: Optional decode seed. When provided, switches to
+                ``do_sample=True, temperature=0.7, top_p=0.9`` and calls
+                ``torch.manual_seed(seed)`` before generation. Used by
+                BFCL recording (scripted user turns → seed the agent
+                decode). When ``None`` (default), keeps legacy greedy
+                decode (``do_sample=False``) for τ-bench / run_workflow.
 
         Returns:
             generated_text: Decoded assistant output.
@@ -669,15 +706,19 @@ class TrajectoryRecorder:
         inputs = self._tokenizer(prompt_text, return_tensors="pt").to(self._device)
         num_prefill_tokens = inputs.input_ids.shape[1]
 
-        t0 = time.perf_counter()
-        outputs = self._model.generate(
-            **inputs,
+        gen_kwargs = dict(
             max_new_tokens=MAX_NEW_TOKENS,
-            do_sample=False,          # greedy decode
-            temperature=1.0,
             pad_token_id=self._tokenizer.eos_token_id,
             eos_token_id=self._tokenizer.eos_token_id,
         )
+        if seed is not None:
+            torch.manual_seed(int(seed))
+            gen_kwargs.update(do_sample=True, temperature=0.7, top_p=0.9)
+        else:
+            gen_kwargs.update(do_sample=False, temperature=1.0)
+
+        t0 = time.perf_counter()
+        outputs = self._model.generate(**inputs, **gen_kwargs)
         t1 = time.perf_counter()
         total_ms = (t1 - t0) * 1000.0
 
@@ -962,6 +1003,474 @@ class TrajectoryRecorder:
             task_id, len(steps), total_tokens, total_prefill_ms, total_decode_ms,
         )
         return trajectory
+
+    # ------------------------------------------------------------------
+    # G1 episode recording loops (real adapters)
+    # ------------------------------------------------------------------
+    #
+    # These replace the mock-based run_workflow path with real adapter
+    # calls. Two data-sets use structurally different loops:
+    #   - τ-bench: LLM user simulator (step_respond drives next user msg)
+    #   - BFCL v3: scripted user turns (iterate episode.user_turns list)
+
+    def _run_episode_tau_bench(
+        self,
+        adapter,
+        task_index: int,
+        task_id: str,
+        seed: int,
+        domain: str,
+    ) -> Dict:
+        """Record a single τ-bench episode using a TauBenchAdapter.
+
+        Conversation loop:
+          step 0: system policy + tool schema (recorded, not generated)
+          step 1: initial user observation (adapter.reset)
+          loop:   assistant generate → parse tool call →
+                    tool call path: adapter.step_tool → tool result
+                    no-tool path:   adapter.step_respond → user next msg
+                  until done / MAX_WORKFLOW_TURNS / ###STOP###
+
+        Each step records arrival_time_ms (wall-clock offset from
+        episode start) so downstream replay can reconstruct arrival
+        times.
+
+        Args:
+            adapter: TauBenchAdapter (or mock) instance.
+            task_index: Index into adapter.list_tasks().
+            task_id: Human-readable task identifier (e.g. "retail-0").
+            seed: Recording seed (user-simulator seed).
+            domain: τ-bench domain ("retail" / "airline").
+
+        Returns:
+            Trace dict with ``meta`` (dataset, seed, task_id, model_id,
+            template_hash, config_hash, adapter_id, ...) and ``steps``.
+        """
+        t_start = time.perf_counter()
+        system_policy = adapter.get_system_policy()
+        tools_schema = adapter.get_tools_schema_for_qwen()
+        full_system = f"{system_policy}\n\n{tools_schema}"
+
+        obs = adapter.reset(task_index)
+        user_instruction = obs.get("observation", "")
+
+        steps: List[Dict] = []
+        parent_hash = ""
+        global_offset = 0
+        step_id = 0
+
+        # ---- Step 0: system prompt ----
+        sys_tokens, sys_blocks = self.tokenize_with_block_tracking(
+            full_system, parent_hash=parent_hash
+        )
+        if sys_blocks:
+            parent_hash = sys_blocks[-1]["block_hash"]
+        _register_blocks(self._global_block_index, sys_blocks, task_id, global_offset)
+        global_offset += len(sys_tokens)
+        steps.append({
+            "step_id": step_id,
+            "role": "system",
+            "content": full_system,
+            "token_ids": sys_tokens,
+            "token_count": len(sys_tokens),
+            "block_assignments": sys_blocks,
+            "prefill_ms": 0.0,
+            "decode_ms": 0.0,
+            "arrival_time_ms": (time.perf_counter() - t_start) * 1000,
+            "tool_call": None,
+            "tool_result": None,
+            "tool_wait_ms": 0.0,
+        })
+        step_id += 1
+
+        # ---- Step 1: initial user message ----
+        user_msg = {"role": "user", "content": user_instruction}
+        usr_tokens, usr_blocks = self.tokenize_with_block_tracking(
+            user_instruction, parent_hash=parent_hash
+        )
+        if usr_blocks:
+            parent_hash = usr_blocks[-1]["block_hash"]
+        _register_blocks(self._global_block_index, usr_blocks, task_id, global_offset)
+        global_offset += len(usr_tokens)
+        steps.append({
+            "step_id": step_id,
+            "role": "user",
+            "content": user_instruction,
+            "token_ids": usr_tokens,
+            "token_count": len(usr_tokens),
+            "block_assignments": usr_blocks,
+            "prefill_ms": 0.0,
+            "decode_ms": 0.0,
+            "arrival_time_ms": (time.perf_counter() - t_start) * 1000,
+            "tool_call": None,
+            "tool_result": None,
+            "tool_wait_ms": 0.0,
+        })
+        step_id += 1
+
+        # ---- Conversation loop ----
+        conversation: List[Dict] = [user_msg]
+        done = False
+        turn = 0
+        while not done and turn < MAX_WORKFLOW_TURNS:
+            messages = [{"role": "system", "content": full_system}] + conversation
+            try:
+                gen_text, _n_pre, pre_ms, dec_ms = self._generate_response(messages)
+            except Exception as exc:
+                logger.error("Generation failed for %s turn %d: %s", task_id, turn, exc)
+                break
+
+            asst_tokens, asst_blocks = self.tokenize_with_block_tracking(
+                gen_text, parent_hash=parent_hash
+            )
+            if asst_blocks:
+                parent_hash = asst_blocks[-1]["block_hash"]
+            _register_blocks(self._global_block_index, asst_blocks, task_id, global_offset)
+            global_offset += len(asst_tokens)
+            conversation.append({"role": "assistant", "content": gen_text})
+
+            tool_call = parse_tool_call(gen_text)
+            steps.append({
+                "step_id": step_id,
+                "role": "assistant",
+                "content": gen_text,
+                "token_ids": asst_tokens,
+                "token_count": len(asst_tokens),
+                "block_assignments": asst_blocks,
+                "prefill_ms": pre_ms,
+                "decode_ms": dec_ms,
+                "arrival_time_ms": (time.perf_counter() - t_start) * 1000,
+                "tool_call": tool_call,
+                "tool_result": None,
+                "tool_wait_ms": 0.0,
+            })
+            step_id += 1
+
+            if tool_call:
+                t_tool0 = time.perf_counter()
+                result = adapter.step_tool(
+                    tool_call["name"], tool_call.get("arguments", {})
+                )
+                tool_wait_ms = (time.perf_counter() - t_tool0) * 1000
+                obs_text = result.get("observation", "")
+                tool_tokens, tool_blocks = self.tokenize_with_block_tracking(
+                    obs_text, parent_hash=parent_hash
+                )
+                if tool_blocks:
+                    parent_hash = tool_blocks[-1]["block_hash"]
+                _register_blocks(self._global_block_index, tool_blocks, task_id, global_offset)
+                global_offset += len(tool_tokens)
+                conversation.append({"role": "tool", "content": obs_text})
+                steps.append({
+                    "step_id": step_id,
+                    "role": "tool",
+                    "content": obs_text,
+                    "token_ids": tool_tokens,
+                    "token_count": len(tool_tokens),
+                    "block_assignments": tool_blocks,
+                    "prefill_ms": 0.0,
+                    "decode_ms": 0.0,
+                    "arrival_time_ms": (time.perf_counter() - t_start) * 1000,
+                    "tool_call": None,
+                    "tool_result": obs_text,
+                    "tool_wait_ms": tool_wait_ms,
+                })
+                step_id += 1
+                if result.get("done"):
+                    done = True
+            else:
+                # No tool call → respond to user simulator
+                t_user0 = time.perf_counter()
+                u_resp = adapter.step_respond(gen_text)
+                tool_wait_ms = (time.perf_counter() - t_user0) * 1000
+                u_text = u_resp.get("observation", "")
+                if not u_text or u_text == "###STOP###":
+                    done = True
+                else:
+                    u2_tokens, u2_blocks = self.tokenize_with_block_tracking(
+                        u_text, parent_hash=parent_hash
+                    )
+                    if u2_blocks:
+                        parent_hash = u2_blocks[-1]["block_hash"]
+                    _register_blocks(self._global_block_index, u2_blocks, task_id, global_offset)
+                    global_offset += len(u2_tokens)
+                    conversation.append({"role": "user", "content": u_text})
+                    steps.append({
+                        "step_id": step_id,
+                        "role": "user",
+                        "content": u_text,
+                        "token_ids": u2_tokens,
+                        "token_count": len(u2_tokens),
+                        "block_assignments": u2_blocks,
+                        "prefill_ms": 0.0,
+                        "decode_ms": 0.0,
+                        "arrival_time_ms": (time.perf_counter() - t_start) * 1000,
+                        "tool_call": None,
+                        "tool_result": None,
+                        "tool_wait_ms": tool_wait_ms,
+                    })
+                    step_id += 1
+                if u_resp.get("done"):
+                    done = True
+            turn += 1
+
+        # ---- Build meta ----
+        model_id = self._config.get("model", {}).get("name", "unknown")
+        try:
+            template_str = self._tokenizer.apply_chat_template(
+                [{"role": "user", "content": "x"}], tokenize=False
+            )
+            template_hash = compute_template_hash(template_str)
+        except Exception:
+            template_hash = ""
+        if self._model is not None and hasattr(self._model, "config"):
+            try:
+                config_hash = compute_config_hash(
+                    {"num_layers": getattr(self._model.config, "num_hidden_layers", 0)}
+                )
+            except Exception:
+                config_hash = ""
+        else:
+            config_hash = ""
+        revision = ""
+        if self._model is not None:
+            revision = getattr(self._model, "_commit_hash", "") or ""
+
+        return {
+            "meta": {
+                "workflow_id": f"{task_id}_seed{seed}",
+                "task_id": task_id,
+                "seed": seed,
+                "dataset": "tau-bench",
+                "domain": domain,
+                "model_id": model_id,
+                "revision": revision,
+                "template_hash": template_hash,
+                "config_hash": config_hash,
+                "adapter_id": "tau_bench_v1",
+                "block_size": self._block_size,
+                "pass_k": 8,
+                "group_id": task_id,
+                "num_steps": len(steps),
+                "num_turns": turn,
+            },
+            "steps": steps,
+            "global_block_index": self._global_block_index,
+        }
+
+    def _run_episode_bfcl(
+        self,
+        adapter,
+        episode,
+        seed: int,
+    ) -> Dict:
+        """Record a single BFCL v3 episode using a BFCLAdapter.
+
+        BFCL differs from τ-bench:
+          - No LLM user simulator; iterate ``episode.user_turns`` list.
+          - ``_generate_response`` is called with ``seed`` to enable
+            ``do_sample=True, temperature=0.7`` (BFCL's seed semantic
+            is on the agent decode, not on a user simulator).
+          - Tool calls use BFCL syntax (``func1(x=1); func2(y=2)``),
+            parsed by ``_parse_bfcl_tool_calls``.
+          - Each turn may produce multiple parallel tool calls.
+
+        Args:
+            adapter: BFCLAdapter (or mock) instance.
+            episode: BFCLEpisode (or mock) with ``user_turns`` /
+                ``entry_id`` / ``subset`` / ``tool_calls`` /
+                ``tool_results`` attributes.
+            seed: Model decode seed.
+
+        Returns:
+            Trace dict with ``meta`` (dataset, seed, bfcl_subset,
+            model_id, template_hash, config_hash, adapter_id,
+            bfcl_valid, ...) and ``steps``.
+        """
+        t_start = time.perf_counter()
+        system_policy = (
+            "You are a helpful assistant. Use the available tools to complete tasks. "
+            "Emit tool calls as Python-style function calls separated by semicolons.\n\n"
+            + adapter.get_tool_schema_for_qwen(episode)
+        )
+
+        steps: List[Dict] = []
+        parent_hash = ""
+        global_offset = 0
+        step_id = 0
+
+        # ---- Step 0: system prompt ----
+        sys_tokens, sys_blocks = self.tokenize_with_block_tracking(
+            system_policy, parent_hash=parent_hash
+        )
+        if sys_blocks:
+            parent_hash = sys_blocks[-1]["block_hash"]
+        _register_blocks(self._global_block_index, sys_blocks, episode.entry_id, global_offset)
+        global_offset += len(sys_tokens)
+        steps.append({
+            "step_id": step_id,
+            "role": "system",
+            "content": system_policy,
+            "token_ids": sys_tokens,
+            "token_count": len(sys_tokens),
+            "block_assignments": sys_blocks,
+            "prefill_ms": 0.0,
+            "decode_ms": 0.0,
+            "arrival_time_ms": (time.perf_counter() - t_start) * 1000,
+            "tool_call": None,
+            "tool_result": None,
+            "tool_wait_ms": 0.0,
+        })
+        step_id += 1
+
+        conversation: List[Dict] = []
+        for user_msg_text in episode.user_turns:
+            # --- User turn ---
+            user_msg = {"role": "user", "content": user_msg_text}
+            conversation.append(user_msg)
+            u_tokens, u_blocks = self.tokenize_with_block_tracking(
+                user_msg_text, parent_hash=parent_hash
+            )
+            if u_blocks:
+                parent_hash = u_blocks[-1]["block_hash"]
+            _register_blocks(self._global_block_index, u_blocks, episode.entry_id, global_offset)
+            global_offset += len(u_tokens)
+            steps.append({
+                "step_id": step_id,
+                "role": "user",
+                "content": user_msg_text,
+                "token_ids": u_tokens,
+                "token_count": len(u_tokens),
+                "block_assignments": u_blocks,
+                "prefill_ms": 0.0,
+                "decode_ms": 0.0,
+                "arrival_time_ms": (time.perf_counter() - t_start) * 1000,
+                "tool_call": None,
+                "tool_result": None,
+                "tool_wait_ms": 0.0,
+            })
+            step_id += 1
+
+            # --- Assistant generate (with seed) ---
+            messages = [{"role": "system", "content": system_policy}] + conversation
+            try:
+                gen_text, _n_pre, pre_ms, dec_ms = self._generate_response(
+                    messages, seed=seed
+                )
+            except Exception as exc:
+                logger.error(
+                    "BFCL generation failed for %s: %s", episode.entry_id, exc
+                )
+                break
+
+            asst_tokens, asst_blocks = self.tokenize_with_block_tracking(
+                gen_text, parent_hash=parent_hash
+            )
+            if asst_blocks:
+                parent_hash = asst_blocks[-1]["block_hash"]
+            _register_blocks(self._global_block_index, asst_blocks, episode.entry_id, global_offset)
+            global_offset += len(asst_tokens)
+            conversation.append({"role": "assistant", "content": gen_text})
+            episode.agent_responses.append(gen_text)
+
+            tool_calls = _parse_bfcl_tool_calls(gen_text)
+            steps.append({
+                "step_id": step_id,
+                "role": "assistant",
+                "content": gen_text,
+                "token_ids": asst_tokens,
+                "token_count": len(asst_tokens),
+                "block_assignments": asst_blocks,
+                "prefill_ms": pre_ms,
+                "decode_ms": dec_ms,
+                "arrival_time_ms": (time.perf_counter() - t_start) * 1000,
+                "tool_call": tool_calls if tool_calls else None,
+                "tool_result": None,
+                "tool_wait_ms": 0.0,
+            })
+            step_id += 1
+
+            # --- Execute tool calls (parallel) ---
+            if tool_calls:
+                t_tool0 = time.perf_counter()
+                results = adapter.execute_tool_calls(tool_calls, episode)
+                tool_wait_ms = (time.perf_counter() - t_tool0) * 1000
+                for tc, res in zip(tool_calls, results):
+                    r_tokens, r_blocks = self.tokenize_with_block_tracking(
+                        str(res), parent_hash=parent_hash
+                    )
+                    if r_blocks:
+                        parent_hash = r_blocks[-1]["block_hash"]
+                    _register_blocks(self._global_block_index, r_blocks, episode.entry_id, global_offset)
+                    global_offset += len(r_tokens)
+                    conversation.append({"role": "tool", "content": str(res)})
+                    steps.append({
+                        "step_id": step_id,
+                        "role": "tool",
+                        "content": str(res),
+                        "token_ids": r_tokens,
+                        "token_count": len(r_tokens),
+                        "block_assignments": r_blocks,
+                        "prefill_ms": 0.0,
+                        "decode_ms": 0.0,
+                        "arrival_time_ms": (time.perf_counter() - t_start) * 1000,
+                        "tool_call": None,
+                        "tool_result": str(res),
+                        "tool_wait_ms": tool_wait_ms,
+                    })
+                    step_id += 1
+                episode.tool_calls.append([tool_calls])
+                episode.tool_results.append([results])
+
+        # ---- Validate episode ----
+        try:
+            adapter.validate_episode(episode)
+        except Exception as exc:
+            logger.warning("validate_episode failed for %s: %s", episode.entry_id, exc)
+
+        # ---- Build meta ----
+        model_id = self._config.get("model", {}).get("name", "unknown")
+        try:
+            template_str = self._tokenizer.apply_chat_template(
+                [{"role": "user", "content": "x"}], tokenize=False
+            )
+            template_hash = compute_template_hash(template_str)
+        except Exception:
+            template_hash = ""
+        if self._model is not None and hasattr(self._model, "config"):
+            try:
+                config_hash = compute_config_hash(
+                    {"num_layers": getattr(self._model.config, "num_hidden_layers", 0)}
+                )
+            except Exception:
+                config_hash = ""
+        else:
+            config_hash = ""
+        revision = ""
+        if self._model is not None:
+            revision = getattr(self._model, "_commit_hash", "") or ""
+
+        return {
+            "meta": {
+                "workflow_id": f"{episode.entry_id}_seed{seed}",
+                "task_id": episode.entry_id,
+                "seed": seed,
+                "dataset": "bfcl_v3",
+                "bfcl_subset": episode.subset,
+                "model_id": model_id,
+                "revision": revision,
+                "template_hash": template_hash,
+                "config_hash": config_hash,
+                "adapter_id": "bfcl_v1",
+                "block_size": self._block_size,
+                "pass_k": 8,
+                "group_id": episode.entry_id,
+                "bfcl_valid": episode.valid,
+                "num_steps": len(steps),
+            },
+            "steps": steps,
+            "global_block_index": self._global_block_index,
+        }
 
     # ------------------------------------------------------------------
     # Batch recording
