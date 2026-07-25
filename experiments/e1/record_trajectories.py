@@ -603,15 +603,31 @@ class TrajectoryRecorder:
     # ------------------------------------------------------------------
 
     def tokenize_with_block_tracking(
-        self, text: str, parent_hash: str = ""
+        self,
+        text: str,
+        parent_hash: str = "",
+        model_id: str = "",
+        revision: str = "",
+        template_hash: str = "",
+        config_hash: str = "",
+        adapter_id: str = "",
     ) -> Tuple[List[int], List[Dict]]:
         """
         Tokenize *text* and split token_ids into blocks of BLOCK_SIZE.
-        Each block receives an identity hash over (token_ids, parent_hash, block_idx).
+        Each block receives a G0 8-tuple identity hash over
+        (model_id, revision, template_hash, config_hash, adapter_id,
+         parent_hash, token_ids, block_idx).
 
         Args:
             text: The raw text to tokenize (may include special chat tokens).
             parent_hash: Hash of the immediately preceding block ("" for first block).
+            model_id: Model identifier (e.g. "Qwen/Qwen2.5-7B-Instruct").
+                Default "" preserves backward compat with the legacy 4-tuple
+                callers (run_workflow).
+            revision: Model revision / commit hash.
+            template_hash: Chat template hash.
+            config_hash: Model config hash.
+            adapter_id: Adapter identifier (e.g. "tau_bench_v1").
 
         Returns:
             token_ids: Full list of token IDs for this text.
@@ -628,7 +644,12 @@ class TrajectoryRecorder:
             block_idx = len(blocks)
             # If the chunk is shorter than block_size, pad tracking but still hash
             block_hash = compute_block_hash(
-                chunk, parent_hash, block_idx, self._block_size
+                chunk, parent_hash, block_idx, self._block_size,
+                model_id=model_id,
+                revision=revision,
+                template_hash=template_hash,
+                config_hash=config_hash,
+                adapter_id=adapter_id,
             )
             block_info = {
                 "block_idx": block_idx,
@@ -641,6 +662,55 @@ class TrajectoryRecorder:
             parent_hash = block_hash  # chain to next block
 
         return token_ids, blocks
+
+    # ------------------------------------------------------------------
+    # Model metadata extraction (G1 Task 7: block identity propagation)
+    # ------------------------------------------------------------------
+
+    def _compute_model_metadata(self) -> Dict[str, str]:
+        """Extract model_id / revision / template_hash / config_hash.
+
+        Used by ``_run_episode_tau_bench`` / ``_run_episode_bfcl`` to
+        propagate the G0 8-tuple block identity fields into every
+        ``compute_block_hash`` call. Falls back gracefully when the model
+        is not loaded (tests / smoke runs): model_id from config (or
+        "unknown"), revision/template_hash/config_hash may be "".
+
+        Returns:
+            Dict with keys ``model_id``, ``revision``,
+            ``template_hash``, ``config_hash`` (all strings, possibly
+            empty).
+        """
+        model_id = self._config.get("model", {}).get("name", "unknown")
+
+        revision = ""
+        if self._model is not None:
+            revision = getattr(self._model, "_commit_hash", "") or ""
+
+        template_hash = ""
+        try:
+            template_str = self._tokenizer.apply_chat_template(
+                [{"role": "user", "content": "x"}], tokenize=False
+            )
+            template_hash = compute_template_hash(template_str)
+        except Exception:
+            pass
+
+        config_hash = ""
+        if self._model is not None and hasattr(self._model, "config"):
+            try:
+                config_hash = compute_config_hash(
+                    {"num_layers": getattr(self._model.config, "num_hidden_layers", 0)}
+                )
+            except Exception:
+                pass
+
+        return {
+            "model_id": model_id,
+            "revision": revision,
+            "template_hash": template_hash,
+            "config_hash": config_hash,
+        }
 
     # ------------------------------------------------------------------
     # Conversation helpers
@@ -1054,15 +1124,28 @@ class TrajectoryRecorder:
         obs = adapter.reset(task_index)
         user_instruction = obs.get("observation", "")
 
+        # G1 Task 7: propagate model_id / revision / template_hash /
+        # config_hash / adapter_id into every block hash (G0 8-tuple).
+        meta_fields = self._compute_model_metadata()
+        adapter_id = "tau_bench_v1"
+
+        def _tokenize(text: str, parent: str):
+            return self.tokenize_with_block_tracking(
+                text, parent_hash=parent,
+                model_id=meta_fields["model_id"],
+                revision=meta_fields["revision"],
+                template_hash=meta_fields["template_hash"],
+                config_hash=meta_fields["config_hash"],
+                adapter_id=adapter_id,
+            )
+
         steps: List[Dict] = []
         parent_hash = ""
         global_offset = 0
         step_id = 0
 
         # ---- Step 0: system prompt ----
-        sys_tokens, sys_blocks = self.tokenize_with_block_tracking(
-            full_system, parent_hash=parent_hash
-        )
+        sys_tokens, sys_blocks = _tokenize(full_system, parent_hash)
         if sys_blocks:
             parent_hash = sys_blocks[-1]["block_hash"]
         _register_blocks(self._global_block_index, sys_blocks, task_id, global_offset)
@@ -1085,9 +1168,7 @@ class TrajectoryRecorder:
 
         # ---- Step 1: initial user message ----
         user_msg = {"role": "user", "content": user_instruction}
-        usr_tokens, usr_blocks = self.tokenize_with_block_tracking(
-            user_instruction, parent_hash=parent_hash
-        )
+        usr_tokens, usr_blocks = _tokenize(user_instruction, parent_hash)
         if usr_blocks:
             parent_hash = usr_blocks[-1]["block_hash"]
         _register_blocks(self._global_block_index, usr_blocks, task_id, global_offset)
@@ -1120,9 +1201,7 @@ class TrajectoryRecorder:
                 logger.error("Generation failed for %s turn %d: %s", task_id, turn, exc)
                 break
 
-            asst_tokens, asst_blocks = self.tokenize_with_block_tracking(
-                gen_text, parent_hash=parent_hash
-            )
+            asst_tokens, asst_blocks = _tokenize(gen_text, parent_hash)
             if asst_blocks:
                 parent_hash = asst_blocks[-1]["block_hash"]
             _register_blocks(self._global_block_index, asst_blocks, task_id, global_offset)
@@ -1153,9 +1232,7 @@ class TrajectoryRecorder:
                 )
                 tool_wait_ms = (time.perf_counter() - t_tool0) * 1000
                 obs_text = result.get("observation", "")
-                tool_tokens, tool_blocks = self.tokenize_with_block_tracking(
-                    obs_text, parent_hash=parent_hash
-                )
+                tool_tokens, tool_blocks = _tokenize(obs_text, parent_hash)
                 if tool_blocks:
                     parent_hash = tool_blocks[-1]["block_hash"]
                 _register_blocks(self._global_block_index, tool_blocks, task_id, global_offset)
@@ -1187,9 +1264,7 @@ class TrajectoryRecorder:
                 if not u_text or u_text == "###STOP###":
                     done = True
                 else:
-                    u2_tokens, u2_blocks = self.tokenize_with_block_tracking(
-                        u_text, parent_hash=parent_hash
-                    )
+                    u2_tokens, u2_blocks = _tokenize(u_text, parent_hash)
                     if u2_blocks:
                         parent_hash = u2_blocks[-1]["block_hash"]
                     _register_blocks(self._global_block_index, u2_blocks, task_id, global_offset)
@@ -1214,28 +1289,7 @@ class TrajectoryRecorder:
                     done = True
             turn += 1
 
-        # ---- Build meta ----
-        model_id = self._config.get("model", {}).get("name", "unknown")
-        try:
-            template_str = self._tokenizer.apply_chat_template(
-                [{"role": "user", "content": "x"}], tokenize=False
-            )
-            template_hash = compute_template_hash(template_str)
-        except Exception:
-            template_hash = ""
-        if self._model is not None and hasattr(self._model, "config"):
-            try:
-                config_hash = compute_config_hash(
-                    {"num_layers": getattr(self._model.config, "num_hidden_layers", 0)}
-                )
-            except Exception:
-                config_hash = ""
-        else:
-            config_hash = ""
-        revision = ""
-        if self._model is not None:
-            revision = getattr(self._model, "_commit_hash", "") or ""
-
+        # ---- Build meta (reuse metadata already propagated to blocks) ----
         return {
             "meta": {
                 "workflow_id": f"{task_id}_seed{seed}",
@@ -1243,11 +1297,11 @@ class TrajectoryRecorder:
                 "seed": seed,
                 "dataset": "tau-bench",
                 "domain": domain,
-                "model_id": model_id,
-                "revision": revision,
-                "template_hash": template_hash,
-                "config_hash": config_hash,
-                "adapter_id": "tau_bench_v1",
+                "model_id": meta_fields["model_id"],
+                "revision": meta_fields["revision"],
+                "template_hash": meta_fields["template_hash"],
+                "config_hash": meta_fields["config_hash"],
+                "adapter_id": adapter_id,
                 "block_size": self._block_size,
                 "pass_k": 8,
                 "group_id": task_id,
@@ -1294,15 +1348,28 @@ class TrajectoryRecorder:
             + adapter.get_tool_schema_for_qwen(episode)
         )
 
+        # G1 Task 7: propagate model_id / revision / template_hash /
+        # config_hash / adapter_id into every block hash (G0 8-tuple).
+        meta_fields = self._compute_model_metadata()
+        adapter_id = "bfcl_v1"
+
+        def _tokenize(text: str, parent: str):
+            return self.tokenize_with_block_tracking(
+                text, parent_hash=parent,
+                model_id=meta_fields["model_id"],
+                revision=meta_fields["revision"],
+                template_hash=meta_fields["template_hash"],
+                config_hash=meta_fields["config_hash"],
+                adapter_id=adapter_id,
+            )
+
         steps: List[Dict] = []
         parent_hash = ""
         global_offset = 0
         step_id = 0
 
         # ---- Step 0: system prompt ----
-        sys_tokens, sys_blocks = self.tokenize_with_block_tracking(
-            system_policy, parent_hash=parent_hash
-        )
+        sys_tokens, sys_blocks = _tokenize(system_policy, parent_hash)
         if sys_blocks:
             parent_hash = sys_blocks[-1]["block_hash"]
         _register_blocks(self._global_block_index, sys_blocks, episode.entry_id, global_offset)
@@ -1328,9 +1395,7 @@ class TrajectoryRecorder:
             # --- User turn ---
             user_msg = {"role": "user", "content": user_msg_text}
             conversation.append(user_msg)
-            u_tokens, u_blocks = self.tokenize_with_block_tracking(
-                user_msg_text, parent_hash=parent_hash
-            )
+            u_tokens, u_blocks = _tokenize(user_msg_text, parent_hash)
             if u_blocks:
                 parent_hash = u_blocks[-1]["block_hash"]
             _register_blocks(self._global_block_index, u_blocks, episode.entry_id, global_offset)
@@ -1363,9 +1428,7 @@ class TrajectoryRecorder:
                 )
                 break
 
-            asst_tokens, asst_blocks = self.tokenize_with_block_tracking(
-                gen_text, parent_hash=parent_hash
-            )
+            asst_tokens, asst_blocks = _tokenize(gen_text, parent_hash)
             if asst_blocks:
                 parent_hash = asst_blocks[-1]["block_hash"]
             _register_blocks(self._global_block_index, asst_blocks, episode.entry_id, global_offset)
@@ -1396,9 +1459,7 @@ class TrajectoryRecorder:
                 results = adapter.execute_tool_calls(tool_calls, episode)
                 tool_wait_ms = (time.perf_counter() - t_tool0) * 1000
                 for tc, res in zip(tool_calls, results):
-                    r_tokens, r_blocks = self.tokenize_with_block_tracking(
-                        str(res), parent_hash=parent_hash
-                    )
+                    r_tokens, r_blocks = _tokenize(str(res), parent_hash)
                     if r_blocks:
                         parent_hash = r_blocks[-1]["block_hash"]
                     _register_blocks(self._global_block_index, r_blocks, episode.entry_id, global_offset)
