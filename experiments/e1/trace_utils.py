@@ -2,52 +2,34 @@
 Utility functions for E1 trajectory processing.
 Provides block identity hashing, parent chain computation,
 and cross-workflow prefix deduplication.
+
+Block identity (compute_block_hash, verify_parent_chain,
+compute_template_hash, compute_config_hash) is unified to the G0
+8-tuple version (m, r, tau, c, a, h_parent, tokenIds, positions)
+defined in experiments/g0/block_index.py. The previous 4-tuple
+simplified version is deprecated in favor of cross-experiment
+consistency.
 """
 
-import hashlib
 import json
 import os
 import glob
-from typing import List, Tuple, Dict, Optional
+import sys
+from pathlib import Path
+from typing import List, Dict
 
+# Re-export G0 8-tuple block identity implementation.
+# experiments/g0/block_index.py must be importable as `block_index`.
+_G0_DIR = Path(__file__).resolve().parent.parent / "g0"
+if str(_G0_DIR) not in sys.path:
+    sys.path.insert(0, str(_G0_DIR))
 
-def compute_block_hash(token_ids: List[int],
-                       parent_hash: str,
-                       block_idx: int,
-                       block_size: int = 16) -> str:
-    """
-    Compute block identity hash I_b = (token_ids, parent_hash).
-
-    Uses SHA-256 truncated to 16 hex chars.
-
-    This implements IDEA Section 1.2's block identity:
-        I_b = (m, r, tau, c, a, h_parent, tokenIds, positions)
-
-    For E1, we simplify: all workflows use the same model/config, so
-    we only need token_ids + parent_hash for identity. The block_idx
-    and block_size are included as additional distinguishing context.
-
-    Args:
-        token_ids: List of token IDs in this block.
-        parent_hash: Hash string of the parent block (empty string for root).
-        block_idx: Index of this block in the sequence.
-        block_size: Number of tokens per block (default 16).
-
-    Returns:
-        A 16-character hex hash string uniquely identifying this block.
-    """
-    if not token_ids:
-        raise ValueError("token_ids must not be empty")
-
-    content = json.dumps({
-        "token_ids": token_ids,
-        "parent_hash": parent_hash,
-        "block_idx": block_idx,
-        "block_size": block_size
-    }, sort_keys=True, separators=(",", ":"))
-
-    full_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    return full_hash[:16]
+from block_index import (  # noqa: F401  (re-exported)
+    compute_block_hash,
+    verify_parent_chain,
+    compute_template_hash,
+    compute_config_hash,
+)
 
 
 def compute_parent_chain(blocks: List[Dict]) -> List[str]:
