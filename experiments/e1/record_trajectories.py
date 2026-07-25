@@ -330,6 +330,59 @@ class TrajectoryRecorder:
         return cfg
 
     # ------------------------------------------------------------------
+    # Adapter dispatch (G1: replaces mock simulators)
+    # ------------------------------------------------------------------
+
+    def _init_adapter(self, dataset: str, seed: int,
+                      domain: str = "retail",
+                      subset: Optional[str] = None):
+        """Instantiate and return the appropriate adapter for `dataset`.
+
+        Replaces the legacy `_simulate_tool_result` /
+        `_simulate_user_response` / `_get_domain_policy` mock methods with
+        real tau-bench / BFCL v3 backends.
+
+        Args:
+            dataset: "tau-bench" or "bfcl_v3".
+            seed: Recording seed. For tau-bench this is the user-simulator
+                seed (pass^k alignment); for BFCL it is the model-decode
+                seed (applied later in `_run_episode_bfcl` via
+                `model.generate`).
+            domain: tau-bench domain ("retail" or "airline"). Ignored for
+                BFCL.
+            subset: BFCL subset name. Required when dataset="bfcl_v3" and
+                None defaults to "multi_turn_base".
+
+        Returns:
+            TauBenchAdapter or BFCLAdapter instance.
+
+        Raises:
+            ValueError: if `dataset` is not recognized.
+            ImportError: if the upstream package is not installed.
+        """
+        if dataset == "tau-bench":
+            from taubench_adapter import TauBenchAdapter
+            tb_cfg = self._config.get("workload", {}).get("tau_bench", {})
+            return TauBenchAdapter(
+                domain=domain,
+                seed=seed,
+                user_model=tb_cfg.get("user_model", "gpt-4o-mini"),
+                user_provider=tb_cfg.get("user_provider", "openai"),
+                user_temperature=tb_cfg.get("user_temperature", 0.7),
+            )
+        elif dataset == "bfcl_v3":
+            from bfcl_adapter import BFCLAdapter
+            if subset is None:
+                # Recording loop iterates over all 4 subsets; default is
+                # multi_turn_base so callers can smoke-test a single subset.
+                subset = "multi_turn_base"
+            return BFCLAdapter(subset=subset)
+        else:
+            raise ValueError(
+                f"Unknown dataset: {dataset!r} (expected 'tau-bench' or 'bfcl_v3')"
+            )
+
+    # ------------------------------------------------------------------
     # Model initialization
     # ------------------------------------------------------------------
 
