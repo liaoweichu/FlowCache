@@ -1279,3 +1279,5 @@ LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
 2026-07-25 22:30:58,580 [INFO] 
 LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
 2026-07-25 22:31:00,026 [INFO] Wrapper: Completed Call, calling success_handler
+2026-07-25 22:31:11,992 [INFO] 
+LiteLLM completion() model= deepseek-v4-flash; provider = deepseek
