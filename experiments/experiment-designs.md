@@ -9,7 +9,8 @@
 > **修订记录**：
 > - v0.1（2026-07-25）：初版
 > - **v0.2（2026-07-25）：数据集体系重构**——应用户要求：①全册禁止自建/合成数据集（移除合成 prompt 集与合成可控 DAG，G0 改用真实数据天然结构）；②数据集种类与样本总量大幅扩充（~880 → ~8,800 workflow 级样本）；③引入 BFCL、SWE 轨迹、Toolathlon、CATraces、LongBench、GSM8K、BurstGPT、Mooncake，选择依据对齐同类论文（详见 0.4）
-> - **v0.3（2026-07-25）：实验体系精简**——按 `.trae/specs/experiment-scope-redesign/spec.md`（状态：approved-pending-implementation）落地：13 章 → 5 章 + 2 个小判定（G0、G3 冒烟）；核心数据集 12+ → 7；workflow 样本 ~8,800 → ~3,300；E4 replay ~702 → ~100。G1/G2/G4 不再独立运行，复用正式实验数据判定。**v0.3 重构分批进行**：本次仅对齐 G1/Ch.1 与 E1 章节顶部；其余章节（G3/G4/E2–E7）保留 v0.2 形式，待对应周次前再重构
+> - **v0.3（2026-07-25）：实验体系精简**——按 `.trae/specs/experiment-scope-redesign/spec.md`（状态：approved-pending-implementation）落地：13 章 → 5 章 + 2 个小判定（G0、G3 冒烟）；核心数据集 12+ → 7；workflow 样本 ~8,800 → ~4,120；E4 replay ~702 → ~100。G1/G2/G4 不再独立运行，复用正式实验数据判定。**v0.3 重构分批进行**：本次仅对齐 G1/Ch.1 与 E1 章节顶部；其余章节（G3/G4/E2–E7）保留 v0.2 形式，待对应周次前再重构
+> - **v0.3.1（2026-07-25）：τ-bench seeds 数升级**——基于 τ-bench 原论文（arXiv 2406.12045, ICLR 2025）调研，pass^k 指标用 k∈{1,2,4,8}，3 seeds 只能算 pass^3 不足以区分 consistency。τ-bench 主表样本量从 495（165 × 3 seeds）升级为 **1,320（165 × 8 seeds）**，与原论文 pass^8 完全对齐。本次仅同步更新 G1.2/G1.3/G1.11.1 与 spec v0.3 §5/§8；**G3/G4/E1/E4/E5/E6 等章节中的 "495 episodes" 与 "3 seeds" 引用暂保留 v0.2 形式**，待对应章节 v0.3 重构时统一更新为 1,320 / 8 seeds
 > **状态**：designed — G1/Ch.1 已按 v0.3 对齐；其余章节按 v0.2 形式待 v0.3 重构
 
 ---
@@ -565,8 +566,10 @@ G1 验证 FlowCache 的**第一核心假设**（IDEA §0.3-1）：
 
 | 数据集 | 样本数 | 说明 |
 |---|---|---|
-| τ-bench | 495 episodes（165 任务 × 3 seeds，retail + airline 两域） | 主判定 workload ①；LLM 用户模拟器（`llm_user`）+ 真实工具 backend |
+| τ-bench | **1,320 episodes（165 任务 × 8 seeds，retail + airline 两域）** | 主判定 workload ①；LLM 用户模拟器（`llm_user`）+ 真实工具 backend；8 seeds 与原论文 pass^k（k≤8）对齐 |
 | BFCL v3 multi-turn | 800（4 子集 × 200：`multi_turn_base` / `miss_func` / `miss_param` / `long_context`） | 主判定 workload ②；scripted user turns（1–7 轮/episode）+ 8 个真实 sim 工具类 + 状态验证 |
+
+**τ-bench seeds 数冻结依据（2026-07-25 调研后冻结）**：τ-bench 原论文（arXiv 2406.12045, ICLR 2025）主表用 165 任务全量，pass^k 指标用 k∈{1,2,4,8}。3 seeds 只能算 pass^3，统计上不足以区分 consistency；8 seeds 与原论文 pass^8 完全对齐，最稳健。相比 3 seeds 增量 660 episodes，按 4090D ~30s/episode 估算约 5.5 GPU 小时。原 v0.3 的 495（3 seeds）已升级为 1320（8 seeds）。
 
 **v0.3 移出主表的数据集**（仅在 Ch.5 鲁棒性章节使用，不参与 G1 判定）：
 
@@ -592,12 +595,13 @@ trace 来源：E1 录制的可重放 trace（τ-bench 与 BFCL 均为 rollout �
 
 | 项 | 值 | 依据 |
 |---|---|---|
-| 判定单元 | 495 episodes（τ-bench）+ 800（BFCL） | workflow/episode 为统计单位 |
-| unique block 数（估计） | 随 episode 量上升（原 80 任务 ~300–600；全量 ×3 后 TBD） | g2-pilot §2.4 外推 |
+| 判定单元 | 1,320 episodes（τ-bench，165 任务 × 8 seeds）+ 800（BFCL） | workflow/episode 为统计单位 |
+| unique block 数（估计） | 随 episode 量上升（原 80 任务 ~300–600；全量 ×8 后 TBD） | g2-pilot §2.4 外推 |
 | 判定效应量 | oracle vs 最佳简单策略的 miss-cost 或 p95 TTFT 差距 ≥ 10% | IDEA §7 G1 内部参考阈值 |
-| 功效 | 495 paired episodes 下 CI 半宽显著小于 80 单元情形（0.8.3）；首跑测 CV 后按 0.8.3 规则决定是否增加种子 | 0.8.3 预注册规则 |
-| v0.3 样本量封顶 | τ-bench 495 + BFCL 800 = 1,295 episodes（不再追加 STB/SWE/Toolathlon） | spec v0.3 §5：主表仅 τ-bench + BFCL；STB/SWE/Toolathlon 仅 Ch.5 |
-| 报告补充指标 | total LLM calls（预计 5K–15K）、平均 turn/episode | BFCL 单 episode turn 数较少（1–7），需补 total LLM calls 才能跨论文对比 |
+| 功效 | 1,320 paired episodes 下 CI 半宽显著小于 80 单元情形（0.8.3）；8 seeds 支持 pass^k（k≤8）分析 | 0.8.3 预注册规则 + τ-bench 原论文 pass^k 对齐 |
+| v0.3 样本量封顶 | τ-bench 1,320 + BFCL 800 = 2,120 episodes（不再追加 STB/SWE/Toolathlon） | spec v0.3 §5：主表仅 τ-bench + BFCL；STB/SWE/Toolathlon 仅 Ch.5 |
+| 报告补充指标 | total LLM calls（预计 5K–15K）、平均 turn/episode、pass^k（k∈{1,2,4,8}） | BFCL 单 episode turn 数较少（1–7），需补 total LLM calls 才能跨论文对比；pass^k 与 τ-bench 原论文对齐 |
+| seeds 数冻结 | 8 seeds（2026-07-25 调研后冻结） | τ-bench 原论文（arXiv 2406.12045, ICLR 2025）用 k≤8；3 seeds 只能算 pass^3 不足以区分 consistency |
 
 ## G1.4 Baseline / 对照
 
@@ -691,7 +695,7 @@ trace 来源：E1 录制的可重放 trace（τ-bench 与 BFCL 均为 rollout �
 
 ### G1.11.1 结果表格模板（完成后填充，不发明数字）
 
-**表 G1-1：headroom 主表（τ-bench 495 episodes，3 种子均值）**
+**表 G1-1：headroom 主表（τ-bench 1,320 episodes = 165 任务 × 8 seeds，pass^k k∈{1,2,4,8}）**
 
 | 策略 | 预算 10% miss cost (ms) | 预算 25% miss cost | 预算 50% miss cost | 预算 10% p95 TTFT (ms) | 预算 25% p95 TTFT | 预算 50% p95 TTFT |
 |---|---|---|---|---|---|---|

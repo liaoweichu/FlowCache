@@ -121,13 +121,15 @@ v0.2 E5 的其余消融轴（无 partial DAG、无成本校准、静态阈值 vs
 
 | 角色 | 数据集 | 样本 | 用途 |
 |---|---|---|---|
-| 主表 | τ-bench | 495 | Ch.1/2/3/4 |
+| 主表 | τ-bench | 1,320（165 任务 × 8 seeds） | Ch.1/2/3/4 |
 | 主表 | BFCL v3 multi-turn | 800 | Ch.1/3/4 |
 | fidelity 质量面 | LongBench | 1,000 | Ch.3 |
 | fidelity 质量面 | GSM8K | 100 | Ch.3（accuracy sanity） |
 | family-out（仅 Ch.5） | StableToolBench | 500 | Ch.5 |
 | 压力面（仅 Ch.5） | SWE 轨迹 | 200 | Ch.5 |
 | 压力面（仅 Ch.5） | Toolathlon | 200 | Ch.5 |
+
+**τ-bench seeds 数依据（2026-07-25 调研后冻结）**：τ-bench 原论文（arXiv 2406.12045, ICLR 2025）主表用 165 任务全量，pass^k 指标用 k∈{1,2,4,8}。3 seeds 只能算 pass^3，统计上不足以区分 consistency；8 seeds 与原论文 pass^8 完全对齐，最稳健。增量成本：165 × 5 = 825 episodes（相比 3 seeds 多 660 episodes），按 4090D ~30s/episode 估算约 5.5 GPU 小时。
 
 **2 个辅助角色**（不计入样本总量）：
 
@@ -138,7 +140,7 @@ v0.2 E5 的其余消融轴（无 partial DAG、无成本校准、静态阈值 vs
 
 **删除**：CATraces（可得性 TBD）、Mooncake（窗口 TBD）、MuSiQue、2WikiMultihopQA（多跳 QA 质量 sanity 由 LongBench 的 QA 子任务覆盖）。
 
-**核心样本总量**：~8,800 → **~3,300**（495+800+1000+100+500+200+200）。
+**核心样本总量**：~8,800 → **~4,120**（1320+800+1000+100+500+200+200）。相比 v0.2 降幅 53%。
 
 ---
 
@@ -199,10 +201,10 @@ Ch.5 仅 3 轴（family-out、到达扰动、branch 噪声），相比 v0.2 E6 �
 |---|---|---|---|
 | 章节 | 6 Gate + 7 E = 13 章 | 5 章 + 2 小判定 | 61% |
 | 核心数据集 | 12+ | 7 | 42% |
-| workflow 样本 | ~8,800 | ~3,300 | 63% |
+| workflow 样本 | ~8,800 | ~4,120 | 53% |
 | E4 replay 运行 | ~702 | ~100 | 86% |
 | 独立 Gate 运行 | 6 次 | 0（全部复用） | 100% |
-| Tier-1 轨迹录制 | 33–40 GPU 小时 | ~20 GPU 小时 | 50% |
+| Tier-1 轨迹录制 | 33–40 GPU 小时 | ~26 GPU 小时 | 35% |
 
 ---
 
