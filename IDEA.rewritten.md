@@ -428,7 +428,7 @@ $$
 
 ### 5.2 模型选择
 
-主模型使用 **Qwen3-8B-Instruct**（2025-04 发布，Apache 2.0），BF16 权重约 16GB，标准 GQA + RoPE 架构。
+主模型使用 **Qwen2.5-7B-Instruct**（BF16 权重约 15GB，GQA + RoPE 架构，原生 tool calling 支持）。2026-07-25 用户决定从原 Qwen3-8B-Instruct 变更为 Qwen2.5-7B-Instruct，变更记录见 `experiments/experiment-designs.md` Part 0.3。
 
 以下模型被排除：
 
@@ -437,10 +437,10 @@ $$
 | Qwen3.5 系列（含 9B） | Gated DeltaNet hybrid attention（3 GDN : 1 full attention），75% 层为线性注意力无传统 KV cache，block identity、父链哈希、prefix cache 和 KV quantization 工具链不兼容 |
 | Qwen3.6 系列（27B / 35B-A3B） | 同上 Gated DeltaNet 架构不兼容；27B BF16 约 56GB，远超 4090D 24GB |
 | Gemma 4 12B | BF16 权重约 24GB，4090D 无法为 KV cache 保留空间；5:1 sliding/global attention 后端支持不成熟 |
-| Gemma 4 E4B | 尺寸可行，但 5:1 sliding/global attention 的 KV cache 操作后端支持需 G0 实测；若 Qwen3-8B 通过 G0 则不再切换 |
-| Llama-3.1-8B-Instruct | 备选（同为 GQA + RoPE），仅当 Qwen3-8B 在后端实测中出现兼容性问题时切换 |
+| Gemma 4 E4B | 尺寸可行，但 5:1 sliding/global attention 的 KV cache 操作后端支持需 G0 实测；若 Qwen2.5-7B 通过 G0 则不再切换 |
+| Llama-3.1-8B-Instruct | 备选（同为 GQA + RoPE），仅当 Qwen2.5-7B 在后端实测中出现兼容性问题时切换 |
 
-模型选择在 G0 阶段冻结。若 Qwen3-8B 通过 G0 exactness/loadability 测试，则不再切换到其他模型。
+模型选择在 G0 阶段冻结。若 Qwen2.5-7B 通过 G0 exactness/loadability 测试，则不再切换到其他模型。
 
 ### 5.3 显存预算设置
 
@@ -478,15 +478,40 @@ CPU offload 结果同时依赖主机。正式实验前必须冻结并报告 CPU 
 
 ### 6.1 最小 workload 组合
 
-| Workload | 角色 | 可证明内容 | 不能外推的内容 |
-|---|---|---|---|
-| 主 workload A：BFCL multi-turn 或 τ-bench | 原生多轮工具 Agent；W2 前二选一并冻结 | 工具调用、状态变化、失败和任务成功率 | 超大规模生产流量 |
-| 主 workload B：StableToolBench 或可复现 coding-agent trace | 第二个工具 family；W2 前核验 trace 事件后冻结 | workflow-family 泛化；工具等待/重试仅在 trace 实际包含时评估 | 通用线上分布 |
-| 合成可控 DAG | chain、fan-out/fan-in、conditional branch、retry、cancel、tool wait | 结构复杂度、next-use distance、branch entropy 的因果敏感性 | 真实 Agent 分布 |
-| MuSiQue + 2WikiMultihopQA | 次要的受控多步 QA workflow | 小型依赖链与任务质量 sanity check | 原生在线服务 DAG |
-| LMSYS-Chat-1M | 顺序式多轮聊天负对照 | 在固定 chat template、确定性序列化且仅追加历史时，检查高 exact-prefix reuse 场景是否需要复杂预测 | 工具型 DAG |
+v0.3 将 workload 体系按实验章节分层，主表严格限定两个工具 workload，其余按角色分配到 Ch.3 质量面、Ch.5 压力面或辅助附注，避免主表规模失控。
 
-14 周版本只保留一个主模型和两个主工具 workload；合成 DAG、QA 与 LMSYS 只用于机制/负对照，不扩展为同等规模的全套主实验。StableToolBench 主要提供稳定工具/API 环境，本身不保证工具等待、重试或取消事件；这些性质必须由实际运行 trace 证明。第二模型、更多 coding workload 和大部分跨模型泛化移至后续版本。ShareGPT mirror 不作为主 workload；HotpotQA 只作为可选短链对照。
+**主表 workload（Ch.1/2/3/4 共用，严格两个）**：
+
+| Workload | 样本 | 角色 | 可证明内容 | 不能外推的内容 |
+|---|---|---|---|---|
+| τ-bench | 495 | 主表 workload 1（原生多轮工具 Agent） | 工具调用、状态变化、失败和任务成功率；workflow-family 1 | 超大规模生产流量 |
+| BFCL v3 multi-turn | 800 | 主表 workload 2（第二个工具 family） | workflow-family 泛化；工具等待/重试仅在 trace 实际包含时评估 | 通用线上分布 |
+
+**Ch.5 鲁棒性压力面（仅进入 Ch.5，不进 Ch.4 主表）**：
+
+| Workload | 样本 | 角色 | 可证明内容 |
+|---|---|---|---|
+| StableToolBench | 500 | family-out 交叉证据 | τ-bench↔BFCL 之外的第三工具 family 鲁棒性 |
+| SWE 轨迹 | 200 | 结构压力面（替代原合成 DAG 的因果敏感性角色） | 真实 coding-agent 的长链、分支与工具等待结构 |
+| Toolathlon | 200 | 结构压力面 | 复杂多步工具编排下的 next-use 与 branch 噪声鲁棒性 |
+
+**Ch.3 fidelity 质量面（仅进入 Ch.3 估计器有效性验证，不进 Ch.4 主表）**：
+
+| Workload | 样本 | 角色 | 可证明内容 |
+|---|---|---|---|
+| LongBench | 1,000 | fidelity 质量面主数据 | 多任务下的量化保真风险估计与质量非劣 sanity |
+| GSM8K | 100 | accuracy sanity | 短链推理任务的量化正确率基线 |
+
+**辅助角色（不计入核心样本总量）**：
+
+| Workload | 角色 | 用途 |
+|---|---|---|
+| BurstGPT 窗口 | 到达证据 | Ch.4 到达结构 replay 参数，不产生 workflow 样本 |
+| LMSYS-Chat-1M | 负对照附注 | Ch.1 画像附注：500 会话仅做顺序式多轮的 exact-prefix overlap 对照，检查高 reuse 场景是否需要复杂预测 |
+
+**已删除的 workload**：合成可控 DAG（受用户禁令约束，其结构因果敏感性角色由 SWE 轨迹分层分析替代）、MuSiQue、2WikiMultihopQA（多跳 QA 质量 sanity 由 LongBench 的 QA 子任务覆盖）、CATraces（可得性 TBD）、Mooncake（窗口 TBD）。
+
+14 周版本按 v0.3 的 **7 核心 + 2 辅助数据集体系**执行：核心 7 个数据集（τ-bench 495、BFCL 800、LongBench 1000、GSM8K 100、StableToolBench 500、SWE 200、Toolathlon 200，核心样本总量约 3,300）计入样本总量；辅助 2 个（BurstGPT 窗口、LMSYS-Chat-1M 500）不计入。StableToolBench 主要提供稳定工具/API 环境，本身不保证工具等待、重试或取消事件；这些性质必须由实际运行 trace 证明。第二模型、更多 coding workload 和大部分跨模型泛化移至后续版本。ShareGPT mirror 不作为主 workload；HotpotQA 只作为可选短链对照。
 
 ### 6.2 Cache-Compatible 序列化
 
@@ -542,6 +567,8 @@ CPU offload 结果同时依赖主机。正式实验前必须冻结并报告 CPU 
 - 至少保证 PBKV 或 KVFlow 中一个 closest baseline 能在公平协议下忠实运行；若只能实现 inspired variant，必须先解决可比性；
 - 内部参考：oracle 相对最佳简单策略应存在约 10% 的 miss-cost 或 p95 TTFT 改进空间。
 
+**运行方式**：数据来源改为复用 Ch.1 画像数据（τ-bench 495 + BFCL 800 同 trace），不再独立运行 Gate 实验；判定逻辑与阈值不变。`design_doc` 指向 `experiments/experiment-designs.md#ch1`。
+
 **失败动作**：转向“何时工作流结构产生物理 KV 复用”的 benchmark/characterization 论文。
 
 ### G2：Two-Axis Necessity
@@ -550,6 +577,8 @@ CPU offload 结果同时依赖主机。正式实验前必须冻结并报告 CPU 
 - 分析四类块：高复用高敏感、高复用低敏感、低复用高敏感、低复用低敏感；
 - 在相同质量风险约束下，直接比较 reuse-only、fidelity-only、最强解耦组合和 joint policy；
 - joint policy 必须在计入自身开销后形成解耦组合达不到的延迟–容量改进。
+
+**运行方式**：R–D 错位用 Ch.2 Pilot 数据（τ-bench 80 子集，Spearman ρ + 四象限）判定；"joint > 解耦组合"用 Ch.4 主表最终判定。判定逻辑与阈值不变。`design_doc` 指向 `experiments/g2-pilot-design.md` 与 `experiments/experiment-designs.md#ch4`。
 
 **失败动作**：若 joint policy 无净收益，reuse–fidelity 主线不成立，转路线 B；不把低相关分析单独包装成方法贡献。
 
@@ -561,6 +590,8 @@ CPU offload 结果同时依赖主机。正式实验前必须冻结并报告 CPU 
 - 内部参考：固定质量下 p95 TTFT 改善约 15%，吞吐下降不超过约 5%；
 - 控制器必须优于 size-aware LRU/GDSF。
 
+**运行方式**：分两时点判定。W8 冒烟前置：主 cell × 4 个无损对照（No-Cache、APC-LRU、GDSF、Reuse-Only）× 约 100 workflow 子集，本质是主表的 pilot run，防止无损驻留不成立时白做量化。最终阈值判定用 Ch.4 主表的无损对照行结果做最终确认。`design_doc` 指向 `experiments/experiment-designs.md#ch4`。
+
 **失败动作**：路线 A No-Go；可保留实现作为工程基线，但不以无损 residency 单独投稿该主张。
 
 ### G4：Quantization
@@ -571,85 +602,118 @@ CPU offload 结果同时依赖主机。正式实验前必须冻结并报告 CPU 
 - pilot 后预注册绝对质量非劣界、$\delta$ 和样本量；95% CI 必须窄到足以检验该界；
 - 至少在一个真实工具 workload 上验证，而不只看 logit KL。
 
+**运行方式**：数据来源改为复用 Ch.3 fidelity 侧数据（LongBench 1000 + GSM8K 100）。判定逻辑与阈值不变。`design_doc` 指向 `experiments/experiment-designs.md#ch3`。
+
 **失败动作**：在 G0 已允许的一次模型/后端切换后仍失败，则路线 A No-Go 并转路线 B；不能删除量化后继续使用“reuse–fidelity”主标题投稿。
 
-### G5：Learning
+### G5（Learning）：已删除
 
-- 学习模型在未见 workflow family 上，相对最佳确定性启发式降低 policy regret；
-- 收益必须包含模型推理开销；
-- 内部参考：净端到端收益约 5%，或 regret 改善约 10%。
-
-**失败动作**：保留简单、可解释的 controller，不为论文形式强行加入 GNN。
+G5（Learning）整节已删除。GNN 不启用是设计选择而非 gate 失败；论文主张"简单可解释 controller 足够"，这本身可写为发现（见 §7.2 of `experiment-scope-redesign/spec.md`）。§4.3 的预测器选择顺序（heuristic → survival → GNN 仅在前两者与 oracle 仍有明显差距时）保留作为方法描述，但不再作为 gate。简单 controller 成为默认而非"gate 失败"。
 
 ---
 
 ## 8. 正式实验计划
 
-### E1：缓存机会与工作负载画像
+v0.3 将原 E1–E7 七个独立实验章节合并为 Ch.1–Ch.5 五章，遵循"一次运行，多处消费"原则：Gate 判定不再独立运行，全部复用本章 trace/数据。各章保留原 v0.2 实验的指标与成功标准，仅按 v0.3 的对照/cell/数据集规模重写。
+
+### Ch.1：工作负载画像（合并原 E1，承载 G1 判定）
 
 **问题**：真实 workload 中是否存在值得管理的 exact-prefix locality？
 
-报告：
+**数据来源**：τ-bench 495 + BFCL v3 multi-turn 800（与 Ch.4 主表共用 trace，W3–W5 一次录制）。
+
+**报告指标**（保留原 E1）：
 
 - workflow 长度、深度、宽度、分支率和工具等待；
 - exact-prefix overlap、LCP tokens、next-use distance；
 - block working-set size、KV/总显存占比；
 - offline oracle 与 LRU/简单 heuristic 的 headroom。
 
+**Gate 复用**：G1 判定（oracle headroom ≥ 10% + closest baseline 可比性）直接复用本章画像数据，不独立运行。
+
 这是中心 claim 的前提，不应被放在附录。
 
-### E2：复用价值预测
+### Ch.2：R–D 错位 Pilot（原 G2-Pilot，承载 G2 存在性判定）
 
-**变体**：
+**问题**：复用价值与保真风险是否存在系统性错位？
 
-- age/LRU；
-- size/recompute-cost heuristic；
-- survival/hazard；
-- partial-DAG GNN（仅在 G1/G5 有必要时）。
+**数据来源**：τ-bench 80 workflow 子集。
 
-**指标**：
+**方法**：
 
-- PR-AUC、Brier、ECE；
-- byte-和 recompute-cost-weighted recall；
-- Precision@budget；
-- policy regret 与 saved-prefill ms；
-- 推理开销。
+- 计算 future-use/recompute value 与 $D_{b,q}$ 的 Spearman ρ；
+- 四象限分析：高复用高敏感、高复用低敏感、低复用高敏感、低复用低敏感；
+- 不把低相关本身当作充分证据，需配合 Ch.4 主表的 joint vs Decoupled-Best 净收益判定。
+
+**Gate 复用**：G2 的 R–D 错位存在性判定复用本章 Pilot 数据；"joint > 解耦组合"最终判定复用 Ch.4 主表。`design_doc` 指向 `experiments/g2-pilot-design.md`（保持有效，不重构）。
+
+### Ch.3：估计器有效性（合并原 E2 + E3，承载 G4 判定）
+
+**问题**：reuse 侧与 fidelity 侧估计器是否各自有效？
+
+**reuse 侧**（2 变体，复用 Ch.1 trace）：
+
+- heuristic：age/LRU、size/recompute-cost；
+- survival/hazard 模型。
+
+**删除 GNN 变体**：GNN 不进入主实验（见 §7 G5 删除说明）；§4.3 的预测器选择顺序保留作为方法描述。
+
+**fidelity 侧**（2 变体，数据：LongBench 1000 + GSM8K 100）：
+
+- uniform precision；
+- norm/range proxy（FlowCache fidelity estimator 即 norm/range proxy 的校准版本，合并描述，不再单列为独立变体）。
+
+**删除**：静态 layer/position rule 变体、独立的 FlowCache fidelity estimator 变体。
+
+**指标**（保留原 E2/E3）：
+
+- reuse 侧：PR-AUC、Brier、ECE；byte-和 recompute-cost-weighted recall；Precision@budget；policy regret 与 saved-prefill ms；推理开销。
+- fidelity 侧：logit KL/top-k change；QA EM/F1；工具调用正确率、最终状态和任务成功率；风险校准；codec latency 与实际容量收益。
 
 准确率提升若不能转换为系统收益，不构成贡献。
 
-### E3：保真风险估计
+**Gate 复用**：G4 判定（量化非劣 + 端到端不破坏延迟）复用本章 fidelity 侧数据，不独立运行。
 
-**变体**：
+### Ch.4：端到端主结果（合并原 E4 + E5 核心，承载 G2/G3 最终判定）
 
-- uniform precision；
-- 静态 layer/position rule；
-- norm/range proxy；
-- FlowCache fidelity estimator。
+**问题**：联合控制在扣除预测、迁移和量化开销后，是否优于最强的同后端解耦基线？
 
-**指标**：
+**对照（10 个，原 13 删 LFU、LRU-K/2Q、Uniform-Q4）**：
 
-- logit KL/top-k change；
-- QA EM/F1；
-- 工具调用正确率、最终状态和任务成功率；
-- 风险校准；
-- codec latency 与实际容量收益。
+| # | 对照 | 说明 |
+|---|---|---|
+| 1 | No-Cache | cold recompute 下界 |
+| 2 | APC-LRU | 同引擎实际 APC |
+| 3 | GDSF | 强启发式代表（合并 LFU、LRU-K/2Q 的角色） |
+| 4 | KVFlow† 或 PBKV† | ≥1 个可公平运行的 closest baseline；另一项若不兼容才使用明确标注的 inspired variant |
+| 5 | Uniform-Q8 | 统一 Q8（Q4 仅在 Ch.3 fidelity 侧，不进主表） |
+| 6 | Reuse-Only | 核心变体 1：复用价值驱动驻留 + 统一精度 |
+| 7 | Fidelity-Only | 核心变体 2：保真风险驱动精度 + 强启发式驻留 |
+| 8 | Decoupled-Best | 核心变体 3：最强"reuse policy + uniform quantization"解耦组合 |
+| 9 | FlowCache-Joint | 核心变体 4：待验联合 policy |
+| 10 | Oracle-Cost | 离线上界 |
 
-### E4：端到端主结果
+**cell（6 个，原 18 删并发 4 档与 100% 预算档）**：
 
-在至少三个 KV budget、三个并发水平和两类 workload 上比较：
+| cell | 预算 | 并发 | workload | seeds |
+|---|---|---|---|---|
+| 主-1 | 25% | 8 | τ-bench | 3 |
+| 主-2 | 25% | 8 | BFCL | 3 |
+| 主-3 | 50% | 8 | τ-bench | 1 |
+| 主-4 | 50% | 8 | BFCL | 1 |
+| 边界-1 | 10% | 16 | τ-bench | 1 |
+| 边界-2 | 10% | 16 | BFCL | 1 |
 
-- No reusable cache / cold recompute；
-- 实际同引擎 LRU/APC；
-- LFU、LRU-K/2Q 或 GDSF；
-- 至少一个可公平运行的 KVFlow/PBKV 忠实基线；另一项若不兼容，才使用明确标注的 inspired variant；
-- uniform Q8/Q4；
-- reuse-only residency；
-- fidelity-only precision；
-- 最强的“reuse policy + uniform quantization”解耦组合；
-- FlowCache joint policy；
-- offline cache oracle。
+运行量：10 对照 × 6 cell，其中主-1/主-2 各 3 seeds = 10×(4×1 + 2×3) = 100 replay（v0.2 约 702 replay）。
 
-**主指标**：
+**设计消融并入主表**（核心 4 变体 + 2 设计消融同表，同一 cell 仅切开关）：
+
+- 无 parent-closure：后继 block 在父 block 不可用时仍计为可复用；
+- 无 CPU tier：仅 GPU + evict，禁用 CPU offload。
+
+**开销透明账**（H2D/D2H、codec、controller、queueing 时间）并入主表列，不单设章节。
+
+**主指标**（保留原 E4）：
 
 - TTFT、JCT p50/p95/p99；
 - throughput、SLO goodput、最大 admitted concurrency；
@@ -661,46 +725,35 @@ CPU offload 结果同时依赖主机。正式实验前必须冻结并报告 CPU 
 
 主结论必须来自相同引擎、模型、dtype、预算和请求顺序。
 
-### E5：机制消融
+**关键问题**（保留原 E5）：不是"删掉模块性能是否下降"，而是联合建模是否解决了单一分数的错误分配。
 
-- reuse-only；
-- fidelity-only；
-- 两者独立串联；
-- joint utility；
-- 无 partial DAG；
-- 无成本校准，仅预测概率；
-- 无 parent-closure；
-- 无 CPU tier；
-- 静态阈值与动态预算；
-- 不同 controller 更新频率。
+**降级为附录表**：原 E5 的其余消融轴（无 partial DAG、无成本校准、静态阈值 vs 动态预算、不同 controller 更新频率）降级为附录表或移除，不再作为主表消融主体。
 
-关键问题不是“删掉模块性能是否下降”，而是联合建模是否解决了单一分数的错误分配。
+**Gate 复用**：G2 的"joint > 解耦组合"最终判定与 G3 的阈值判定（p95 TTFT 改善 ~15%、吞吐 ≥ −5%、优于 size-aware LRU/GDSF）均复用本章主表的无损对照行与核心变体行，不独立运行。
 
-### E6：泛化与鲁棒性
+### Ch.5：鲁棒性与失败分析（合并原 E6 + E7）
 
-- 两个已冻结主工具 workload 之间的 workflow-family-out；
-- 不同上下文长度；
-- DAG 边缺失/噪声；
-- branch misprediction；
-- burst arrival 与不同工具等待分布；
-- GPU budget 突变；
-- CPU 带宽竞争；
-- predictor calibration drift。
+**问题**：方法在不同 family、到达扰动和 branch 噪声下是否稳健？负结果能否转化为发现？
 
-第二模型和额外 dataset-out 只作为资源允许时的扩展，不是 14 周主证据包的前置条件。
+**3 个扰动轴**（原 E6 的 8 轴大幅缩减）：
 
-### E7：失败与开销
+- family-out：τ-bench↔BFCL 交叉验证，加 StableToolBench 500 作为第三工具 family 证据；
+- 到达扰动：BurstGPT 窗口 replay；
+- branch 噪声：DAG 边缺失/误预测下的表现。
 
-必须单独报告：
+**降级为 appendix**：原 E6 的 CPU 带宽竞争、predictor calibration drift、不同上下文长度、GPU budget 突变降级为附录表，rebuttal 时用预留的 SWE/Toolathlon 余量补。
+
+**失败模式**（从 Ch.4 负结果 cell 提取，原 E7 的独立章合并）：
 
 - exact-prefix overlap 过低；
-- 全部工作流均为追加式、预测没有价值；
 - 量化敏感块误判；
 - 高频 GPU↔CPU 抖动；
 - parent block 缺失导致后继缓存不可用；
 - 模型/template/adapter 变化引发大面积 invalidation；
 - controller 开销超过 saved-prefill；
 - overload 下的 graceful degradation、拒绝率和 OOM。
+
+**扩展标注**：第二模型和额外 dataset-out 仍标注为"仅资源允许时扩展"，不是 14 周主证据包的前置条件。
 
 ---
 
@@ -750,7 +803,7 @@ CPU offload 结果同时依赖主机。正式实验前必须冻结并报告 CPU 
 |---|---|---|---|
 | PBKV/KVFlow/QKVShare 已覆盖大部分机制 | likely-pivot / needs-search | full-paper 对比后只剩组件拼装 | 将贡献收缩为 exact-prefix protocol + reuse–fidelity interaction，或转 benchmark |
 | 语义 workflow 几乎不产生非平凡 exact-prefix locality | requires-new-result | G1 oracle headroom 很小 | 做“工作流结构何时转化为物理缓存复用”的 characterization |
-| 简单 heuristic 接近 oracle | design-fixable | G5 学习模型无净收益 | 删除 GNN，强调简单 cost-aware policy |
+| 简单 heuristic 接近 oracle | design-fixable | 简单 cost-aware policy 与 oracle 差距小 | 删除 GNN，强调简单 cost-aware policy（G5 不再作为 gate） |
 | 复用价值与保真风险高度一致 | likely-pivot | G2 不支持双轴或 joint 无净收益 | 路线 A No-Go，转路线 B；不以纯 residency 延续原主张 |
 | 目标后端不支持所需 KV quantization/offload | feasibility | G0/G4 失败 | 允许一次模型/后端切换；仍失败则转路线 B |
 | 量化收益被 codec/PCIe 抵消 | requires-new-result | 端到端无正收益 | 路线 A No-Go；无损 GPU/CPU/evict 仅保留为路线 B 的工程基线 |
@@ -762,7 +815,7 @@ CPU offload 结果同时依赖主机。正式实验前必须冻结并报告 CPU 
 ### 路线 A：推荐主线
 
 **Exact-prefix reuse value + fidelity risk + joint precision/residency**。  
-单卡条件下可尝试，创新与实现风险均较高；必须通过 G0–G5。
+单卡条件下可尝试，创新与实现风险均较高；`requires_gates = [G0, G1, G2, G3, G4]`，任一关键门槛失败即停止并转路线 B（G5 已删除，不再作为 gate，详见 §7）。
 
 ### 路线 B：保守回退
 
@@ -778,22 +831,22 @@ CPU offload 结果同时依赖主机。正式实验前必须冻结并报告 CPU 
 
 ## 12. 14 周执行计划
 
+v0.3 按"一次运行，多处消费"原则重排周次：Gate 判定复用正式实验数据，Pilot 提前到 W7–W8，W8 增加 G3 冒烟，W9 末用实测效应量标定 Ch.4 样本量，W10–W11 主表，W12 鲁棒性。
+
 | 周次 | 目标 | Gate / 产物 |
 |---|---|---|
-| W1 | 冻结一个主模型、后端和主机配置；完成 Q-storage codec/staging spike | G0 loadability/codec |
-| W2 | 实现 block identity、precision lineage、父链、invalidation 和 exactness tests；冻结两个主工具 workload | G0 exactness |
-| W3–W4 | 两个主 workload 的 compiler/trace/replay；合成 DAG 仅作受控测试 | 可重放 trace |
-| W5 | LRU/GDSF、同引擎 APC、offline oracle；至少一个 PBKV/KVFlow closest baseline | G1 opportunity/comparability |
-| W6 | workload characterization 与无泄漏 split | E1 |
-| W7–W8 | GPU BF16↔CPU BF16↔evict、heuristic/survival reuse estimator 与简单 controller | G3/G5 |
-| W9 | 离线量化与组合干预、fidelity estimator、质量界功效分析 | G2/G4 |
-| W10 | Q-storage 集成和 joint controller；与最强解耦组合直接比较 | G2/G4 |
-| W11 | 相同后端的主实验冻结 | E3–E5 |
-| W12 | branch noise、burst、负对照、failure 和 overhead；第二模型/GNN 后移 | E6–E7 精简版 |
-| W13 | 全量复跑、统计、artifact 与复现说明 | 冻结结果 |
-| W14 | ICWS 稿件与图表 | 不新增未验证 claim |
+| W1–W2 | 冻结模型/后端/主机；Q-storage codec spike | G0 |
+| W3–W5 | τ-bench 495 + BFCL 800 轨迹录制 | 可重放 trace |
+| W6–W7 | Ch.1 画像 + G1 判定（复用 trace） | E1 画像 |
+| W7–W8 | Ch.2 Pilot + Ch.3 reuse 侧（并行）→ G2 存在性判定 | G2 Pilot |
+| W8 | G3 冒烟（主 cell × 4 无损对照 × 100 子集） | G3 冒烟 |
+| W9 | Ch.3 fidelity 侧 + G4 判定 | G4 |
+| W9 末 | 用实测效应量标定 Ch.4 样本量（封顶 495/800） | 样本量冻结 |
+| W10–W11 | Ch.4 主表（G2/G3 最终确认复用主表） | E4 主表 |
+| W12 | Ch.5 鲁棒性（STB 500 录制在此窗口） | E5 鲁棒性 |
+| W13 | 复跑冻结 / W14 写作 | 冻结结果 |
 
-如果 G0 的 codec/lineage spike、G1、G2、G3 或 G4 任一关键门槛失败，路线 A 停止并转路线 B；不能删除量化后继续沿用 reuse–fidelity 主标题。GNN 和第二模型只有在主结果已稳定且仍有时间时加入。
+如果 G0、G1、G2、G3 或 G4 任一关键门槛失败，路线 A 停止并转路线 B；不能删除量化后继续沿用 reuse–fidelity 主标题（G5 已删除，不再作为 gate，详见 §7）。GNN 和第二模型只有在主结果已稳定且仍有时间时加入。
 
 ---
 
@@ -831,7 +884,7 @@ CPU offload 结果同时依赖主机。正式实验前必须冻结并报告 CPU 
 - 用户提供的目标是 ICWS 2027 / TSC，硬件为单张 RTX 4090D。
 - 本次重写前，项目目录中只看到 IDEA 文档，未发现可核验实现状态的代码。
 - 最近公开工作已经显著压缩“预测式工作流 KV 管理”和“混合精度 KV”的宽泛新颖性。
-- 主模型已选定 Qwen3-8B-Instruct（GQA + RoPE），Qwen3.5/3.6 因 Gated DeltaNet 架构不兼容 KV cache 工具链被排除，Gemma 4 12B 因显存不足被排除。
+- 主模型已选定 Qwen2.5-7B-Instruct（GQA + RoPE，BF16 ~15GB），2026-07-25 从原 Qwen3-8B 变更。Qwen3.5/3.6 因 Gated DeltaNet 架构不兼容 KV cache 工具链被排除，Gemma 4 12B 因显存不足被排除。
 
 ### 仍需确认
 

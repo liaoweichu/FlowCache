@@ -468,7 +468,7 @@ $$
 
 | 组件 | 预估占用 | 说明 |
 |---|---|---|
-| 模型权重（BF16） | ~16 GB | Qwen3-8B-Instruct（G0 冻结） |
+| 模型权重（BF16） | ~15 GB | Qwen2.5-7B-Instruct（G0 冻结） |
 | KV cache pool（BF16） | ~5-6 GB | 限制并发为 4-8 workflow，每个 ~4-8K context |
 | Q8/Q4 codec staging | ~1 GB | 量化/反量化临时空间 |
 | active decode + activation | ~1-2 GB | 当前 forward pass 的 activation |
@@ -503,10 +503,10 @@ $$
 
 | 模型 | 参数量 | BF16 权重 | 架构 | tool calling | 候选状态 |
 |---|---|---|---|---|---|
-| Qwen3-8B-Instruct | 8B | ~16 GB | GQA + RoPE | 原生支持 | **主候选** |
-| Llama-3.1-8B-Instruct | 8B | ~16 GB | GQA + RoPE | 原生支持 | 备选（仅当 Qwen3-8B 兼容性问题时切换） |
+| Qwen2.5-7B-Instruct | 7.62B | ~15 GB | GQA + RoPE | 原生支持 | **主候选** |
+| Llama-3.1-8B-Instruct | 8B | ~16 GB | GQA + RoPE | 原生支持 | 备选（仅当 Qwen2.5-7B 兼容性问题时切换） |
 
-Qwen3.5/3.6 系列因 Gated DeltaNet hybrid attention 与 KV cache 工具链不兼容被排除；Gemma 4 12B 因 BF16 权重 ~24GB 超出 4090D 显存被排除。
+Qwen3.5/3.6 系列因 Gated DeltaNet hybrid attention 与 KV cache 工具链不兼容被排除；Gemma 4 12B 因 BF16 权重 ~24GB 超出 4090D 显存被排除。2026-07-25 用户决定从原 Qwen3-8B-Instruct 变更为 Qwen2.5-7B-Instruct，变更记录见 `experiments/experiment-designs.md` Part 0.3。
 
 **最终模型在 G0 冻结，Pilot 使用 G0 冻结的模型。**
 
