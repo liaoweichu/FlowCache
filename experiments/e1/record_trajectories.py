@@ -1517,6 +1517,236 @@ class TrajectoryRecorder:
                      len(saved_paths), len(workflows), self._output_dir)
         return saved_paths
 
+    # ------------------------------------------------------------------
+    # G1 multi-seed × multi-dataset recording loop
+    # ------------------------------------------------------------------
+    #
+    # Outer loop: dataset → seed → task/subset → episode.
+    # Writes one JSON per episode under {output_dir}/{tau_bench|bfcl_v3}/.
+    # Skips existing files when resume=True (checkpoint/resume for the
+    # 50-GPU-hour 7720-episode run). Catches OOM and continues.
+
+    def _record_all_g1(
+        self,
+        dataset_filter: str = "all",
+        seed_filter: Optional[int] = None,
+        bfcl_subset_filter: Optional[str] = None,
+        max_episodes: Optional[int] = None,
+        resume: bool = True,
+    ) -> int:
+        """Multi-seed × multi-dataset recording loop with checkpoint/resume.
+
+        Iterates ``dataset → seed → task/subset → episode`` and writes
+        one JSON per episode. Skips existing files when ``resume=True``.
+        Catches ``torch.cuda.OutOfMemoryError`` per-episode and continues.
+
+        File naming:
+            tau-bench: ``{output_dir}/tau_bench/{domain}-{task_idx}_seed{seed}.json``
+            BFCL v3:   ``{output_dir}/bfcl_v3/{subset}_{entry_id}_seed{seed}.json``
+
+        Args:
+            dataset_filter: "all" (default) / "tau-bench" / "bfcl_v3".
+                Restricts the outer dataset loop.
+            seed_filter: If set, restricts to a single seed (smoke tests).
+                If None, iterates all seeds from config.
+            bfcl_subset_filter: If set, restricts BFCL to a single subset.
+                If None, iterates all subsets from config.
+            max_episodes: Cap on episodes per (dataset, seed). Useful
+                for smoke tests. None = no cap.
+            resume: If True (default), skip episodes whose output file
+                already exists. If False, re-record over existing files.
+
+        Returns:
+            Number of episodes written this run (skipped files not
+            counted).
+        """
+        cfg_workload = self._config.get("workload", {})
+        all_datasets = cfg_workload.get("datasets", ["tau-bench"])
+        all_seeds = cfg_workload.get("seeds", [42])
+
+        # Apply dataset filter
+        if dataset_filter == "all":
+            datasets = list(all_datasets)
+        else:
+            datasets = [d for d in all_datasets if d == dataset_filter]
+
+        # Apply seed filter
+        if seed_filter is not None:
+            seeds = [int(seed_filter)]
+        else:
+            seeds = list(all_seeds)
+
+        # Resolve BFCL subsets (only used if bfcl_v3 in datasets)
+        all_bfcl_subsets = cfg_workload.get("bfcl_v3", {}).get(
+            "subsets", ["multi_turn_base"]
+        )
+        if bfcl_subset_filter is not None:
+            bfcl_subsets = [s for s in all_bfcl_subsets if s == bfcl_subset_filter]
+        else:
+            bfcl_subsets = list(all_bfcl_subsets)
+
+        self._skip_count = 0
+        self._oom_log: List[Dict] = []
+        written = 0
+
+        for dataset in datasets:
+            if dataset == "tau-bench":
+                written += self._record_tau_bench_g1(seeds, resume, max_episodes)
+            elif dataset == "bfcl_v3":
+                written += self._record_bfcl_g1(seeds, bfcl_subsets, resume, max_episodes)
+            else:
+                logger.warning("Unknown dataset %s, skipping", dataset)
+
+        # Write recording report (overwrites the legacy _recording_report.json)
+        report = {
+            "experiment": "E1",
+            "skip_count": self._skip_count,
+            "oom_log": self._oom_log,
+            "total_episodes_written": written,
+            "dataset_filter": dataset_filter,
+            "seed_filter": seed_filter,
+            "bfcl_subset_filter": bfcl_subset_filter,
+            "max_episodes": max_episodes,
+            "resume": resume,
+        }
+        report_path = self._output_dir / "_recording_report.json"
+        try:
+            with open(report_path, "w", encoding="utf-8") as f:
+                json.dump(report, f, indent=2, ensure_ascii=False, default=str)
+        except Exception as exc:
+            logger.warning("Failed to write recording report: %s", exc)
+
+        logger.info(
+            "G1 recording done: %d written, %d skipped, %d OOM",
+            written, self._skip_count, len(self._oom_log),
+        )
+        return written
+
+    def _record_tau_bench_g1(
+        self, seeds: List[int], resume: bool, max_episodes: Optional[int]
+    ) -> int:
+        """Record all tau-bench episodes across (retail, airline) × seeds."""
+        written = 0
+        for domain in ("retail", "airline"):
+            for seed in seeds:
+                try:
+                    adapter = self._init_adapter(
+                        "tau-bench", seed=seed, domain=domain
+                    )
+                except Exception as exc:
+                    self._oom_log.append({
+                        "dataset": "tau-bench", "domain": domain,
+                        "seed": seed, "error": f"init: {exc}",
+                    })
+                    continue
+                try:
+                    tasks = adapter.list_tasks()
+                    count_this_seed = 0
+                    for task_idx, _task in enumerate(tasks):
+                        if max_episodes is not None and count_this_seed >= max_episodes:
+                            break
+                        task_id = f"{domain}-{task_idx}"
+                        out_path = (
+                            self._output_dir / "tau_bench"
+                            / f"{task_id}_seed{seed}.json"
+                        )
+                        if resume and out_path.exists():
+                            self._skip_count += 1
+                            continue
+                        out_path.parent.mkdir(parents=True, exist_ok=True)
+                        try:
+                            trace = self._run_episode_tau_bench(
+                                adapter, task_idx, task_id, seed, domain
+                            )
+                            with open(out_path, "w", encoding="utf-8") as f:
+                                json.dump(trace, f, indent=2,
+                                          ensure_ascii=False, default=str)
+                            written += 1
+                            count_this_seed += 1
+                        except torch.cuda.OutOfMemoryError as exc:
+                            torch.cuda.empty_cache()
+                            self._oom_log.append({
+                                "dataset": "tau-bench", "task_id": task_id,
+                                "seed": seed, "error": f"OOM: {exc}",
+                            })
+                        except Exception as exc:
+                            logger.error(
+                                "Episode failed: %s seed=%d task=%s: %s",
+                                domain, seed, task_id, exc,
+                            )
+                finally:
+                    try:
+                        adapter.close()
+                    except Exception:
+                        pass
+        return written
+
+    def _record_bfcl_g1(
+        self,
+        seeds: List[int],
+        subsets: List[str],
+        resume: bool,
+        max_episodes: Optional[int],
+    ) -> int:
+        """Record all BFCL v3 episodes across subsets × seeds."""
+        written = 0
+        for subset in subsets:
+            for seed in seeds:
+                try:
+                    adapter = self._init_adapter(
+                        "bfcl_v3", seed=seed, subset=subset
+                    )
+                except Exception as exc:
+                    self._oom_log.append({
+                        "dataset": "bfcl_v3", "subset": subset,
+                        "seed": seed, "error": f"init: {exc}",
+                    })
+                    continue
+                try:
+                    entries = adapter.load_entries()
+                    count_this_seed = 0
+                    for entry, gt in entries:
+                        if max_episodes is not None and count_this_seed >= max_episodes:
+                            break
+                        entry_id = entry.get("id", "unknown")
+                        out_path = (
+                            self._output_dir / "bfcl_v3"
+                            / f"{subset}_{entry_id}_seed{seed}.json"
+                        )
+                        if resume and out_path.exists():
+                            self._skip_count += 1
+                            continue
+                        out_path.parent.mkdir(parents=True, exist_ok=True)
+                        try:
+                            episode = adapter.init_episode(entry, gt, seed=seed)
+                            trace = self._run_episode_bfcl(adapter, episode, seed)
+                            with open(out_path, "w", encoding="utf-8") as f:
+                                json.dump(trace, f, indent=2,
+                                          ensure_ascii=False, default=str)
+                            try:
+                                adapter.close_episode(episode)
+                            except Exception:
+                                pass
+                            written += 1
+                            count_this_seed += 1
+                        except torch.cuda.OutOfMemoryError as exc:
+                            torch.cuda.empty_cache()
+                            self._oom_log.append({
+                                "dataset": "bfcl_v3", "entry_id": entry_id,
+                                "seed": seed, "error": f"OOM: {exc}",
+                            })
+                        except Exception as exc:
+                            logger.error(
+                                "BFCL episode failed: %s seed=%d entry=%s: %s",
+                                subset, seed, entry_id, exc,
+                            )
+                finally:
+                    try:
+                        adapter.close()
+                    except Exception:
+                        pass
+        return written
+
 
 # ---------------------------------------------------------------------------
 # Standalone helpers
@@ -1648,28 +1878,26 @@ def main():
         recorder._output_dir = Path(args.output_dir)
         recorder._output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Note: args.seed / args.dataset / args.bfcl_subset / args.max_episodes
-    # are consumed by the multi-seed multi-dataset recording loop that will
-    # be implemented in Task 4-7. For now we delegate to the existing
-    # record_all path so legacy behavior is preserved.
-    saved_paths = recorder.record_all(subset_path=args.subset)
-
-    report = {
-        "experiment": "E1",
-        "description": "Workload characterization trajectory recording",
-        "total_workflows_recorded": len(saved_paths),
-        "output_directory": str(recorder._output_dir),
-        "files": saved_paths,
-    }
-    report_path = recorder._output_dir / "_recording_report.json"
-    with open(report_path, "w", encoding="utf-8") as f:
-        json.dump(report, f, indent=2, ensure_ascii=False, default=str)
+    # G1 path: multi-seed × multi-dataset loop with checkpoint/resume.
+    # The legacy --subset flag (if provided) still routes to the old
+    # record_all path for backward compatibility with synthetic workflows.
+    if args.subset:
+        saved_paths = recorder.record_all(subset_path=args.subset)
+        written = len(saved_paths)
+    else:
+        written = recorder._record_all_g1(
+            dataset_filter=args.dataset,
+            seed_filter=args.seed,
+            bfcl_subset_filter=args.bfcl_subset,
+            max_episodes=args.max_episodes,
+            resume=args.resume,
+        )
 
     print(f"\n{'='*60}")
     print(f"E1 Recording complete.")
-    print(f"Workflows recorded: {len(saved_paths)}")
+    print(f"Episodes written:  {written}")
     print(f"Output directory:   {recorder._output_dir}")
-    print(f"Report:             {report_path}")
+    print(f"Report:             {recorder._output_dir / '_recording_report.json'}")
     print(f"{'='*60}")
 
 
