@@ -1,0 +1,46 @@
+# G0: Exactness & Loadability
+# ============================
+# Gate: G0 (correctness admission)
+# Week: W1-W2
+# Model: Qwen2.5-7B-Instruct
+
+model:
+  name: "Qwen/Qwen2.5-7B-Instruct"
+  dtype: "bfloat16"
+  trust_remote_code: true
+  device_map: "auto"
+
+cache:
+  block_size: 16  # tokens per block
+
+memory:
+  repeats: 5
+  configs:
+    - name: "model_only"
+      concurrent: 0
+      context_len: 0
+    - name: "concurrent_4x4k"
+      concurrent: 4
+      context_len: 4096
+    - name: "concurrent_8x8k"
+      concurrent: 8
+      context_len: 8192
+
+structure_cases:
+  tau_bench_domains: ["retail", "airline"]
+  pairs_per_domain: 15
+  append_sessions: 10
+  no_share_pairs: 10
+
+codec:
+  num_blocks: 100
+  precisions: ["q8", "q4"]
+
+output:
+  dir: "outputs"
+  freeze_record: "outputs/freeze-record.json"
+  structure_cases: "outputs/real-structure-cases.json"
+  exactness_report: "outputs/exactness-report.md"
+  codec_report: "outputs/codec-spike-report.md"
+  memory_report: "outputs/memory-report.md"
+  verdict: "outputs/g0-verdict.md"

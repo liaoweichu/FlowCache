@@ -1,0 +1,41 @@
+{
+  "conditions": [
+    {
+      "id": 1,
+      "name": "BF16 缓存恢复与重算一致",
+      "passed": false,
+      "evidence": "exactness-results.json 中无数值结果"
+    },
+    {
+      "id": 2,
+      "name": "block identity/父链/invalidation 无错误",
+      "passed": false,
+      "evidence": "exactness-results.json 中无 identity 结果"
+    },
+    {
+      "id": 3,
+      "name": "freeze-record 完整",
+      "passed": false,
+      "evidence": "freeze-record.json 不存在或为空"
+    },
+    {
+      "id": 4,
+      "name": "codec/staging/lineage spike 跑通",
+      "passed": false,
+      "evidence": "codec-results.json 不存在或为空"
+    },
+    {
+      "id": 5,
+      "name": "后端能拦截/恢复 KV",
+      "passed": false,
+      "evidence": "无 exactness 结果，无法验证后端拦截/恢复"
+    },
+    {
+      "id": 6,
+      "name": "显存可承载",
+      "passed": false,
+      "evidence": "memory-results.json 不存在或为空"
+    }
+  ],
+  "overall": "FAILED"
+}
