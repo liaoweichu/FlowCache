@@ -1020,26 +1020,65 @@ def _safe_filename(name: str) -> str:
 # Entry point
 # ---------------------------------------------------------------------------
 
-def main():
-    """Entry point for E1 trajectory recording."""
+def _build_arg_parser():
+    """Build the CLI argument parser for record_trajectories.
+
+    Returns:
+        argparse.ArgumentParser with G1 flags:
+        --config / --dataset / --bfcl-subset / --seed / --max-episodes /
+        --resume / --no-resume / --output-dir / --subset (legacy).
+    """
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="E1: Record BF16 trajectories for tau-bench workflows."
+        description="Record BF16 trajectories for G1 experiments.",
     )
     parser.add_argument(
-        "--config", type=str, default="experiments/e1/config.yaml",
-        help="Path to config YAML file.",
+        "--config", default="experiments/e1/config.yaml",
+        help="Path to config.yaml",
     )
     parser.add_argument(
-        "--subset", type=str, default="",
-        help="Path to workflow subset JSON (overrides config).",
+        "--dataset", default="all",
+        choices=["all", "tau-bench", "bfcl_v3"],
+        help="Which dataset to record. 'all' = both (default: all)",
     )
     parser.add_argument(
-        "--output-dir", type=str, default="",
+        "--bfcl-subset", default=None,
+        choices=["multi_turn_base", "multi_turn_miss_func",
+                 "multi_turn_miss_param", "multi_turn_long_context"],
+        help="BFCL subset (only valid with --dataset bfcl_v3). Default: all 4 subsets.",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None,
+        help="Single seed to record. Default: all seeds from config.",
+    )
+    parser.add_argument(
+        "--max-episodes", type=int, default=None,
+        help="Cap on episodes per (dataset, seed). For smoke tests.",
+    )
+    parser.add_argument(
+        "--resume", dest="resume", action="store_true", default=True,
+        help="Skip existing trace files (default: true)",
+    )
+    parser.add_argument(
+        "--no-resume", dest="resume", action="store_false",
+        help="Re-record even if trace file exists.",
+    )
+    # Legacy / compatibility flags (kept so old invocations still work).
+    parser.add_argument(
+        "--subset", default="",
+        help="Path to workflow subset JSON (overrides config). Legacy.",
+    )
+    parser.add_argument(
+        "--output-dir", default="",
         help="Override output directory for trajectory files.",
     )
-    args = parser.parse_args()
+    return parser
+
+
+def main():
+    """Entry point for E1 trajectory recording."""
+    args = _build_arg_parser().parse_args()
 
     recorder = TrajectoryRecorder(config_path=args.config)
 
@@ -1047,6 +1086,10 @@ def main():
         recorder._output_dir = Path(args.output_dir)
         recorder._output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Note: args.seed / args.dataset / args.bfcl_subset / args.max_episodes
+    # are consumed by the multi-seed multi-dataset recording loop that will
+    # be implemented in Task 4-7. For now we delegate to the existing
+    # record_all path so legacy behavior is preserved.
     saved_paths = recorder.record_all(subset_path=args.subset)
 
     report = {
