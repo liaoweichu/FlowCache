@@ -9,7 +9,8 @@
 > **修订记录**：
 > - v0.1（2026-07-25）：初版
 > - **v0.2（2026-07-25）：数据集体系重构**——应用户要求：①全册禁止自建/合成数据集（移除合成 prompt 集与合成可控 DAG，G0 改用真实数据天然结构）；②数据集种类与样本总量大幅扩充（~880 → ~8,800 workflow 级样本）；③引入 BFCL、SWE 轨迹、Toolathlon、CATraces、LongBench、GSM8K、BurstGPT、Mooncake，选择依据对齐同类论文（详见 0.4）
-> **状态**：designed — 各章按 execution-plan.md 的 W1–W14 周次等待执行
+> - **v0.3（2026-07-25）：实验体系精简**——按 `.trae/specs/experiment-scope-redesign/spec.md`（状态：approved-pending-implementation）落地：13 章 → 5 章 + 2 个小判定（G0、G3 冒烟）；核心数据集 12+ → 7；workflow 样本 ~8,800 → ~3,300；E4 replay ~702 → ~100。G1/G2/G4 不再独立运行，复用正式实验数据判定。**v0.3 重构分批进行**：本次仅对齐 G1/Ch.1 与 E1 章节顶部；其余章节（G3/G4/E2–E7）保留 v0.2 形式，待对应周次前再重构
+> **状态**：designed — G1/Ch.1 已按 v0.3 对齐；其余章节按 v0.2 形式待 v0.3 重构
 
 ---
 
@@ -541,6 +542,8 @@ G0 是**确定性正确性验证**而非统计推断，样本量由覆盖性决�
 
 > **周次**：W6（v0.2 起，原 W5 顺延） | **依赖**：G0、E1 | **关键路径**：是
 > **失败动作**：转向"何时工作流结构产生物理 KV 复用"的 benchmark/characterization 论文（路线 B）
+>
+> **v0.3 对齐说明（2026-07-25）**：按 spec v0.3，G1 不再独立运行，**复用 Ch.1（即 E1+G1 合并）画像数据**做判定。判定逻辑（headroom ≥ 10% + closest baseline 可比性）与阈值不变；数据来源从"独立 Gate 实验"改为"E1 画像 + oracle headroom 表"。本章数据集体系同步精简：StableToolBench/SWE/Toolathlon 移出（仅在 Ch.5 出现），主表仅保留 τ-bench 495 + BFCL 800。原 v0.2 的 G1.11.1 表 G1-3（StableToolBench 确认表）降级为附录，不参与 Go/No-Go 判定。
 
 ## G1.1 实验目标与 Gate 关系
 
@@ -558,15 +561,32 @@ G1 验证 FlowCache 的**第一核心假设**（IDEA §0.3-1）：
 
 ## G1.2 数据集与子集定义
 
+**v0.3 精简后主表数据集**（参与 Go/No-Go 判定）：
+
 | 数据集 | 样本数 | 说明 |
 |---|---|---|
-| τ-bench | 495 episodes（165 × 3 seeds） | 主判定 workload |
-| BFCL v3 multi-turn | 800 | 第二主判定 workload（多轮函数调用、确定性状态校验） |
-| StableToolBench | 500（通过 0.4.3 核验） | 确认性 workload |
-| SWE 轨迹 | 500 | 结构多样性参照（真实重试/分支），不参与 Go/No-Go 判定 |
-| Toolathlon 轨迹 | 500 | 真实工具等待分布参照，不参与判定 |
+| τ-bench | 495 episodes（165 任务 × 3 seeds，retail + airline 两域） | 主判定 workload ①；LLM 用户模拟器（`llm_user`）+ 真实工具 backend |
+| BFCL v3 multi-turn | 800（4 子集 × 200：`multi_turn_base` / `miss_func` / `miss_param` / `long_context`） | 主判定 workload ②；scripted user turns（1–7 轮/episode）+ 8 个真实 sim 工具类 + 状态验证 |
 
-trace 来源：E1 录制/整理的可重放 trace（τ-bench 与 BFCL 为 rollout 录制；SWE/Toolathlon 为真实轨迹整理；到达结构主证据 BurstGPT，Poisson λ=4 为建模参照，H=1000，block_size=16）。
+**v0.3 移出主表的数据集**（仅在 Ch.5 鲁棒性章节使用，不参与 G1 判定）：
+
+| 数据集 | 样本数（Ch.5 用量） | v0.2 原计划用量 | 说明 |
+|---|---|---|---|
+| StableToolBench | 500 | 500 | Ch.5 family-out 轴 |
+| SWE-rebench-openhands-trajectories | 200 | 500 | Ch.5 压力面 |
+| Toolathlon-Trajectories | 200 | 500 | Ch.5 压力面 |
+
+**BFCL v3 multi-turn 集成方式**（基于 2026-07-25 调研）：
+
+- **可用性**：GitHub `ShishirPatil/gorilla/berkeley-function-call-leaderboard/`、HuggingFace `gorilla-llm/Berkeley-Function-Calling-Leaderboard`、PyPI `pip install bfcl-eval`；Apache 2.0；ICML 2025 配套论文
+- **样本结构**：JSONL，字段含 `id` / `question`（user turns list）/ `function`（tools 定义）/ `initial_config`（后端状态初始化）/ `ground_truth`（多轮交互轨迹）/ `group_id`
+- **多轮真实性**：每 episode 含 1–7 个 user turn；每 turn 内部可多步 function call → 单 episode 的 LLM 调用数远多于 user turn 数；前文（system + tool schema + 历史 turns）在后续 turn 中成为可重用的 exact prefix → 产生 inactive KV
+- **工具 backend**：8 个 sim 类（Vehicle Control / Trading Bots / Travel Booking / Gorilla File System / Message API / Twitter API / Ticket API / Math API），纯 Python 实现，状态可 `copy.deepcopy` 快照/恢复；评估采用状态验证（验证 backend 终态而非 AST 匹配）
+- **用户模拟器**：**不提供 LLM 用户模拟器**，user turns 是 scripted 固定序列写在数据集里。与 τ-bench 的 `llm_user` 形成方法论互补（一个 simulated user、一个 scripted user）。**报告需明确披露**此差异，并解释这反而提升可复现性
+- **集成命令**：`bfcl generate --test-category multi_turn_base`（其余 3 子集类同）；用 `--include-input-log` 拿到完整 `inference_log`（含 user/assistant/tool/state_info 角色）；用 `utils/visualize_multi_turn_ground_truth_conversation.py` 获取 oracle trajectory
+- **样本量对齐**：vLLM × Mooncake blog（2026-05）使用 610 traces 做 workload characterization，800 BFCL episodes 与之同量级；但 BFCL 单 episode turn 数较少（1–7 vs Codex 33 中位数），**报告时需补充 total LLM calls 指标**（预计 5K–15K）
+
+trace 来源：E1 录制的可重放 trace（τ-bench 与 BFCL 均为 rollout 录制；到达结构主证据 BurstGPT，Poisson λ=4 为建模参照，H=1000，block_size=16）。
 
 ## G1.3 样本数与功效分析
 
@@ -576,6 +596,8 @@ trace 来源：E1 录制/整理的可重放 trace（τ-bench 与 BFCL 为 rollou
 | unique block 数（估计） | 随 episode 量上升（原 80 任务 ~300–600；全量 ×3 后 TBD） | g2-pilot §2.4 外推 |
 | 判定效应量 | oracle vs 最佳简单策略的 miss-cost 或 p95 TTFT 差距 ≥ 10% | IDEA §7 G1 内部参考阈值 |
 | 功效 | 495 paired episodes 下 CI 半宽显著小于 80 单元情形（0.8.3）；首跑测 CV 后按 0.8.3 规则决定是否增加种子 | 0.8.3 预注册规则 |
+| v0.3 样本量封顶 | τ-bench 495 + BFCL 800 = 1,295 episodes（不再追加 STB/SWE/Toolathlon） | spec v0.3 §5：主表仅 τ-bench + BFCL；STB/SWE/Toolathlon 仅 Ch.5 |
+| 报告补充指标 | total LLM calls（预计 5K–15K）、平均 turn/episode | BFCL 单 episode turn 数较少（1–7），需补 total LLM calls 才能跨论文对比 |
 
 ## G1.4 Baseline / 对照
 
@@ -686,17 +708,14 @@ trace 来源：E1 录制/整理的可重放 trace（τ-bench 与 BFCL 为 rollou
 
 **表 G1-2：headroom 第二主表（BFCL 800，结构同表 G1-1）**。
 
-**表 G1-3：headroom 确认表（StableToolBench 500，结构同表 G1-1）**——若 0.4.3 核验未通过，本表降级为附表并标注。
-
-**表 G1-4：locality 画像摘要（判定输入，与 E1 共享数据）**
+**表 G1-3：locality 画像摘要（判定输入，与 E1/Ch.1 共享数据）**
 
 | 数据集 | exact-prefix overlap | LCP tokens (median / p95) | next-use distance (median / p95) | share_count ≥ 2 的 block 占比 | KV/总显存占比 |
 |---|---|---|---|---|---|
 | τ-bench | TBD | TBD | TBD | TBD | TBD |
 | BFCL | TBD | TBD | TBD | TBD | TBD |
-| StableToolBench | TBD | TBD | TBD | TBD | TBD |
-| SWE 轨迹 | TBD | TBD | TBD | TBD | TBD |
-| Toolathlon | TBD | TBD | TBD | TBD | TBD |
+
+> **v0.3 注**：原 v0.2 的 G1-3 确认表（StableToolBench 500）与 G1-4 locality 摘要中的 STB/SWE/Toolathlon 行已删除，这些数据集移至 Ch.5 鲁棒性章节。如需 STB 确认性参照，在 Ch.5 family-out 轴中给出。
 
 ## G1.12 失败动作
 
@@ -1242,6 +1261,8 @@ GNN 是可选实现，不是论文贡献本身。
 
 > **周次**：W7（v0.2 起，原 W6 顺延） | **对应 Gate**：G1 | **实验状态**：τ-bench 管线代码已有基础（`experiments/e1/`），需扩展至全数据集组合
 > **定位**：中心 claim 的前提，**不放在附录**（IDEA §8 E1）
+>
+> **v0.3 对齐说明（2026-07-25）**：按 spec v0.3，**E1 已并入 Ch.1（与 G1 合并）**。本章保留作为画像方法的详细参考（指标定义、序列化规则、执行步骤模板）。**数据集范围以 G1.2 为准**（仅 τ-bench 495 + BFCL 800）；本章 E1.2 表格列出的 12 数据集 v0.2 计划已被 spec v0.3 §5 精简为 7 核心 + 2 辅助，主表用量见 G1.2，Ch.5 用量见 spec v0.3 §5。原 E1.10 的 ~33–40 GPU 小时 Tier-1 录制预算，v0.3 缩减为 ~20 GPU 小时（spec v0.3 §8）。
 
 ## E1.1 实验目标
 
