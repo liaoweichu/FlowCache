@@ -12,6 +12,7 @@ G0: Exactness & Loadability - 主入口脚本 (Task 11)。
     python run_g0.py --step 6       # Step 6: 判定报告
 """
 import argparse
+import gc
 import json
 import os
 import sys
@@ -20,6 +21,23 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import yaml
+
+
+def _cleanup_between_steps(backend=None):
+    """步骤间清理显存，防止跨步骤累积导致 OOM。"""
+    gc.collect()
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            if backend is not None:
+                backend.print_memory_status(tag="after-step")
+            else:
+                allocated = torch.cuda.memory_allocated() / 1e9
+                reserved = torch.cuda.memory_reserved() / 1e9
+                print(f"  [mem] allocated={allocated:.2f}GB, reserved={reserved:.2f}GB")
+    except ImportError:
+        pass
 
 
 def load_config(config_path: str = None) -> dict:
@@ -186,6 +204,8 @@ def main():
         print(f"Backend loaded: {backend.model_name}")
         if torch.cuda.is_available():
             print(f"GPU: {torch.cuda.get_device_name(0)}")
+        # 加载后立即打印显存基线
+        backend.print_memory_status(tag="after-load")
         print()
 
     steps = {
@@ -202,6 +222,9 @@ def main():
         for step_id in ["0", "1", "2", "3", "4", "5", "6"]:
             name, func = steps[step_id]
             print(f"\n--- {name} ---")
+            # 步骤开始前打印显存基线
+            if backend is not None:
+                backend.print_memory_status(tag=f"before-step{step_id}")
             try:
                 func()
             except Exception as e:
@@ -211,10 +234,15 @@ def main():
                 # 继续执行后续步骤（verdict 会报告失败）
                 if step_id == "6":
                     continue
+            # 步骤间清理显存
+            _cleanup_between_steps(backend)
     else:
         name, func = steps[args.step]
         print(f"\n--- {name} ---")
+        if backend is not None:
+            backend.print_memory_status(tag=f"before-step{args.step}")
         func()
+        _cleanup_between_steps(backend)
 
     print(f"\n{'='*60}")
     print(f"G0 complete. Check outputs/ for artifacts.")

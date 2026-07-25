@@ -10,6 +10,7 @@ Q8/Q4 codec 100 block roundtrip spike 测试 (Task 7).
 4. 验证 lineage 隔离：BF16 block hash ≠ Q8 block hash ≠ Q4 block hash
 5. 生成 codec-spike-report.md（含表 G0-3）
 """
+import gc
 import json
 import os
 import random
@@ -28,6 +29,29 @@ from codec import (
     measure_decode_time,
 )
 from block_index import compute_block_hash
+
+
+def _release_kv(*vars):
+    """释放 KV cache 张量并清理 GPU 显存。"""
+    for v in vars:
+        del v
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+def _move_block_to_device(block: Dict, device: str) -> Dict:
+    """将 block 的所有 KV 张量移到指定设备（返回新 block，不修改原 block）。"""
+    gpu_block = {
+        "block_idx": block["block_idx"],
+        "token_range": block["token_range"],
+        "layer_k": [],
+        "layer_v": [],
+    }
+    for layer_idx in range(len(block["layer_k"])):
+        gpu_block["layer_k"].append(block["layer_k"][layer_idx].to(device))
+        gpu_block["layer_v"].append(block["layer_v"][layer_idx].to(device))
+    return gpu_block
 
 
 # =============================================================================
@@ -73,33 +97,52 @@ def collect_blocks(backend, cases: Dict, block_size: int, max_blocks: int = 500)
     blocks = []
     seen_fingerprints = set()
 
-    for seq_label, messages in _iter_message_sequences(cases):
+    for seq_idx, (seq_label, messages) in enumerate(_iter_message_sequences(cases)):
         if len(blocks) >= max_blocks:
             break
 
+        # 每 10 条序列检查一次显存水位
+        if seq_idx > 0 and seq_idx % 10 == 0:
+            if not backend.assert_memory_available(
+                required_gb=2.0, tag=f"collect_blocks seq={seq_idx}"
+            ):
+                print(f"  [mem] 显存不足，提前停止收集（已收集 {len(blocks)} blocks）")
+                break
+
         try:
             input_ids = backend.tokenize_chat(messages)
+            # 使用 safe_forward 而非 forward_with_kv，OOM 时降级跳过
             with torch.no_grad():
-                _, past_kv = backend.forward_with_kv(input_ids)
+                logits, past_kv = backend.safe_forward(
+                    input_ids, tag=f"collect {seq_label}"
+                )
+            if past_kv is None:
+                print(f"  [SKIP] {seq_label}: OOM, 跳过该序列")
+                _release_kv(input_ids)
+                continue
             seq_blocks = backend.slice_kv_into_blocks(past_kv, block_size)
+
+            # 收集完后立即释放 past_kv
+            _release_kv(past_kv, input_ids, logits if logits is not None else None)
 
             for block in seq_blocks:
                 if len(blocks) >= max_blocks:
                     break
-                # 用第一层 key 张量的数据指针 + 形状作为指纹
+                # 用第一层 key 张量的内容哈希作为指纹
                 k_tensor = block["layer_k"][0]
-                fingerprint = (
-                    k_tensor.shape,
-                    k_tensor.dtype,
-                    k_tensor.data_ptr(),
-                )
-                # 更稳定的指纹：用张量内容的哈希
                 content_hash = hash(k_tensor.cpu().numpy().tobytes())
                 if content_hash not in seen_fingerprints:
                     seen_fingerprints.add(content_hash)
+                    # 将 block 的 KV 张量移到 CPU，避免 GPU 显存累积
+                    for layer_idx in range(len(block["layer_k"])):
+                        block["layer_k"][layer_idx] = block["layer_k"][layer_idx].cpu()
+                        block["layer_v"][layer_idx] = block["layer_v"][layer_idx].cpu()
                     blocks.append(block)
+            # 释放本轮 seq_blocks 中未入池的 block 张量
+            _release_kv(seq_blocks)
         except Exception as e:
             print(f"  [WARN] 跳过 {seq_label}: {e}")
+            _release_kv()
             continue
 
     return blocks
@@ -307,42 +350,74 @@ def run_codec_spike(
     lineage_results = []
 
     for i, block in enumerate(sampled):
+        # 每 20 个 block 打印显存状态，确保不会因累积导致 OOM
+        if i > 0 and i % 20 == 0:
+            backend.print_memory_status(tag=f"codec block {i}/{len(sampled)}")
+
         # ---- 量化 roundtrip ----
+        # block 的 KV 张量在 CPU 上（collect_blocks 已转移），量化在 CPU 完成
         # Q8
         dequant_q8, stats_q8 = quantize_block_kv(block, "q8", backend.num_layers)
         # Q4
         dequant_q4, stats_q4 = quantize_block_kv(block, "q4", backend.num_layers)
 
         # ---- logit KL（用单 block forward）----
-        # BF16 原始 block forward
+        # 将 block 移到 GPU 做 forward，完成后立即释放
+        kl_q8 = float("nan")
+        kl_q4 = float("nan")
         try:
             with torch.no_grad():
-                past_kv_bf16 = backend.restore_kv_from_blocks([block])
-                logits_bf16, _ = backend.forward_with_kv(cont_token, past_kv_bf16)
+                # 原始 BF16 block → GPU（先释放上一轮残留显存）
+                _release_kv()
+                gpu_block = _move_block_to_device(block, backend.device)
+                past_kv_bf16 = backend.restore_kv_from_blocks([gpu_block])
+                logits_bf16, _ = backend.safe_forward(
+                    cont_token, past_kv_bf16, tag=f"block{i} bf16"
+                )
+                if logits_bf16 is None:
+                    raise RuntimeError("BF16 forward OOM")
 
-                past_kv_q8 = backend.restore_kv_from_blocks([dequant_q8])
-                logits_q8, _ = backend.forward_with_kv(cont_token, past_kv_q8)
+                # Q8 dequant block → GPU
+                gpu_dequant_q8 = _move_block_to_device(dequant_q8, backend.device)
+                past_kv_q8 = backend.restore_kv_from_blocks([gpu_dequant_q8])
+                logits_q8, _ = backend.safe_forward(
+                    cont_token, past_kv_q8, tag=f"block{i} q8"
+                )
+                if logits_q8 is None:
+                    raise RuntimeError("Q8 forward OOM")
 
-                past_kv_q4 = backend.restore_kv_from_blocks([dequant_q4])
-                logits_q4, _ = backend.forward_with_kv(cont_token, past_kv_q4)
+                # Q4 dequant block → GPU
+                gpu_dequant_q4 = _move_block_to_device(dequant_q4, backend.device)
+                past_kv_q4 = backend.restore_kv_from_blocks([gpu_dequant_q4])
+                logits_q4, _ = backend.safe_forward(
+                    cont_token, past_kv_q4, tag=f"block{i} q4"
+                )
+                if logits_q4 is None:
+                    raise RuntimeError("Q4 forward OOM")
 
             kl_q8 = compute_logit_kl(logits_bf16, logits_q8)
             kl_q4 = compute_logit_kl(logits_bf16, logits_q4)
+
+            # 释放 GPU 上的临时张量
+            _release_kv(gpu_block, gpu_dequant_q8, gpu_dequant_q4,
+                        past_kv_bf16, past_kv_q8, past_kv_q4,
+                        logits_bf16, logits_q8, logits_q4)
         except Exception as e:
             print(f"  [WARN] Block {i} forward failed: {e}")
-            kl_q8 = float("nan")
-            kl_q4 = float("nan")
+            _release_kv()
 
         # ---- staging 峰值字节（量化后数据大小）----
-        # Q8: int8, 每层 K+V
+        # 在释放 dequant 前计算
         q8_bytes = sum(
             dequant_q8["layer_k"][l].numel() + dequant_q8["layer_v"][l].numel()
             for l in range(backend.num_layers)
-        )  # dequant 后是 BF16，但实际存储用 int8
-        # 量化后的实际存储大小（int8 = 1 byte）
+        )
         q8_staging_bytes = q8_bytes * 1  # int8 = 1 byte per element
         q4_staging_bytes = q8_bytes * 1  # int4 存储为 int8，仍 1 byte
         bf16_staging_bytes = q8_bytes * 2  # BF16 = 2 bytes per element
+
+        # 释放 CPU 上的 dequant block
+        _release_kv(dequant_q8, dequant_q4)
 
         block_results.append({
             "block_idx": i,

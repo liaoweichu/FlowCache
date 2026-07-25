@@ -251,3 +251,131 @@ class Backend:
                 next_token.unsqueeze(0), past_key_values
             )
         return tokens
+
+    # =========================================================================
+    # 显存监控工具方法
+    # =========================================================================
+
+    def get_memory_status(self) -> Dict:
+        """
+        返回当前 GPU 显存状态（GB）。
+
+        Returns:
+            {
+                'available': bool,         # CUDA 是否可用
+                'allocated_gb': float,     # 当前已分配显存
+                'reserved_gb': float,      # 当前 reserved 显存
+                'free_gb': float,          # 估算空闲显存（total - allocated）
+                'total_gb': float,         # GPU 总显存
+                'peak_allocated_gb': float,# 峰值分配显存
+            }
+            CUDA 不可用时返回 available=False，其余字段为 0.0。
+        """
+        if not torch.cuda.is_available():
+            return {
+                "available": False,
+                "allocated_gb": 0.0,
+                "reserved_gb": 0.0,
+                "free_gb": 0.0,
+                "total_gb": 0.0,
+                "peak_allocated_gb": 0.0,
+            }
+        props = torch.cuda.get_device_properties(0)
+        total = props.total_memory / 1e9
+        allocated = torch.cuda.memory_allocated() / 1e9
+        reserved = torch.cuda.memory_reserved() / 1e9
+        peak = torch.cuda.max_memory_allocated() / 1e9
+        return {
+            "available": True,
+            "allocated_gb": allocated,
+            "reserved_gb": reserved,
+            "free_gb": max(total - allocated, 0.0),
+            "total_gb": total,
+            "peak_allocated_gb": peak,
+        }
+
+    def print_memory_status(self, tag: str = "") -> None:
+        """打印当前显存状态，用于调试和实验间监控。"""
+        s = self.get_memory_status()
+        if not s["available"]:
+            print(f"  [mem{(' '+tag) if tag else ''}] CUDA unavailable")
+            return
+        print(
+            f"  [mem{(' '+tag) if tag else ''}] "
+            f"allocated={s['allocated_gb']:.2f}GB, "
+            f"reserved={s['reserved_gb']:.2f}GB, "
+            f"free={s['free_gb']:.2f}GB, "
+            f"total={s['total_gb']:.2f}GB, "
+            f"peak={s['peak_allocated_gb']:.2f}GB"
+        )
+
+    def assert_memory_available(
+        self, required_gb: float, tag: str = ""
+    ) -> bool:
+        """
+        检查是否有足够显存可用于下一批操作。
+
+        Args:
+            required_gb: 需要的显存下限（GB）。
+            tag: 用于日志的标签。
+
+        Returns:
+            True 如果空闲显存 >= required_gb；False 否则（同时打印警告）。
+        """
+        s = self.get_memory_status()
+        if not s["available"]:
+            return True  # CPU 模式不检查
+        if s["free_gb"] < required_gb:
+            print(
+                f"  [mem WARN{(' '+tag) if tag else ''}] "
+                f"free={s['free_gb']:.2f}GB < required={required_gb:.2f}GB, "
+                f"triggering empty_cache()"
+            )
+            torch.cuda.empty_cache()
+            s = self.get_memory_status()
+            if s["free_gb"] < required_gb:
+                print(
+                    f"  [mem WARN{(' '+tag) if tag else ''}] "
+                    f"after cleanup free={s['free_gb']:.2f}GB still < "
+                    f"required={required_gb:.2f}GB"
+                )
+                return False
+        return True
+
+    def safe_forward(
+        self,
+        input_ids: torch.Tensor,
+        past_key_values=None,
+        required_gb: Optional[float] = None,
+        tag: str = "",
+    ) -> Tuple[Optional[torch.Tensor], Optional[object]]:
+        """
+        带 OOM 防护的 forward 调用。
+
+        若 CUDA OOM，会尝试 empty_cache 后重试一次；仍失败则返回 (None, None)，
+        由调用方决定降级策略（跳过该样本/标记 OOM）。
+
+        Args:
+            input_ids: 输入 token 张量。
+            past_key_values: 可选的 past KV cache。
+            required_gb: 可选，调用前检查的显存下限。
+            tag: 日志标签。
+
+        Returns:
+            (logits, past_key_values)；OOM 时为 (None, None)。
+        """
+        if required_gb is not None and not self.assert_memory_available(
+            required_gb, tag=tag
+        ):
+            return None, None
+        try:
+            return self.forward_with_kv(input_ids, past_key_values)
+        except torch.cuda.OutOfMemoryError as e:
+            print(f"  [OOM{(' '+tag) if tag else ''}] {e}")
+            torch.cuda.empty_cache()
+            try:
+                return self.forward_with_kv(input_ids, past_key_values)
+            except torch.cuda.OutOfMemoryError as e2:
+                print(f"  [OOM{(' '+tag) if tag else ''}] retry failed: {e2}")
+                torch.cuda.empty_cache()
+                return None, None

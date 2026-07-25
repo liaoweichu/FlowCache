@@ -13,6 +13,7 @@ BF16 缓存恢复 vs 重算一致性测试 (Task 5).
 - 缓存路径：slice → restore → forward(continuation) → logits_cached
 - 对比两条路径的 KV 张量和 logits
 """
+import gc
 import json
 import os
 from typing import Dict, List, Tuple
@@ -26,6 +27,15 @@ from block_index import (
     compute_template_hash,
     compute_config_hash,
 )
+
+
+def _release_kv(*vars):
+    """释放 KV cache 张量并清理 GPU 显存。"""
+    for v in vars:
+        del v
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 # =============================================================================
@@ -184,14 +194,27 @@ def compute_sequence_block_hashes(
     Returns:
         (blocks, hashes)：blocks 为带 hash/parent_hash 字段的 block 列表，
                          hashes 为哈希字符串列表。
+                         OOM 时返回 ([], [])。
     """
     input_ids = backend.tokenize_chat(messages)
     token_ids = input_ids[0].tolist()
 
+    # 使用 safe_forward 而非 forward_with_kv，OOM 时返回空结果
     with torch.no_grad():
-        _, past_kv = backend.forward_with_kv(input_ids)
+        _, past_kv = backend.safe_forward(input_ids, tag="block_hash")
+    if past_kv is None:
+        print(f"  [SKIP] compute_sequence_block_hashes OOM, 返回空结果")
+        _release_kv(input_ids)
+        return [], []
 
     blocks = backend.slice_kv_into_blocks(past_kv, block_size)
+    # 只保留哈希信息，释放 KV 张量到 CPU 避免显存累积
+    for block in blocks:
+        for layer_idx in range(len(block["layer_k"])):
+            block["layer_k"][layer_idx] = block["layer_k"][layer_idx].cpu()
+            block["layer_v"][layer_idx] = block["layer_v"][layer_idx].cpu()
+
+    _release_kv(past_kv, input_ids)
 
     hashes = []
     parent_hash = ""
@@ -255,10 +278,15 @@ def test_block_identity(backend, cases: Dict, block_size: int) -> Dict:
                 incremental_ok = True
                 chain_ok = True
                 num_turns = len(case["turns"])
+                oom_skip = False
                 for turn in case["turns"]:
                     blocks, hashes = compute_sequence_block_hashes(
                         backend, turn["messages"], block_size, default_metadata
                     )
+                    if len(hashes) == 0:
+                        # OOM 跳过，标记该用例失败
+                        oom_skip = True
+                        break
                     chain_valid, _ = verify_parent_chain(blocks)
                     if not chain_valid:
                         chain_ok = False
@@ -273,18 +301,30 @@ def test_block_identity(backend, cases: Dict, block_size: int) -> Dict:
                                     break
                     prev_hashes = hashes
 
-                results.append({
-                    "case_id": case_id,
-                    "category": category,
-                    "identity_check": incremental_ok,
-                    "parent_chain": chain_ok,
-                    "invalidation": None,
-                    "detail": f"turns={num_turns}, incremental_sharing={incremental_ok}",
-                })
+                if oom_skip:
+                    results.append({
+                        "case_id": case_id,
+                        "category": category,
+                        "identity_check": False,
+                        "parent_chain": False,
+                        "invalidation": None,
+                        "detail": f"OOM skipped (turns={num_turns})",
+                    })
+                else:
+                    results.append({
+                        "case_id": case_id,
+                        "category": category,
+                        "identity_check": incremental_ok,
+                        "parent_chain": chain_ok,
+                        "invalidation": None,
+                        "detail": f"turns={num_turns}, incremental_sharing={incremental_ok}",
+                    })
+                _release_kv()
                 continue
 
             # ---- pair-based 类别 (1, 2, 3, 4, 6) ----
             pair_results = []
+            pair_oom = False
             for item in case["pair"]:
                 metadata = default_metadata.copy()
                 if category == 3:
@@ -303,7 +343,22 @@ def test_block_identity(backend, cases: Dict, block_size: int) -> Dict:
                 blocks, hashes = compute_sequence_block_hashes(
                     backend, item["messages"], block_size, metadata
                 )
+                if len(hashes) == 0:
+                    pair_oom = True
                 pair_results.append((blocks, hashes))
+
+            # OOM 跳过：直接标记失败，不参与判定
+            if pair_oom:
+                results.append({
+                    "case_id": case_id,
+                    "category": category,
+                    "identity_check": False,
+                    "parent_chain": False,
+                    "invalidation": None,
+                    "detail": "OOM skipped (one or both sequences OOM)",
+                })
+                _release_kv()
+                continue
 
             hashes_a = pair_results[0][1]
             hashes_b = pair_results[1][1]
@@ -472,13 +527,33 @@ def _test_single_sequence(
     backend, messages: List[Dict], block_size: int,
     cont_token: torch.Tensor, seq_label: str, category: int
 ) -> Dict:
-    """对单条消息序列执行数值一致性测试。"""
+    """对单条消息序列执行数值一致性测试。OOM 时返回标记失败的结果。"""
     input_ids = backend.tokenize_chat(messages)
     seq_len = input_ids.shape[1]
 
-    # 重算路径：完整 forward
+    # 重算路径：完整 forward（带 OOM 防护）
     with torch.no_grad():
-        logits_recompute, past_kv_recompute = backend.forward_with_kv(input_ids)
+        logits_recompute, past_kv_recompute = backend.safe_forward(
+            input_ids, tag=f"exactness {seq_label}"
+        )
+    if past_kv_recompute is None:
+        print(f"  [SKIP] {seq_label}: OOM during recompute forward")
+        _release_kv(input_ids)
+        return {
+            "case_id": seq_label,
+            "category": category,
+            "seq_len": seq_len,
+            "num_blocks": 0,
+            "kv_bit_identical": False,
+            "kv_max_abs_diff": float("inf"),
+            "logits_max_abs_diff": float("inf"),
+            "logits_mean_abs_diff": float("inf"),
+            "logits_cosine_sim": 0.0,
+            "top1_match": False,
+            "top1_a": -1,
+            "top1_b": -1,
+            "oom": True,
+        }
 
     # 缓存路径：slice → restore
     blocks = backend.slice_kv_into_blocks(past_kv_recompute, block_size)
@@ -489,17 +564,29 @@ def _test_single_sequence(
 
     # 续算对比：用同一个 continuation token 分别在两条路径上 forward
     with torch.no_grad():
-        logits_recompute_cont, _ = backend.forward_with_kv(
-            cont_token, past_kv_recompute
+        logits_recompute_cont, _ = backend.safe_forward(
+            cont_token, past_kv_recompute, tag=f"exactness {seq_label} cont"
         )
-        logits_cached, _ = backend.forward_with_kv(
-            cont_token, past_kv_restored
+        logits_cached, _ = backend.safe_forward(
+            cont_token, past_kv_restored, tag=f"exactness {seq_label} cached"
         )
 
-    # 对比 logits
-    logits_comparison = compare_logits(logits_recompute_cont, logits_cached)
+    # OOM 降级：续算 forward 失败时用零张量占位
+    if logits_recompute_cont is None or logits_cached is None:
+        print(f"  [WARN] {seq_label}: OOM during continuation forward")
+        logits_comparison = {
+            "max_abs_diff": float("inf"),
+            "mean_abs_diff": float("inf"),
+            "cosine_sim": 0.0,
+            "top1_match": False,
+            "top1_a": -1,
+            "top1_b": -1,
+        }
+    else:
+        logits_comparison = compare_logits(logits_recompute_cont, logits_cached)
 
-    return {
+    # 提取结果后释放所有 KV 张量和中间变量
+    result = {
         "case_id": seq_label,
         "category": category,
         "seq_len": seq_len,
@@ -513,6 +600,12 @@ def _test_single_sequence(
         "top1_a": logits_comparison["top1_a"],
         "top1_b": logits_comparison["top1_b"],
     }
+
+    _release_kv(past_kv_recompute, past_kv_restored, blocks,
+                logits_recompute, logits_recompute_cont, logits_cached,
+                kv_comparison, logits_comparison, input_ids)
+
+    return result
 
 
 # =============================================================================

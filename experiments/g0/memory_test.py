@@ -47,36 +47,46 @@ def measure_memory_peak(
 
     has_cuda = torch.cuda.is_available()
 
-    for _ in range(repeats):
+    for rep in range(repeats):
         if has_cuda:
             torch.cuda.empty_cache()
             torch.cuda.reset_peak_memory_stats()
 
         if context_len > 0 and concurrent > 0:
-            # 模拟并发请求：生成 concurrent 个 KV cache
-            kv_caches = []
-            for _ in range(concurrent):
-                input_ids = torch.randint(
-                    0,
-                    backend.model.config.vocab_size,
-                    (1, context_len),
-                    device=backend.device,
-                )
-                with torch.no_grad():
-                    _, past_kv = backend.forward_with_kv(input_ids)
-                kv_caches.append(past_kv)
+            # 模拟并发请求：逐个生成 KV cache
+            # 如果显存不足，逐个释放前一个再生成下一个（测峰值而非总量）
+            try:
+                kv_caches = []
+                for j in range(concurrent):
+                    input_ids = torch.randint(
+                        0,
+                        backend.model.config.vocab_size,
+                        (1, context_len),
+                        device=backend.device,
+                    )
+                    with torch.no_grad():
+                        _, past_kv = backend.forward_with_kv(input_ids)
+                    kv_caches.append(past_kv)
+                    del input_ids
 
-            if has_cuda:
-                allocated = torch.cuda.max_memory_allocated() / 1e9
-                reserved = torch.cuda.max_memory_reserved() / 1e9
-            else:
-                allocated = 0.0
-                reserved = 0.0
+                if has_cuda:
+                    allocated = torch.cuda.max_memory_allocated() / 1e9
+                    reserved = torch.cuda.max_memory_reserved() / 1e9
+                else:
+                    allocated = 0.0
+                    reserved = 0.0
 
-            # 释放 KV cache
-            del kv_caches
-            if has_cuda:
-                torch.cuda.empty_cache()
+                # 释放 KV cache
+                del kv_caches
+                if has_cuda:
+                    torch.cuda.empty_cache()
+            except torch.cuda.OutOfMemoryError as e:
+                # 显存不足时记录 OOM，不崩溃
+                print(f"    [OOM] repeat {rep}: {e}")
+                if has_cuda:
+                    torch.cuda.empty_cache()
+                allocated = -1.0  # 标记 OOM
+                reserved = -1.0
         else:
             # 仅模型加载
             if has_cuda:
@@ -89,11 +99,18 @@ def measure_memory_peak(
         allocated_values.append(allocated)
         reserved_values.append(reserved)
 
+    # 过滤 OOM 标记值（-1.0），只取有效测量
+    valid_allocated = [v for v in allocated_values if v >= 0]
+    valid_reserved = [v for v in reserved_values if v >= 0]
+    oom_count = sum(1 for v in allocated_values if v < 0)
+
     return {
-        "allocated_peak_gb": max(allocated_values) if allocated_values else 0.0,
-        "reserved_peak_gb": max(reserved_values) if reserved_values else 0.0,
+        "allocated_peak_gb": max(valid_allocated) if valid_allocated else 0.0,
+        "reserved_peak_gb": max(valid_reserved) if valid_reserved else 0.0,
         "allocated_values": allocated_values,
         "reserved_values": reserved_values,
+        "oom": oom_count > 0,
+        "oom_count": oom_count,
     }
 
 
@@ -130,20 +147,29 @@ def run_memory_test(backend, config: Dict, output_path: str) -> Dict:
         result["context_len"] = context_len
         results.append(result)
 
-        print(
-            f"    allocated_peak={result['allocated_peak_gb']:.3f} GB, "
-            f"reserved_peak={result['reserved_peak_gb']:.3f} GB"
-        )
+        if result.get("oom", False):
+            print(
+                f"    allocated_peak={result['allocated_peak_gb']:.3f} GB, "
+                f"reserved_peak={result['reserved_peak_gb']:.3f} GB "
+                f"[OOM: {result['oom_count']}/{repeats} repeats failed]"
+            )
+        else:
+            print(
+                f"    allocated_peak={result['allocated_peak_gb']:.3f} GB, "
+                f"reserved_peak={result['reserved_peak_gb']:.3f} GB"
+            )
 
     # 判定：权重 + active cache + staging + 安全水位 ≤ 24GB
     # 安全水位 = reserved 的 10%
     memory_limit_gb = 24.0
     safety_margin = 0.1  # 10% 安全水位
 
-    # 找到最大配置（并发 8x8k）的 reserved 峰值
+    # 找到最大配置（并发 8x8k）的 reserved 峰值（排除 OOM 的 0.0）
     max_reserved = max(r["reserved_peak_gb"] for r in results)
     required_with_safety = max_reserved * (1 + safety_margin)
-    verdict = "PASS" if required_with_safety <= memory_limit_gb else "FAIL"
+    # 如果任一配置 OOM，判定为 FAIL
+    any_oom = any(r.get("oom", False) for r in results)
+    verdict = "PASS" if (required_with_safety <= memory_limit_gb and not any_oom) else "FAIL"
 
     output = {
         "configs": results,

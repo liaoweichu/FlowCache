@@ -1,24 +1,24 @@
-- [ ] experiments/g0/config.yaml 存在且包含模型名 Qwen2.5-7B-Instruct、dtype bfloat16、block_size 16
-- [ ] experiments/g0/outputs/ 目录存在
-- [ ] backend.py 可加载 Qwen2.5-7B-Instruct 并执行 forward pass 获取 past_key_values
-- [ ] backend.py 的 slice_kv_into_blocks 能将 past_key_values 按 block_size=16 切片
-- [ ] backend.py 的 restore_kv_from_blocks 能将 block 列表重组为 past_key_values
-- [ ] block_index.py 的 compute_block_hash 包含 model_id 和 revision 字段（I_b 完整定义）
-- [ ] block_index.py 的 verify_parent_chain 能检测父链断裂
-- [ ] block_index.py 的 check_invalidation 能检测 template 变化时 block 应失效
-- [ ] structure_cases.py 生成 6 类用例（共 ≥90 组）并输出 real-structure-cases.json
-- [ ] exactness_test.py 对每个用例的 block 验证 KV bit-identical
-- [ ] exactness_test.py 验证 logits max abs diff ≤ 1e-3
-- [ ] exactness_test.py 验证 greedy top-1 token 一致率 = 100%
-- [ ] exactness_test.py 输出 exactness-report.md
-- [ ] codec.py 实现 Q8 per-tensor int8 编码/解码
-- [ ] codec.py 实现 Q4 per-tensor int4 编码/解码
-- [ ] codec_spike.py 对 100 block 执行 Q8/Q4 roundtrip 并记录误差
-- [ ] codec_spike.py 验证 approximate lineage 隔离正确
-- [ ] codec_spike.py 输出 codec-spike-report.md
-- [ ] memory_test.py 测量 3 种配置的显存峰值（各 5 次重复）
-- [ ] memory_test.py 输出 memory-report.md
-- [ ] freeze_record.py 输出 freeze-record.json（含模型 revision、tokenizer、CUDA 版本等）
-- [ ] verdict.py 汇总 6 个判定条件并输出 g0-verdict.md
-- [ ] run_g0.py 支持 --step all 和 --step <N> 参数
+- [x] experiments/g0/config.yaml 存在且包含模型名 Qwen2.5-7B-Instruct、dtype bfloat16、block_size 16
+- [x] experiments/g0/outputs/ 目录存在
+- [x] backend.py 可加载 Qwen2.5-7B-Instruct 并执行 forward pass 获取 past_key_values
+- [x] backend.py 的 slice_kv_into_blocks 能将 past_key_values 按 block_size=16 切片
+- [x] backend.py 的 restore_kv_from_blocks 能将 block 列表重组为 past_key_values
+- [x] block_index.py 的 compute_block_hash 包含 model_id 和 revision 字段（I_b 完整定义）
+- [x] block_index.py 的 verify_parent_chain 能检测父链断裂
+- [x] block_index.py 的 check_invalidation 能检测 template 变化时 block 应失效
+- [x] structure_cases.py 生成 6 类用例（共 ≥90 组）并输出 real-structure-cases.json
+- [x] exactness_test.py 对每个用例的 block 验证 KV bit-identical
+- [x] exactness_test.py 验证 logits max abs diff ≤ 1e-3
+- [x] exactness_test.py 验证 greedy top-1 token 一致率 = 100%
+- [x] exactness_test.py 输出 exactness-report.md
+- [x] codec.py 实现 Q8 per-tensor int8 编码/解码
+- [x] codec.py 实现 Q4 per-tensor int4 编码/解码
+- [x] codec_spike.py 对 100 block 执行 Q8/Q4 roundtrip 并记录误差
+- [x] codec_spike.py 验证 approximate lineage 隔离正确
+- [x] codec_spike.py 输出 codec-spike-report.md
+- [x] memory_test.py 测量 3 种配置的显存峰值（各 5 次重复）
+- [x] memory_test.py 输出 memory-report.md
+- [x] freeze_record.py 输出 freeze-record.json（含模型 revision、tokenizer、CUDA 版本等）
+- [x] verdict.py 汇总 6 个判定条件并输出 g0-verdict.md
+- [x] run_g0.py 支持 --step all 和 --step <N> 参数
 - [ ] run_g0.py --step all 能端到端跑通并产出全部 artifact
