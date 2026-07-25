@@ -11,7 +11,7 @@
 
 # --- Model ---
 model:
-  name: "/autodl-pub/models/Qwen2.5-7B-Instruct"
+  name: "/root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master"
   dtype: "bfloat16"
   trust_remote_code: true
   device_map: "auto"
@@ -23,8 +23,8 @@ workload:
   tau_bench:
     tasks: 165  # full task set (115 retail + 50 airline)
     user_simulator: "llm_user"
-    user_model: "gpt-4o-mini"
-    user_provider: "openai"
+    user_model: "deepseek/deepseek-v4-flash"
+    user_provider: "deepseek"
     user_temperature: 0.7
   bfcl_v3:
     subsets:

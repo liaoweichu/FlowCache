@@ -1,12 +1,108 @@
 {
   "experiment": "E1",
-  "description": "Workload characterization trajectory recording",
-  "total_workflows_recorded": 4,
-  "output_directory": "/root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16",
-  "files": [
-    "/root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16/retail-1.json",
-    "/root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16/retail-2.json",
-    "/root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16/airline-1.json",
-    "/root/autodl-tmp/Prefix Caching/experiments/e1/traces/bf16/airline-2.json"
-  ]
+  "skip_count": 0,
+  "oom_log": [
+    {
+      "dataset": "tau-bench",
+      "domain": "retail",
+      "seed": 42,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "retail",
+      "seed": 123,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "retail",
+      "seed": 456,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "retail",
+      "seed": 789,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "retail",
+      "seed": 101112,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "retail",
+      "seed": 131415,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "retail",
+      "seed": 161718,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "retail",
+      "seed": 192021,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "airline",
+      "seed": 42,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "airline",
+      "seed": 123,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "airline",
+      "seed": 456,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "airline",
+      "seed": 789,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "airline",
+      "seed": 101112,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "airline",
+      "seed": 131415,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "airline",
+      "seed": 161718,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    },
+    {
+      "dataset": "tau-bench",
+      "domain": "airline",
+      "seed": 192021,
+      "error": "init: litellm.InternalServerError: InternalServerError: OpenAIException - Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable."
+    }
+  ],
+  "total_episodes_written": 0,
+  "dataset_filter": "tau-bench",
+  "seed_filter": null,
+  "bfcl_subset_filter": null,
+  "max_episodes": 2,
+  "resume": true
 }
