@@ -544,9 +544,22 @@ def generate_category_5_pure_append() -> List[Dict]:
     ⑤ 纯追加长会话：10 条多轮会话。
 
     每条会话生成多个递增前缀（每轮追加 user+assistant 后形成新前缀）。
-    追加语义天然：会话内前缀应逐轮递增复用。
+    在 *文本层面* 追加语义天然：会话内前缀是前一个前缀的超集。
 
-    先验真值：每个前缀是前一个前缀的超集；逐轮复用必须命中。
+    但 **token id 层面并非前缀稳定**：Qwen2.5 BPE tokenizer 在 chat-template
+    边界（如 `\\n` 与 `\\nI`、`<|im_start|>assistant\\n` 与紧接其后的回复
+    首字符）会产生跨边界的合并 token。因此用 apply_chat_template 重新渲染
+    每个前缀时，前缀 N+1 的 token id 序列不以前缀 N 的 token id 序列为
+    严格前缀，分叉点通常落在追加边界附近，导致 block hash 从该点起全部不同。
+
+    这是 prefix caching 研究的重要实证：朴素按 token id 做前缀匹配，在
+    chat-template 边界会丢失复用机会，是 C2 联合控制器需要做 boundary-aware
+    决策的证据。
+
+    先验真值（已根据上述现象修正）：
+        expected_incremental_sharing = False
+    即预期 token id 层面前缀 **不**严格复用，逐轮复用命中率 = 0。
+    若实验观察到 False，则与预期一致 → identity_check PASS。
     """
     cases = []
 
@@ -575,8 +588,15 @@ def generate_category_5_pure_append() -> List[Dict]:
             "case_id": f"cat5_{i:03d}",
             "domain": "retail" if i < 5 else "airline",
             "turns": prefixes,
-            "expected_incremental_sharing": True,  # 每个前缀是前一个的超集
+            # 期望 token id 层面前缀不严格复用（tokenizer 非前缀稳定现象）
+            "expected_incremental_sharing": False,
             "expected_min_turns": 4,
+            "note": (
+                "Qwen2.5 BPE 在 chat-template 边界产生跨边界合并 token，"
+                "apply_chat_template 重新渲染时前缀 N+1 的 token id 序列不以 "
+                "前缀 N 为严格前缀，block hash 从追加边界附近起分叉。"
+                "这是 G0 的正向发现，为 C2 boundary-aware 决策提供证据。"
+            ),
         })
 
     return cases

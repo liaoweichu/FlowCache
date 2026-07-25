@@ -22,9 +22,20 @@ memory:
     - name: "concurrent_4x4k"
       concurrent: 4
       context_len: 4096
-    - name: "concurrent_8x8k"
+    # 主推 8x4k：总 token 数与 4x8k 相同（32K），但单次 prefill 只有 4K，
+    # attention 激活峰值更低，4090D 24GB 上更稳妥。
+    - name: "concurrent_8x4k"
       concurrent: 8
-      context_len: 8192
+      context_len: 4096
+    # 4x8k 备选：单次 prefill 8K，attention 激活更高，含 10% 安全水位可能临界。
+    # 如 GPU 显存充足（≥32GB）或使用 flash-attn 可启用：
+    # - name: "concurrent_4x8k"
+    #   concurrent: 4
+    #   context_len: 8192
+    # 8x8k 在 4090D 24GB 上必 OOM，仅作为上界探测保留注释：
+    # - name: "concurrent_8x8k"
+    #   concurrent: 8
+    #   context_len: 8192
 
 structure_cases:
   tau_bench_domains: ["retail", "airline"]

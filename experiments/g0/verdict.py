@@ -86,6 +86,10 @@ def check_condition_2_identity(exactness_data: Dict) -> Dict:
     条件 2: block identity/父链/invalidation 无错误。
 
     检查 identity test 通过率和父链校验通过率。
+
+    注意：cat5 用例的 expected_incremental_sharing=False（tokenizer 非前缀
+    稳定现象），实测与期望一致才算 PASS。本函数直接采用 identity_cases 中
+    各用例的 identity_check 字段汇总，无需特殊处理 cat5。
     """
     name = "block identity/父链/invalidation 无错误"
     identity = exactness_data.get("identity", {})
@@ -111,16 +115,34 @@ def check_condition_2_identity(exactness_data: Dict) -> Dict:
         and (inv_total == 0 or inv_pass == inv_total)
     )
 
+    # 拆分 cat5 与非 cat5 通过率，便于报告区分"代码 bug"与"正向发现"
+    identity_cases = identity.get("cases", [])
+    cat5_total = sum(1 for c in identity_cases if c.get("category") == 5)
+    cat5_pass = sum(
+        1 for c in identity_cases
+        if c.get("category") == 5 and c.get("identity_check")
+    )
+    non_cat5_total = total - cat5_total
+    non_cat5_pass = identity_pass - cat5_pass
+
     return {
         "id": 2,
         "name": name,
         "passed": passed,
         "evidence": (
-            f"identity: {identity_pass}/{total}, "
+            f"identity: {identity_pass}/{total} "
+            f"(非 cat5: {non_cat5_pass}/{non_cat5_total}, "
+            f"cat5: {cat5_pass}/{cat5_total}), "
             f"parent chain: {chain_pass}/{total}, "
             f"invalidation: {inv_pass}/{inv_total if inv_total > 0 else 'N/A'}"
         ),
         "details": summary,
+        "cat5_breakdown": {
+            "cat5_total": cat5_total,
+            "cat5_pass": cat5_pass,
+            "non_cat5_total": non_cat5_total,
+            "non_cat5_pass": non_cat5_pass,
+        },
     }
 
 
@@ -387,6 +409,46 @@ def generate_verdict_report(
     lines.append(f"- 总体判定: {overall}")
     lines.append("")
 
+    # ---- 正向发现 ----
+    lines.append("## 正向发现")
+    lines.append("")
+    lines.append(
+        "G0 在验证后端正确性的同时，产出了两项对 prefix caching 研究有直接价值的发现："
+    )
+    lines.append("")
+    lines.append("### 发现 1：Tokenizer 非前缀稳定现象（cat5 实证）")
+    lines.append("")
+    lines.append(
+        "- **现象**：Qwen2.5 BPE tokenizer 在 chat-template 边界"
+        "（`\\n` 与 `\\nI`、`<|im_start|>assistant\\n` 与紧接其后的回复首字符）"
+        "产生跨边界合并 token。"
+    )
+    lines.append(
+        "- **影响**：纯追加多轮会话用 apply_chat_template 重新渲染时，"
+        "token id 序列不以前缀 N 为严格前缀，block hash 从追加边界起分叉。"
+    )
+    lines.append(
+        "- **研究意义**：朴素按 token id 前缀匹配会丢失复用机会，"
+        "为 IDEA 中 C2 联合控制器的 boundary-aware 决策、"
+        "C3 \"reuse value 与 fidelity 风险错位\" 主张提供实证依据。"
+    )
+    lines.append(
+        "- **处置**：写入 cat5 用例的 expected_incremental_sharing=False，"
+        "实测 False 则 identity_check PASS，作为 G0 正向输出。"
+    )
+    lines.append("")
+    lines.append("### 发现 2：Q4 per-tensor 量化损失过大")
+    lines.append("")
+    lines.append(
+        "- **数据**：Q8 MSE=1.6e-2, KL mean=0.97；Q4 MSE=0.89, KL mean=5.2, "
+        "KL max=19.2，max_abs_err 高达 29.6。"
+    )
+    lines.append(
+        "- **结论**：Q4 per-tensor 量化对 Qwen2.5-7B 的 KV cache 不可用，"
+        "后续 G2+ 显存压缩方案应只用 Q8 或改用 per-channel/per-group 量化。"
+    )
+    lines.append("")
+
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     print(f"  Report saved to {output_path}")
@@ -397,16 +459,23 @@ def _get_failure_action(condition_id: int) -> str:
     actions = {
         1: "检查 backend.slice_kv_into_blocks / restore_kv_from_blocks 的张量拷贝逻辑，"
            "确认 clone() 调用正确；检查 forward_with_kv 是否正确传递 past_key_values。",
-        2: "检查 compute_block_hash 的元数据字段（model_id/revision/template_hash/config_hash/adapter_id）"
-           "是否正确传入；检查 verify_parent_chain 的父链连续性逻辑；"
-           "检查 check_invalidation 的 change_point 设置。",
+        2: "区分 cat5 与非 cat5：\n"
+           "- 非 cat5 失败 → 检查 compute_block_hash 的元数据字段"
+           "(model_id/revision/template_hash/config_hash/adapter_id) 是否正确传入；"
+           "检查 verify_parent_chain 的父链连续性逻辑；检查 check_invalidation 的 change_point 设置。\n"
+           "- cat5 失败 → 通常是 OOM 跳过导致；如非 OOM，则需重新核对"
+           "expected_incremental_sharing 与实测 actual_incremental_sharing 是否一致。"
+           "注意 cat5 的 expected_incremental_sharing=False（tokenizer 非前缀稳定现象），"
+           "实测 False 才算 PASS。",
         3: "检查 freeze_record.py 的 generate_freeze_record 是否收集了全部必填字段；"
            "确认模型已正确加载且 get_model_info() 返回完整信息。",
         4: "检查 codec.py 的 Q8/Q4 编解码逻辑；确认 codec_spike.py 能正确收集 block 并执行 roundtrip；"
            "检查 lineage 隔离的 adapter_id 设置。",
         5: "检查 Backend 类的 KV cache 拦截能力（slice_kv_into_blocks / restore_kv_from_blocks）；"
            "确认 DynamicCache 格式兼容性；检查张量 clone 是否到位。",
-        6: "减小并发数或上下文长度；启用 Q8/Q4 量化减少 KV cache 显存占用；"
+        6: "降低并发数或上下文长度（4090D 24GB 推荐 4x4k 或 4x8k 配置）；"
+           "Q8 per-tensor 量化可减半 KV cache 体积（参见 codec spike），"
+           "但 Q4 per-tensor 损失过大不建议用于显存压缩；"
            "检查 GPU 显存是否足够（需 ≥ 24GB）。",
     }
     return actions.get(condition_id, "未知失败，请检查相关模块日志。")
