@@ -36,7 +36,7 @@ def test_init_adapter_returns_tau_bench_when_available():
     recorder._config = {
         "workload": {
             "tau_bench": {
-                "user_model": "gpt-4o-mini",
+                "user_model": "deepseek-v4-flash",
                 "user_provider": "openai",
                 "user_temperature": 0.7,
             },

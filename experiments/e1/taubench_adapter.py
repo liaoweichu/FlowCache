@@ -12,7 +12,7 @@
 依赖：
   - tau-bench 源码安装：pip install -e git+https://github.com/sierra-research/tau-bench.git#egg=tau_bench
   - litellm（tau-bench 依赖）：用于调用 OpenAI/Anthropic 等 API
-  - OPENAI_API_KEY 环境变量（默认 user_model=gpt-4o-mini）
+  - DEEPSEEK_API_KEY 环境变量（默认 user_model=deepseek-v4-flash）
 
 seed 注入：
   tau-bench 的 LLMUserSimulationEnv 原生不支持 temperature/seed 参数。
@@ -30,9 +30,35 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 
+import litellm
+
 logger = logging.getLogger(__name__)
+
+# ----------------------------------------------------------------------
+# Thread-local seed injection（替代 monkey-patch，多线程安全）
+# ----------------------------------------------------------------------
+
+_seed_tls = threading.local()
+_ORIGINAL_LITELLM_COMPLETION = litellm.completion
+
+
+def _patched_completion(*args, **kwargs):
+    """Global litellm.completion patch that reads seed/temp from thread-local."""
+    seed = getattr(_seed_tls, "seed", None)
+    temp = getattr(_seed_tls, "temperature", None)
+    if seed is not None:
+        extra_body = kwargs.get("extra_body", {}) or {}
+        extra_body.setdefault("seed", seed)
+        kwargs["extra_body"] = extra_body
+    if temp is not None:
+        kwargs.setdefault("temperature", temp)
+    return _ORIGINAL_LITELLM_COMPLETION(*args, **kwargs)
+
+
+litellm.completion = _patched_completion
 
 
 # ----------------------------------------------------------------------
@@ -77,62 +103,45 @@ class SeededLLMUser:
 
     tau-bench 的 LLMUserSimulationEnv.__init__(model, provider) 没有
     temperature/seed 参数，内部 litellm.completion() 调用也未传 seed。
-    本类通过 monkey-patch litellm.completion 的方式注入 temperature 与 seed，
-    避免重写整个 LLMUserSimulationEnv。
+    本类通过全局 patched litellm.completion + thread-local 注入 temperature
+    与 seed，避免重写整个 LLMUserSimulationEnv，且多线程安全。
 
     使用方式：
-        user = SeededLLMUser(model="gpt-4o-mini", provider="openai",
+        user = SeededLLMUser(model="deepseek-v4-flash", provider="deepseek",
                              temperature=0.7, seed=42)
         user.reset(instruction)
         next_msg = user.step(agent_content)
 
-    seed 语义：与 τ-bench 原论文 pass^k 对齐。OpenAI API 的 seed 参数是
-    best-effort（不保证完全确定性），但在 temperature>0 时能产生不同变体，
-    满足 G1 的 8 seeds 需求。
+    seed 语义：与 τ-bench 原论文 pass^k 对齐。
     """
 
     def __init__(self, model: str, provider: str,
                  temperature: float = 0.7, seed: int = 0):
         from tau_bench.envs.user import LLMUserSimulationEnv
-        import litellm
 
         self._model = model
         self._provider = provider
         self._temperature = temperature
         self._seed = seed
-        self._original_completion = litellm.completion
 
         # 创建底层 user simulator
         self._user = LLMUserSimulationEnv(model=model, provider=provider)
 
-        # Monkey-patch litellm.completion 注入 temperature + seed
-        temperature_val = temperature
-        seed_val = seed
-        original = self._original_completion
-
-        def _patched_completion(*args, **kwargs):
-            # 仅对当前 model 的调用注入，避免影响其他 litellm 调用
-            if kwargs.get("model") == model:
-                kwargs.setdefault("temperature", temperature_val)
-                # OpenAI 透传 seed
-                extra_body = kwargs.get("extra_body", {}) or {}
-                extra_body.setdefault("seed", seed_val)
-                kwargs["extra_body"] = extra_body
-            return original(*args, **kwargs)
-
-        litellm.completion = _patched_completion
-        self._patched_litellm = litellm
-
     def reset(self, instruction: Optional[str] = None) -> str:
+        _seed_tls.seed = self._seed
+        _seed_tls.temperature = self._temperature
         return self._user.reset(instruction)
 
     def step(self, content: str) -> str:
+        _seed_tls.seed = self._seed
+        _seed_tls.temperature = self._temperature
         return self._user.step(content)
 
+    def get_total_cost(self) -> float:
+        return self._user.get_total_cost()
+
     def close(self):
-        """恢复 litellm.completion 原始实现。"""
-        if self._original_completion is not None:
-            self._patched_litellm.completion = self._original_completion
+        """清理 thread-local（不再需要恢复 monkey-patch）。"""
 
 
 # ----------------------------------------------------------------------
@@ -155,7 +164,7 @@ class TauBenchAdapter:
 
     用法：
         adapter = TauBenchAdapter(domain="retail", seed=42,
-                                  user_model="gpt-4o-mini")
+                                  user_model="deepseek-v4-flash")
         tasks = adapter.list_tasks()
         for i in range(len(tasks)):
             obs = adapter.reset(i)
@@ -170,7 +179,7 @@ class TauBenchAdapter:
         self,
         domain: str,
         seed: int = 0,
-        user_model: str = "gpt-4o-mini",
+        user_model: str = "deepseek-v4-flash",
         user_provider: str = "openai",
         user_temperature: float = 0.7,
         task_split: str = "test",
@@ -179,7 +188,7 @@ class TauBenchAdapter:
         Args:
             domain: "retail" 或 "airline"
             seed: user simulator 的 seed（与 τ-bench pass^k 对齐）
-            user_model: user simulator 用的 LLM（默认 gpt-4o-mini，需 OPENAI_API_KEY）
+            user_model: user simulator 用的 LLM（默认 deepseek-v4-flash，需 DEEPSEEK_API_KEY）
             user_provider: litellm provider，如 "openai"
             user_temperature: user simulator 采样温度（>0 才能产生 seed 变体）
             task_split: "test"（165 任务）/ "train" / "dev"
@@ -227,11 +236,10 @@ class TauBenchAdapter:
             task_split=task_split,
         )
         # 替换 env 内部的 user simulator 为 seeded 版本
-        # tau_bench.envs.base.Env 有 self.user_simulator 属性
-        if hasattr(self._env, "user_simulator"):
-            self._env.user_simulator = self._seeded_user._user
-        elif hasattr(self._env, "user_sim"):
-            self._env.user_sim = self._seeded_user._user
+        # tau_bench.envs.base.Env.__init__ 中属性名为 self.user（见 base.py L73）
+        if hasattr(self._env, "user"):
+            self._env.user = self._seeded_user
+            logger.debug("已将 env.user 替换为 SeededLLMUser（seed=%d）", seed)
         else:
             logger.warning(
                 "无法替换 env 的 user simulator，seed 注入可能失效。"
@@ -247,6 +255,17 @@ class TauBenchAdapter:
     # ------------------------------------------------------------------
     # Task 加载
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def task_count(domain: str, task_split: str = "test") -> int:
+        """返回指定 domain 的任务数（硬编码，零 API/磁盘访问）。
+
+        tau-bench v0.1.0 标准 test split:
+          retail: 115 tasks, airline: 50 tasks → 165 total.
+        版本升级时需更新此常数。
+        """
+        _counts = {"retail": 115, "airline": 50}
+        return _counts.get(domain, 0)
 
     def list_tasks(self) -> List[Any]:
         """返回 165 任务全量（test split: 115 retail + 50 airline）。"""
@@ -380,7 +399,7 @@ class TauBenchAdapter:
 # ----------------------------------------------------------------------
 
 def load_all_tau_bench_tasks(
-    user_model: str = "gpt-4o-mini",
+    user_model: str = "deepseek-v4-flash",
     user_provider: str = "openai",
     user_temperature: float = 0.7,
     seed: int = 0,

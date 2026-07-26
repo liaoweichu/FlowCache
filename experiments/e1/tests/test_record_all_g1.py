@@ -48,7 +48,7 @@ def _make_recorder(tmp_path, config=None):
             "workload": {
                 "datasets": ["tau-bench"],
                 "seeds": [42, 123],
-                "tau_bench": {"user_model": "gpt-4o-mini"},
+                "tau_bench": {"user_model": "deepseek-v4-flash"},
             },
             "output": {"resume": True},
         }

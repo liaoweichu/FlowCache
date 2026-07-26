@@ -26,6 +26,7 @@ import logging
 import os
 import re
 import sys
+import threading
 import time
 import yaml
 from datetime import datetime, timezone
@@ -325,6 +326,11 @@ class TrajectoryRecorder:
         # Global block index: block_hash -> {token_start, token_end, parent_hash, workflow_id, ...}
         self._global_block_index: Dict[str, Dict] = {}
 
+        # Thread-safety: GPU lock serializes model.generate() across concurrent episodes
+        self._gpu_lock = threading.Lock()
+        # Thread-safety: block index lock protects self._global_block_index
+        self._block_index_lock = threading.Lock()
+
         self._output_dir = Path(
             self._config.get("output", {}).get("trace_dir", "traces/bf16")
         )
@@ -398,7 +404,7 @@ class TrajectoryRecorder:
             return TauBenchAdapter(
                 domain=domain,
                 seed=seed,
-                user_model=tb_cfg.get("user_model", "gpt-4o-mini"),
+                user_model=tb_cfg.get("user_model", "deepseek-v4-flash"),
                 user_provider=tb_cfg.get("user_provider", "openai"),
                 user_temperature=tb_cfg.get("user_temperature", 0.7),
             )
@@ -804,36 +810,41 @@ class TrajectoryRecorder:
         inputs = self._tokenizer(prompt_text, return_tensors="pt").to(self._device)
         num_prefill_tokens = inputs.input_ids.shape[1]
 
-        # --- Cold prefill measurement (KV cache freed after) ---
-        prefill_ms = self._measure_prefill(inputs)
+        # --- Cold prefill + generate (GPU lock serializes across episodes) ---
+        with self._gpu_lock:
+            prefill_ms = self._measure_prefill(inputs)
 
-        # --- Generate (prefill + decode) ---
-        gen_kwargs = dict(
-            max_new_tokens=MAX_NEW_TOKENS,
-            pad_token_id=self._tokenizer.eos_token_id,
-            eos_token_id=self._tokenizer.eos_token_id,
-        )
-        if seed is not None:
-            torch.manual_seed(int(seed))
-            gen_kwargs.update(do_sample=True, temperature=0.7, top_p=0.9)
-        else:
-            gen_kwargs.update(do_sample=False, temperature=1.0)
+            gen_kwargs = dict(
+                max_new_tokens=MAX_NEW_TOKENS,
+                pad_token_id=self._tokenizer.eos_token_id,
+                eos_token_id=self._tokenizer.eos_token_id,
+            )
+            if seed is not None:
+                torch.manual_seed(int(seed))
+                gen_kwargs.update(do_sample=True, temperature=0.7, top_p=0.9)
+            else:
+                gen_kwargs.update(do_sample=False, temperature=1.0)
 
-        t0 = time.perf_counter()
-        outputs = self._model.generate(**inputs, **gen_kwargs)
-        t1 = time.perf_counter()
-        total_ms = (t1 - t0) * 1000.0
+            t0 = time.perf_counter()
+            outputs = self._model.generate(**inputs, **gen_kwargs)
+            t1 = time.perf_counter()
+            total_ms = (t1 - t0) * 1000.0
 
-        generated_ids = outputs[0][num_prefill_tokens:]
+            decode_ms = max(0.0, total_ms - prefill_ms)
+
+            generated_ids = outputs[0][num_prefill_tokens:]
+
+            # Free GPU tensors while holding the lock
+            del outputs
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
         generated_text = self._tokenizer.decode(generated_ids, skip_special_tokens=True)
 
-        # Free GPU tensors before returning (4090D 24GB cannot afford
-        # accumulation across 30-turn episodes).
-        del outputs, inputs
+        del inputs
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        decode_ms = max(0.0, total_ms - prefill_ms)
         return generated_text, num_prefill_tokens, prefill_ms, decode_ms
 
     @torch.no_grad()
@@ -1189,7 +1200,8 @@ class TrajectoryRecorder:
         sys_tokens, sys_blocks = _tokenize(full_system, parent_hash)
         if sys_blocks:
             parent_hash = sys_blocks[-1]["block_hash"]
-        _register_blocks(self._global_block_index, sys_blocks, task_id, global_offset)
+        with self._block_index_lock:
+            _register_blocks(self._global_block_index, sys_blocks, task_id, global_offset)
         global_offset += len(sys_tokens)
         steps.append({
             "step_id": step_id,
@@ -1212,7 +1224,8 @@ class TrajectoryRecorder:
         usr_tokens, usr_blocks = _tokenize(user_instruction, parent_hash)
         if usr_blocks:
             parent_hash = usr_blocks[-1]["block_hash"]
-        _register_blocks(self._global_block_index, usr_blocks, task_id, global_offset)
+        with self._block_index_lock:
+            _register_blocks(self._global_block_index, usr_blocks, task_id, global_offset)
         global_offset += len(usr_tokens)
         steps.append({
             "step_id": step_id,
@@ -1245,7 +1258,8 @@ class TrajectoryRecorder:
             asst_tokens, asst_blocks = _tokenize(gen_text, parent_hash)
             if asst_blocks:
                 parent_hash = asst_blocks[-1]["block_hash"]
-            _register_blocks(self._global_block_index, asst_blocks, task_id, global_offset)
+            with self._block_index_lock:
+                _register_blocks(self._global_block_index, asst_blocks, task_id, global_offset)
             global_offset += len(asst_tokens)
             conversation.append({"role": "assistant", "content": gen_text})
 
@@ -1276,7 +1290,8 @@ class TrajectoryRecorder:
                 tool_tokens, tool_blocks = _tokenize(obs_text, parent_hash)
                 if tool_blocks:
                     parent_hash = tool_blocks[-1]["block_hash"]
-                _register_blocks(self._global_block_index, tool_blocks, task_id, global_offset)
+                with self._block_index_lock:
+                    _register_blocks(self._global_block_index, tool_blocks, task_id, global_offset)
                 global_offset += len(tool_tokens)
                 conversation.append({"role": "tool", "content": obs_text})
                 steps.append({
@@ -1308,7 +1323,8 @@ class TrajectoryRecorder:
                     u2_tokens, u2_blocks = _tokenize(u_text, parent_hash)
                     if u2_blocks:
                         parent_hash = u2_blocks[-1]["block_hash"]
-                    _register_blocks(self._global_block_index, u2_blocks, task_id, global_offset)
+                    with self._block_index_lock:
+                        _register_blocks(self._global_block_index, u2_blocks, task_id, global_offset)
                     global_offset += len(u2_tokens)
                     conversation.append({"role": "user", "content": u_text})
                     steps.append({
@@ -1709,25 +1725,40 @@ class TrajectoryRecorder:
     def _record_tau_bench_g1(
         self, seeds: List[int], resume: bool, max_episodes: Optional[int]
     ) -> int:
-        """Record all tau-bench episodes across (retail, airline) × seeds."""
+        """Record all tau-bench episodes across (retail, airline) × seeds.
+
+        Pipelining: runs CONCURRENT_EPISODES in parallel threads.
+        While one thread waits for DeepSeek API (step_respond), the other
+        thread uses GPU (model.generate), achieving ~2-3x speedup.
+        """
+        CONCURRENT_EPISODES = 3
         written = 0
+        _write_lock = threading.Lock()
+
         for domain in ("retail", "airline"):
+            if max_episodes is not None and written >= max_episodes:
+                break
+            # Get task count without creating adapter (zero API calls)
+            from taubench_adapter import TauBenchAdapter
+            try:
+                num_tasks = TauBenchAdapter.task_count(domain)
+            except Exception as exc:
+                self._oom_log.append({
+                    "dataset": "tau-bench", "domain": domain,
+                    "error": f"task_count: {exc}",
+                })
+                continue
+
             for seed in seeds:
-                try:
-                    adapter = self._init_adapter(
-                        "tau-bench", seed=seed, domain=domain
-                    )
-                except Exception as exc:
-                    self._oom_log.append({
-                        "dataset": "tau-bench", "domain": domain,
-                        "seed": seed, "error": f"init: {exc}",
-                    })
-                    continue
-                try:
-                    tasks = adapter.list_tasks()
-                    count_this_seed = 0
-                    for task_idx, _task in enumerate(tasks):
-                        if max_episodes is not None and count_this_seed >= max_episodes:
+                if max_episodes is not None and written >= max_episodes:
+                    break
+
+                task_idx = 0
+                while task_idx < num_tasks:
+                    # Build batch of up to CONCURRENT_EPISODES
+                    batch_args = []
+                    while len(batch_args) < CONCURRENT_EPISODES and task_idx < num_tasks:
+                        if max_episodes is not None and (written + len(batch_args)) >= max_episodes:
                             break
                         task_id = f"{domain}-{task_idx}"
                         out_path = (
@@ -1736,38 +1767,79 @@ class TrajectoryRecorder:
                         )
                         if resume and out_path.exists():
                             self._skip_count += 1
+                            task_idx += 1
                             continue
                         out_path.parent.mkdir(parents=True, exist_ok=True)
+                        # Each thread gets its OWN adapter (thread-safe)
+                        try:
+                            ep_adapter = self._init_adapter("tau-bench", seed=seed, domain=domain)
+                        except Exception as exc:
+                            self._oom_log.append({
+                                "dataset": "tau-bench", "domain": domain,
+                                "seed": seed, "task_id": task_id, "error": f"init: {exc}",
+                            })
+                            task_idx += 1
+                            continue
+                        batch_args.append({
+                            "adapter": ep_adapter,
+                            "task_idx": task_idx,
+                            "task_id": task_id,
+                            "seed": seed,
+                            "domain": domain,
+                            "out_path": out_path,
+                        })
+                        task_idx += 1
+
+                    if not batch_args:
+                        break
+
+                    # Launch batch in parallel threads
+                    batch_results = [0] * len(batch_args)
+
+                    def _run_one(idx: int, args: dict):
                         try:
                             trace = self._run_episode_tau_bench(
-                                adapter, task_idx, task_id, seed, domain
+                                args["adapter"], args["task_idx"],
+                                args["task_id"], args["seed"], args["domain"]
                             )
-                            with open(out_path, "w", encoding="utf-8") as f:
-                                json.dump(trace, f, indent=2,
-                                          ensure_ascii=False, default=str)
-                            written += 1
-                            count_this_seed += 1
-                        except torch.cuda.OutOfMemoryError as exc:
+                            with open(args["out_path"], "w", encoding="utf-8") as f:
+                                json.dump(trace, f, indent=2, ensure_ascii=False, default=str)
+                            with _write_lock:
+                                batch_results[idx] = 1
+                        except torch.cuda.OutOfMemoryError:
                             torch.cuda.empty_cache()
+                            logger.error("OOM: %s seed=%d", args["task_id"], args["seed"])
                             self._oom_log.append({
-                                "dataset": "tau-bench", "task_id": task_id,
-                                "seed": seed, "error": f"OOM: {exc}",
+                                "dataset": "tau-bench", "task_id": args["task_id"],
+                                "seed": args["seed"], "error": "OOM",
                             })
                         except Exception as exc:
                             logger.error(
                                 "Episode failed: %s seed=%d task=%s: %s",
-                                domain, seed, task_id, exc,
+                                args["domain"], args["seed"], args["task_id"], exc,
                             )
                         finally:
-                            # Clear GPU cache between episodes to avoid
-                            # fragmentation buildup over 7720 episodes.
+                            try:
+                                args["adapter"].close()
+                            except Exception:
+                                pass
                             if torch.cuda.is_available():
                                 torch.cuda.empty_cache()
-                finally:
-                    try:
-                        adapter.close()
-                    except Exception:
-                        pass
+
+                    threads = []
+                    for i, args in enumerate(batch_args):
+                        t = threading.Thread(target=_run_one, args=(i, args), daemon=True)
+                        threads.append(t)
+                        t.start()
+
+                    for t in threads:
+                        t.join()
+
+                    written += sum(batch_results)
+
+                    if max_episodes is not None and written >= max_episodes:
+                        break
+
         return written
 
 
