@@ -398,7 +398,6 @@ def run_grid(config_path: Optional[str] = None,
 
     # Peak working set = number of distinct block_hashes across trajectories.
     peak_ws = co.compute_peak_working_set(trajectories)
-    future_accesses = co.compute_future_accesses(full_trace)
     block_size = int(cfg.get("verdict", {}).get("block_size",
                                                 _DEFAULT_BLOCK_SIZE))
 
@@ -431,10 +430,12 @@ def run_grid(config_path: Optional[str] = None,
         # Capacity = int(budget * peak_ws), clamped to ≥ 1.
         capacity = max(1, int(budget * peak_ws))
 
-        # Perturb trace order by replay seed.
+        # Perturb trace order by replay seed, then re-compute future_accesses
+        # for the perturbed trace. Both are O(n) and return fresh objects per
+        # grid combo, avoiding any cross-baseline state sharing (caching
+        # future_accesses across baselines caused intermittent
+        # ACCESS_VIOLATION crashes on Windows due to shared mutable dict).
         perturbed = perturb_trace(full_trace, seed)
-        # Re-compute future_accesses for the perturbed trace
-        # (Belady / Oracle-Cost / PBKV / ThunderAgent rely on it).
         perturbed_future = co.compute_future_accesses(perturbed)
 
         metrics = _replay_baseline(
