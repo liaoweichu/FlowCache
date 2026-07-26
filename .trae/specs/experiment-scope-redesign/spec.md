@@ -50,7 +50,7 @@ experiment-designs.md v0.2 包含 6 个 Gate（G0–G5）+ 7 个正式实验（E
 | **Ch.2 R–D 错位 Pilot** | 80 workflow 子集，Spearman ρ + 四象限，GO/NO-GO 判定路线 A | C3 存在性 | τ-bench 80 子集 | G2-Pilot（保持现有设计） |
 | **Ch.3 估计器有效性** | reuse 侧 2 变体（heuristic vs survival）；fidelity 侧 2 变体（uniform vs norm/range proxy）；GNN 删除 | C2 的两半 | reuse 复用 Ch.1 trace；fidelity 用 LongBench 1000 + GSM8K 100 | E2 + E3 合并 |
 | **Ch.4 端到端主结果** | 10 对照 × 6 cell；核心 4 变体 + 2 个设计消融（无 parent-closure、无 CPU tier）同表；开销透明账并入表列 | C2+C3 核心 | τ-bench 495 + BFCL 800 | E4 + E5 核心合并 |
-| **Ch.5 鲁棒性与失败分析** | 3 轴：family-out、到达扰动、branch 噪声；失败模式从 Ch.4 负结果 cell 提取 | C3 系统性 | STB 500（family-out）+ SWE 200 + Toolathlon 200（压力面） | E6 + E7 合并 |
+| **Ch.5 鲁棒性与失败分析** | 2 轴：family-out + 到达扰动；branch 噪声用 τ-bench 内部 replay 扰动覆盖；失败模式从 Ch.4 负结果 cell 提取 | C3 系统性 | STB 500（family-out）+ BurstGPT 窗口（到达扰动） | E6 + E7 合并 |
 
 ### 3.1 保留的 2 个小判定
 
@@ -115,9 +115,9 @@ v0.2 E5 的其余消融轴（无 partial DAG、无成本校准、静态阈值 vs
 
 ---
 
-## 5. 数据集体系：12+ → 7 核心 + 2 辅助
+## 5. 数据集体系：12+ → 5 核心 + 2 辅助
 
-**7 个核心数据集**（计入样本总量）：
+**5 个核心数据集**（计入样本总量）：
 
 | 角色 | 数据集 | 样本 | 用途 |
 |---|---|---|---|
@@ -126,8 +126,6 @@ v0.2 E5 的其余消融轴（无 partial DAG、无成本校准、静态阈值 vs
 | fidelity 质量面 | LongBench | 1,000 | Ch.3 |
 | fidelity 质量面 | GSM8K | 100 | Ch.3（accuracy sanity） |
 | family-out（仅 Ch.5） | StableToolBench | 500 | Ch.5 |
-| 压力面（仅 Ch.5） | SWE 轨迹 | 200 | Ch.5 |
-| 压力面（仅 Ch.5） | Toolathlon | 200 | Ch.5 |
 
 **τ-bench seeds 数依据（2026-07-25 调研后冻结）**：τ-bench 原论文（arXiv 2406.12045, ICLR 2025）主表用 165 任务全量，pass^k 指标用 k∈{1,2,4,8}。3 seeds 只能算 pass^3，统计上不足以区分 consistency；8 seeds 与原论文 pass^8 完全对齐，最稳健。增量成本：165 × 5 = 825 episodes（相比 3 seeds 多 660 episodes），按 4090D ~30s/episode 估算约 5.5 GPU 小时。
 
@@ -140,7 +138,7 @@ v0.2 E5 的其余消融轴（无 partial DAG、无成本校准、静态阈值 vs
 
 **删除**：CATraces（可得性 TBD）、Mooncake（窗口 TBD）、MuSiQue、2WikiMultihopQA（多跳 QA 质量 sanity 由 LongBench 的 QA 子任务覆盖）。
 
-**核心样本总量**：~8,800 → **~4,120**（1320+800+1000+100+500+200+200）。相比 v0.2 降幅 53%。
+**核心样本总量**：~8,800 → **~3,720**（1320+800+1000+100+500）。相比 v0.2 降幅 58%。
 
 ---
 
@@ -189,9 +187,9 @@ GNN 删除不是"gate 失败"，而是设计选择。论文可写为发现：
 
 ### 7.3 鲁棒性篇幅变薄的风险
 
-Ch.5 仅 3 轴（family-out、到达扰动、branch 噪声），相比 v0.2 E6 的 8 轴大幅缩减。审稿人可能要求补实验。
+Ch.5 仅 2 轴（family-out、到达扰动），相比 v0.2 E6 的 8 轴大幅缩减。审稿人可能要求补实验。
 
-**应对**：rebuttal 时用预留的 SWE/Toolathlon 余量（各 200 已录制，可扩展到 500）补 CPU 带宽竞争、predictor calibration drift 等轴。接受此风险。
+**应对**：rebuttal 时可扩展 STB 到 500 或补 SWE 200 episodes 补 CPU 带宽竞争、predictor calibration drift 等轴；branch 噪声用 τ-bench 内部 replay 扰动覆盖。接受此风险。
 
 ---
 
@@ -200,8 +198,8 @@ Ch.5 仅 3 轴（family-out、到达扰动、branch 噪声），相比 v0.2 E6 �
 | 维度 | v0.2 现状 | v0.3 精简后 | 降幅 |
 |---|---|---|---|
 | 章节 | 6 Gate + 7 E = 13 章 | 5 章 + 2 小判定 | 61% |
-| 核心数据集 | 12+ | 7 | 42% |
-| workflow 样本 | ~8,800 | ~4,120 | 53% |
+| 核心数据集 | 12+ | 5 | 58% |
+| workflow 样本 | ~8,800 | ~3,720 | 58% |
 | E4 replay 运行 | ~702 | ~100 | 86% |
 | 独立 Gate 运行 | 6 次 | 0（全部复用） | 100% |
 | Tier-1 轨迹录制 | 33–40 GPU 小时 | ~26 GPU 小时 | 35% |
@@ -212,7 +210,7 @@ Ch.5 仅 3 轴（family-out、到达扰动、branch 噪声），相比 v0.2 E6 �
 
 | IDEA 要素 | v0.3 处理 |
 |---|---|
-| §6.1 "14 周版本只保留一个主模型和两个主工具 workload" | 主表严格 τ-bench + BFCL；STB/SWE/Toolathlon 仅 Ch.5 |
+| §6.1 "14 周版本只保留一个主模型和两个主工具 workload" | 主表严格 τ-bench + BFCL；STB 仅 Ch.5 family-out |
 | §7 G0–G5 Gate | G0 保留；G1/G2/G4 复用正式实验数据判定；G3 用 Ch.4 无损行；G5 删除 |
 | §8 E1–E7 | 合并为 5 章；E2+E3→Ch.3；E4+E5 核心→Ch.4；E6+E7→Ch.5 |
 | §9 三条贡献 | C1←Ch.1；C2←Ch.3+Ch.4；C3←Ch.2+Ch.4+Ch.5 |

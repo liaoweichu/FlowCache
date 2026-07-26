@@ -53,6 +53,7 @@
 | Closest baseline | **KVFlow 和 PBKV 都做 G1.4.1 检查清单** | 选可忠实运行的那个；若都不可则标 *-inspired |
 | block identity | **统一用 G0 版 8 元组** | 废弃 e1 简化版；现有 e1 traces 作废重录 |
 | seeds 语义 | τ-bench = user simulator seed；BFCL = model decode seed | 报告需明确披露此差异 |
+| Ch.5 压力数据集精简 | **3 → 1**（保留 STB 500，删 SWE 200 + Toolathlon 200） | 节省 ~4.5 GPU 小时；200 样本单独成章证据力弱；与 C1–C3 主线关联弱（见 trim-dataset-portfolio spec） |
 
 ### 2.1 算力预算上调
 

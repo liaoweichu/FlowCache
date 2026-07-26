@@ -1617,38 +1617,34 @@ class TrajectoryRecorder:
     # G1 multi-seed × multi-dataset recording loop
     # ------------------------------------------------------------------
     #
-    # Outer loop: dataset → seed → task/subset → episode.
-    # Writes one JSON per episode under {output_dir}/{tau_bench|bfcl_v3}/.
+    # Outer loop: seed → task → episode (single-dataset: tau-bench).
+    # Writes one JSON per episode under {output_dir}/tau_bench/.
     # Skips existing files when resume=True (checkpoint/resume for the
-    # 50-GPU-hour 7720-episode run). Catches OOM and continues.
+    # ~7-GPU-hour 1320-episode run on 4090D). Catches OOM and continues.
 
     def _record_all_g1(
         self,
-        dataset_filter: str = "all",
+        dataset_filter: str = "tau-bench",
         seed_filter: Optional[int] = None,
-        bfcl_subset_filter: Optional[str] = None,
         max_episodes: Optional[int] = None,
         resume: bool = True,
     ) -> int:
-        """Multi-seed × multi-dataset recording loop with checkpoint/resume.
+        """Single-dataset (tau-bench) recording loop with checkpoint/resume.
 
-        Iterates ``dataset → seed → task/subset → episode`` and writes
+        Iterates ``seed → task → episode`` for tau-bench and writes
         one JSON per episode. Skips existing files when ``resume=True``.
         Catches ``torch.cuda.OutOfMemoryError`` per-episode and continues.
 
         File naming:
-            tau-bench: ``{output_dir}/tau_bench/{domain}-{task_idx}_seed{seed}.json``
-            BFCL v3:   ``{output_dir}/bfcl_v3/{subset}_{entry_id}_seed{seed}.json``
+            ``{output_dir}/tau_bench/{domain}-{task_idx}_seed{seed}.json``
 
         Args:
-            dataset_filter: "all" (default) / "tau-bench" / "bfcl_v3".
-                Restricts the outer dataset loop.
+            dataset_filter: Dataset to record (single-dataset: "tau-bench"
+                only; default "tau-bench").
             seed_filter: If set, restricts to a single seed (smoke tests).
                 If None, iterates all seeds from config.
-            bfcl_subset_filter: If set, restricts BFCL to a single subset.
-                If None, iterates all subsets from config.
-            max_episodes: Cap on episodes per (dataset, seed). Useful
-                for smoke tests. None = no cap.
+            max_episodes: Cap on episodes per seed. Useful for smoke tests.
+                None = no cap.
             resume: If True (default), skip episodes whose output file
                 already exists. If False, re-record over existing files.
 
@@ -1672,15 +1668,6 @@ class TrajectoryRecorder:
         else:
             seeds = list(all_seeds)
 
-        # Resolve BFCL subsets (only used if bfcl_v3 in datasets)
-        all_bfcl_subsets = cfg_workload.get("bfcl_v3", {}).get(
-            "subsets", ["multi_turn_base"]
-        )
-        if bfcl_subset_filter is not None:
-            bfcl_subsets = [s for s in all_bfcl_subsets if s == bfcl_subset_filter]
-        else:
-            bfcl_subsets = list(all_bfcl_subsets)
-
         self._skip_count = 0
         self._oom_log: List[Dict] = []
         written = 0
@@ -1688,8 +1675,6 @@ class TrajectoryRecorder:
         for dataset in datasets:
             if dataset == "tau-bench":
                 written += self._record_tau_bench_g1(seeds, resume, max_episodes)
-            elif dataset == "bfcl_v3":
-                written += self._record_bfcl_g1(seeds, bfcl_subsets, resume, max_episodes)
             else:
                 logger.warning("Unknown dataset %s, skipping", dataset)
 
@@ -1701,7 +1686,6 @@ class TrajectoryRecorder:
             "total_episodes_written": written,
             "dataset_filter": dataset_filter,
             "seed_filter": seed_filter,
-            "bfcl_subset_filter": bfcl_subset_filter,
             "max_episodes": max_episodes,
             "resume": resume,
         }
@@ -1769,82 +1753,6 @@ class TrajectoryRecorder:
                             logger.error(
                                 "Episode failed: %s seed=%d task=%s: %s",
                                 domain, seed, task_id, exc,
-                            )
-                        finally:
-                            # Clear GPU cache between episodes to avoid
-                            # fragmentation buildup over 7720 episodes.
-                            if torch.cuda.is_available():
-                                torch.cuda.empty_cache()
-                finally:
-                    try:
-                        adapter.close()
-                    except Exception:
-                        pass
-        return written
-
-    def _record_bfcl_g1(
-        self,
-        seeds: List[int],
-        subsets: List[str],
-        resume: bool,
-        max_episodes: Optional[int],
-    ) -> int:
-        """Record all BFCL v3 episodes across subsets × seeds."""
-        written = 0
-        for subset in subsets:
-            for seed in seeds:
-                try:
-                    adapter = self._init_adapter(
-                        "bfcl_v3", seed=seed, subset=subset
-                    )
-                except Exception as exc:
-                    self._oom_log.append({
-                        "dataset": "bfcl_v3", "subset": subset,
-                        "seed": seed, "error": f"init: {exc}",
-                    })
-                    continue
-                try:
-                    entries = adapter.load_entries()
-                    count_this_seed = 0
-                    for entry, gt in entries:
-                        if max_episodes is not None and count_this_seed >= max_episodes:
-                            break
-                        entry_id = entry.get("id", "unknown")
-                        out_path = (
-                            self._output_dir / "bfcl_v3"
-                            / f"{subset}_{entry_id}_seed{seed}.json"
-                        )
-                        if resume and out_path.exists():
-                            self._skip_count += 1
-                            continue
-                        out_path.parent.mkdir(parents=True, exist_ok=True)
-                        try:
-                            episode = adapter.init_episode(entry, gt, seed=seed)
-                            try:
-                                trace = self._run_episode_bfcl(adapter, episode, seed)
-                                with open(out_path, "w", encoding="utf-8") as f:
-                                    json.dump(trace, f, indent=2,
-                                              ensure_ascii=False, default=str)
-                                written += 1
-                                count_this_seed += 1
-                            finally:
-                                # Always clean up BFCL backend instances
-                                # (they live in module-level globals() and
-                                # leak across episodes if not removed).
-                                try:
-                                    adapter.close_episode(episode)
-                                except Exception:
-                                    pass
-                        except torch.cuda.OutOfMemoryError as exc:
-                            torch.cuda.empty_cache()
-                            self._oom_log.append({
-                                "dataset": "bfcl_v3", "entry_id": entry_id,
-                                "seed": seed, "error": f"OOM: {exc}",
-                            })
-                        except Exception as exc:
-                            logger.error(
-                                "BFCL episode failed: %s seed=%d entry=%s: %s",
-                                subset, seed, entry_id, exc,
                             )
                         finally:
                             # Clear GPU cache between episodes to avoid
@@ -1928,7 +1836,7 @@ def _build_arg_parser():
 
     Returns:
         argparse.ArgumentParser with G1 flags:
-        --config / --dataset / --bfcl-subset / --seed / --max-episodes /
+        --config / --dataset / --seed / --max-episodes /
         --resume / --no-resume / --output-dir / --subset (legacy).
     """
     import argparse
@@ -1941,15 +1849,9 @@ def _build_arg_parser():
         help="Path to config.yaml",
     )
     parser.add_argument(
-        "--dataset", default="all",
-        choices=["all", "tau-bench", "bfcl_v3"],
-        help="Which dataset to record. 'all' = both (default: all)",
-    )
-    parser.add_argument(
-        "--bfcl-subset", default=None,
-        choices=["multi_turn_base", "multi_turn_miss_func",
-                 "multi_turn_miss_param", "multi_turn_long_context"],
-        help="BFCL subset (only valid with --dataset bfcl_v3). Default: all 4 subsets.",
+        "--dataset", default="tau-bench",
+        choices=["tau-bench"],
+        help="Dataset to record (single-dataset: tau-bench only)",
     )
     parser.add_argument(
         "--seed", type=int, default=None,
@@ -1999,7 +1901,6 @@ def main():
         written = recorder._record_all_g1(
             dataset_filter=args.dataset,
             seed_filter=args.seed,
-            bfcl_subset_filter=args.bfcl_subset,
             max_episodes=args.max_episodes,
             resume=args.resume,
         )

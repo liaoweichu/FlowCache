@@ -5,9 +5,9 @@
 # Gate: G1 (Opportunity)
 # Week: W3-W7
 #
-# G1 v0.3: Multi-dataset (tau-bench + BFCL v3) × 8 seeds = 7720 episodes.
+# G1 v0.4: Single dataset (tau-bench) × 8 seeds = 1320 episodes (165 tasks × 8).
 # Block identity is unified to G0 8-tuple version. Resume flag enables
-# checkpoint/resume for long-running recording (50 GPU hours).
+# checkpoint/resume for long-running recording (~7 GPU hours on 4090D).
 
 # --- Model ---
 model:
@@ -18,7 +18,7 @@ model:
 
 # --- Workload ---
 workload:
-  datasets: ["tau-bench", "bfcl_v3"]
+  datasets: ["tau-bench"]
   seeds: [42, 123, 456, 789, 101112, 131415, 161718, 192021]  # 8 seeds
   tau_bench:
     tasks: 165  # full task set (115 retail + 50 airline)
@@ -26,14 +26,6 @@ workload:
     user_model: "deepseek/deepseek-v4-flash"
     user_provider: "deepseek"
     user_temperature: 0.7
-  bfcl_v3:
-    subsets:
-      - "multi_turn_base"
-      - "multi_turn_miss_func"
-      - "multi_turn_miss_param"
-      - "multi_turn_long_context"
-    per_subset: 200  # 200 episodes per subset, total 800
-    decode_mode: "sampling"  # do_sample=True, temperature=0.7
   concurrency: 4  # recording is single-GPU serial; used at replay time
 
 # --- Cache ---
@@ -53,7 +45,7 @@ replay:
 # --- Output ---
 output:
   trace_dir: "traces/bf16"
-  trace_subdirs: ["tau_bench", "bfcl_v3"]
+  trace_subdirs: ["tau_bench"]
   report_dir: "outputs"
   figure_dir: "figures"
   report_format: ["json", "markdown"]

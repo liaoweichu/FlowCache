@@ -1,0 +1,10 @@
+- [x] survey-2025-2026-kv-cache-agent-papers.md QKVShare 条目 Venue 字段标注"arXiv 预印本，未被任何会议/期刊正式接收"
+- [x] survey-2025-2026-kv-cache-agent-papers.md QKVShare 详细信息含 GSM8K 用法（150 problems × 2-5 hops, inter-agent handoff）
+- [x] survey-2025-2026-kv-cache-agent-papers.md QKVShare 条目含"与 FlowCache 场景差异"段落（inter-agent vs intra-agent）
+- [x] survey-2025-2026-kv-cache-agent-papers.md QKVShare 条目含作者自承认局限（拓扑感知控制器未显优势）
+- [x] experiment-designs.md §0.4 含"为何不能只用 GSM8K"论证段落
+- [x] 论证段落引用 QKVShare inter-agent handoff vs FlowCache intra-agent multi-turn 的根本差异
+- [x] 论证段落含 C1/C2/C3 三条主张与 GSM8K 任务结构的匹配度分析表
+- [x] experiment-designs.md §0.4 数据集组合表 GSM8K 行：100 samples, accuracy sanity (Ch.3)
+- [x] trim-dataset-portfolio/spec.md 中 GSM8K 行：100 samples
+- [x] experiment-scope-redesign/spec.md §5 中 GSM8K 行：100 samples

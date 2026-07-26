@@ -480,38 +480,23 @@ CPU offload 结果同时依赖主机。正式实验前必须冻结并报告 CPU 
 
 v0.3 将 workload 体系按实验章节分层，主表严格限定两个工具 workload，其余按角色分配到 Ch.3 质量面、Ch.5 压力面或辅助附注，避免主表规模失控。
 
-**主表 workload（Ch.1/2/3/4 共用，严格两个）**：
+**主表 workload（Ch.1/2/3/4 共用，单数据集）**：
 
 | Workload | 样本 | 角色 | 可证明内容 | 不能外推的内容 |
 |---|---|---|---|---|
-| τ-bench | 495 | 主表 workload 1（原生多轮工具 Agent） | 工具调用、状态变化、失败和任务成功率；workflow-family 1 | 超大规模生产流量 |
-| BFCL v3 multi-turn | 800 | 主表 workload 2（第二个工具 family） | workflow-family 泛化；工具等待/重试仅在 trace 实际包含时评估 | 通用线上分布 |
+| τ-bench | 1,320 | 主表 workload（原生多轮工具 Agent，165 tasks × 8 seeds） | 工具调用、状态变化、失败和任务成功率；pass^k (k≤8) 一致性；retail↔airline 两域弱 family-out 对照 | 超大规模生产流量；跨工具家族泛化（rebuttal 可补 BFCL/STB） |
 
-**Ch.5 鲁棒性压力面（仅进入 Ch.5，不进 Ch.4 主表）**：
-
-| Workload | 样本 | 角色 | 可证明内容 |
-|---|---|---|---|
-| StableToolBench | 500 | family-out 交叉证据 | τ-bench↔BFCL 之外的第三工具 family 鲁棒性 |
-| SWE 轨迹 | 200 | 结构压力面（替代原合成 DAG 的因果敏感性角色） | 真实 coding-agent 的长链、分支与工具等待结构 |
-| Toolathlon | 200 | 结构压力面 | 复杂多步工具编排下的 next-use 与 branch 噪声鲁棒性 |
-
-**Ch.3 fidelity 质量面（仅进入 Ch.3 估计器有效性验证，不进 Ch.4 主表）**：
-
-| Workload | 样本 | 角色 | 可证明内容 |
-|---|---|---|---|
-| LongBench | 1,000 | fidelity 质量面主数据 | 多任务下的量化保真风险估计与质量非劣 sanity |
-| GSM8K | 100 | accuracy sanity | 短链推理任务的量化正确率基线 |
+**Ch.3 fidelity 质量面**：复用主表 τ-bench 1,320 episodes trace，量化质量（logit KL、top-k change、任务成功率变化）直接在主 workload 上测量。
 
 **辅助角色（不计入核心样本总量）**：
 
 | Workload | 角色 | 用途 |
 |---|---|---|
 | BurstGPT 窗口 | 到达证据 | Ch.4 到达结构 replay 参数，不产生 workflow 样本 |
-| LMSYS-Chat-1M | 负对照附注 | Ch.1 画像附注：500 会话仅做顺序式多轮的 exact-prefix overlap 对照，检查高 reuse 场景是否需要复杂预测 |
 
-**已删除的 workload**：合成可控 DAG（受用户禁令约束，其结构因果敏感性角色由 SWE 轨迹分层分析替代）、MuSiQue、2WikiMultihopQA（多跳 QA 质量 sanity 由 LongBench 的 QA 子任务覆盖）、CATraces（可得性 TBD）、Mooncake（窗口 TBD）。
+**已删除的 workload**：合成可控 DAG（受用户禁令约束）、MuSiQue、2WikiMultihopQA、CATraces（可得性 TBD）、Mooncake（窗口 TBD）、BFCL v3（方法论与 τ-bench LLM user simulator 不对等）、LongBench（fidelity 质量面改在主 workload 验证）、GSM8K（同 LongBench）、StableToolBench（family-out 轴证据力弱）、SWE 轨迹（与 C1–C3 主线关联弱）、Toolathlon（同 SWE）、LMSYS-Chat-1M（负对照附注非核心证据）。其中 BFCL/LongBench/GSM8K/STB/SWE/Toolathlon/LMSYS-Chat-1M 在 v0.4 单数据集精简中删除，rebuttal 时可补。
 
-14 周版本按 v0.3 的 **7 核心 + 2 辅助数据集体系**执行：核心 7 个数据集（τ-bench 495、BFCL 800、LongBench 1000、GSM8K 100、StableToolBench 500、SWE 200、Toolathlon 200，核心样本总量约 3,300）计入样本总量；辅助 2 个（BurstGPT 窗口、LMSYS-Chat-1M 500）不计入。StableToolBench 主要提供稳定工具/API 环境，本身不保证工具等待、重试或取消事件；这些性质必须由实际运行 trace 证明。第二模型、更多 coding workload 和大部分跨模型泛化移至后续版本。ShareGPT mirror 不作为主 workload；HotpotQA 只作为可选短链对照。
+14 周版本按 v0.4 的 **1 核心 + 1 辅助数据集体系**执行：核心 1 个数据集（τ-bench 1,320 episodes，165 tasks × 8 seeds，核心样本总量 1,320）计入样本总量；辅助 1 个（BurstGPT 窗口）不计入。τ-bench 与原论文（ICLR 2025）pass^k (k≤8) 方法论完全对齐；retail↔airline 两域对照作为弱 family-out 证据。第二模型、BFCL/STB 等跨工具家族泛化、更多 coding workload 移至后续版本或 rebuttal 补做。ShareGPT mirror 不作为主 workload；HotpotQA 不再作为可选短链对照。
 
 ### 6.2 Cache-Compatible 序列化
 
@@ -567,7 +552,7 @@ v0.3 将 workload 体系按实验章节分层，主表严格限定两个工具 w
 - 至少保证 PBKV 或 KVFlow 中一个 closest baseline 能在公平协议下忠实运行；若只能实现 inspired variant，必须先解决可比性；
 - 内部参考：oracle 相对最佳简单策略应存在约 10% 的 miss-cost 或 p95 TTFT 改进空间。
 
-**运行方式**：数据来源改为复用 Ch.1 画像数据（τ-bench 495 + BFCL 800 同 trace），不再独立运行 Gate 实验；判定逻辑与阈值不变。`design_doc` 指向 `experiments/experiment-designs.md#ch1`。
+**运行方式**：数据来源改为复用 Ch.1 画像数据（τ-bench 1,320 episodes 同 trace），不再独立运行 Gate 实验；判定逻辑与阈值不变。`design_doc` 指向 `experiments/experiment-designs.md#ch1`。
 
 **失败动作**：转向“何时工作流结构产生物理 KV 复用”的 benchmark/characterization 论文。
 
@@ -602,7 +587,7 @@ v0.3 将 workload 体系按实验章节分层，主表严格限定两个工具 w
 - pilot 后预注册绝对质量非劣界、$\delta$ 和样本量；95% CI 必须窄到足以检验该界；
 - 至少在一个真实工具 workload 上验证，而不只看 logit KL。
 
-**运行方式**：数据来源改为复用 Ch.3 fidelity 侧数据（LongBench 1000 + GSM8K 100）。判定逻辑与阈值不变。`design_doc` 指向 `experiments/experiment-designs.md#ch3`。
+**运行方式**：数据来源改为复用 Ch.3 fidelity 侧数据（τ-bench 1,320 episodes，复用 Ch.1 trace）。判定逻辑与阈值不变。`design_doc` 指向 `experiments/experiment-designs.md#ch3`。
 
 **失败动作**：在 G0 已允许的一次模型/后端切换后仍失败，则路线 A No-Go 并转路线 B；不能删除量化后继续使用“reuse–fidelity”主标题投稿。
 
@@ -620,14 +605,14 @@ v0.3 将原 E1–E7 七个独立实验章节合并为 Ch.1–Ch.5 五章，遵�
 
 **问题**：真实 workload 中是否存在值得管理的 exact-prefix locality？
 
-**数据来源**：τ-bench 495 + BFCL v3 multi-turn 800（与 Ch.4 主表共用 trace，W3–W5 一次录制）。
+**数据来源**：τ-bench 1,320 episodes（165 tasks × 8 seeds，与 Ch.4 主表共用 trace，W3–W4 一次录制）。
 
 **报告指标**（保留原 E1）：
 
 - workflow 长度、深度、宽度、分支率和工具等待；
 - exact-prefix overlap、LCP tokens、next-use distance；
 - block working-set size、KV/总显存占比；
-- offline oracle 与 LRU/简单 heuristic 的 headroom。
+- 6 个 baseline（LRU/GDSF/SizeCost/APC-LRU/Belady/Oracle-Cost）+ ≥1 个 closest baseline（PBKV 或 KVFlow）的 headroom；headroom = Oracle-Cost − max(LRU, GDSF, SizeCost, APC-LRU)。
 
 **Gate 复用**：G1 判定（oracle headroom ≥ 10% + closest baseline 可比性）直接复用本章画像数据，不独立运行。
 
@@ -637,7 +622,7 @@ v0.3 将原 E1–E7 七个独立实验章节合并为 Ch.1–Ch.5 五章，遵�
 
 **问题**：复用价值与保真风险是否存在系统性错位？
 
-**数据来源**：τ-bench 80 workflow 子集。
+**数据来源**：τ-bench 80 workflow 子集（从 1,320 episodes 中抽样）。
 
 **方法**：
 
@@ -658,7 +643,7 @@ v0.3 将原 E1–E7 七个独立实验章节合并为 Ch.1–Ch.5 五章，遵�
 
 **删除 GNN 变体**：GNN 不进入主实验（见 §7 G5 删除说明）；§4.3 的预测器选择顺序保留作为方法描述。
 
-**fidelity 侧**（2 变体，数据：LongBench 1000 + GSM8K 100）：
+**fidelity 侧**（2 变体，数据：τ-bench 1,320 episodes，复用 Ch.1 trace）：
 
 - uniform precision；
 - norm/range proxy（FlowCache fidelity estimator 即 norm/range proxy 的校准版本，合并描述，不再单列为独立变体）。
@@ -698,13 +683,12 @@ v0.3 将原 E1–E7 七个独立实验章节合并为 Ch.1–Ch.5 五章，遵�
 | cell | 预算 | 并发 | workload | seeds |
 |---|---|---|---|---|
 | 主-1 | 25% | 8 | τ-bench | 3 |
-| 主-2 | 25% | 8 | BFCL | 3 |
-| 主-3 | 50% | 8 | τ-bench | 1 |
-| 主-4 | 50% | 8 | BFCL | 1 |
+| 主-2 | 50% | 8 | τ-bench | 1 |
 | 边界-1 | 10% | 16 | τ-bench | 1 |
-| 边界-2 | 10% | 16 | BFCL | 1 |
 
-运行量：10 对照 × 6 cell，其中主-1/主-2 各 3 seeds = 10×(4×1 + 2×3) = 100 replay（v0.2 约 702 replay）。
+注：v0.4 单数据集精简后，原 BFCL cell（主-2/主-4/边界-2）删除。具体 cell 设计在 Ch.4 pilot 后冻结，总 replay 数不超过 v0.3 的 100 replay 上限。
+
+运行量：10 对照 × 3 cell，其中主-1 用 3 seeds = 10×(2×1 + 1×3) = 50 replay（v0.4 单数据集精简，低于 v0.3 的 100 replay 上限）。
 
 **设计消融并入主表**（核心 4 变体 + 2 设计消融同表，同一 cell 仅切开关）：
 
@@ -735,13 +719,12 @@ v0.3 将原 E1–E7 七个独立实验章节合并为 Ch.1–Ch.5 五章，遵�
 
 **问题**：方法在不同 family、到达扰动和 branch 噪声下是否稳健？负结果能否转化为发现？
 
-**3 个扰动轴**（原 E6 的 8 轴大幅缩减）：
+**1 个扰动轴**（v0.4 单数据集精简，原 3 轴缩减）：
 
-- family-out：τ-bench↔BFCL 交叉验证，加 StableToolBench 500 作为第三工具 family 证据；
 - 到达扰动：BurstGPT 窗口 replay；
-- branch 噪声：DAG 边缺失/误预测下的表现。
+- retail↔airline 两域对照作为 τ-bench 内部弱 family-out 证据（附注，非独立轴）。
 
-**降级为 appendix**：原 E6 的 CPU 带宽竞争、predictor calibration drift、不同上下文长度、GPU budget 突变降级为附录表，rebuttal 时用预留的 SWE/Toolathlon 余量补。
+**降级为附录**：原 E6 的 CPU 带宽竞争、predictor calibration drift、不同上下文长度、GPU budget 突变降级为附录表。v0.4 单数据集精简后无 SWE/Toolathlon 余量，rebuttal 时若需跨工具家族证据可补 BFCL/STB。
 
 **失败模式**（从 Ch.4 负结果 cell 提取，原 E7 的独立章合并）：
 
@@ -831,19 +814,19 @@ v0.3 将原 E1–E7 七个独立实验章节合并为 Ch.1–Ch.5 五章，遵�
 
 ## 12. 14 周执行计划
 
-v0.3 按"一次运行，多处消费"原则重排周次：Gate 判定复用正式实验数据，Pilot 提前到 W7–W8，W8 增加 G3 冒烟，W9 末用实测效应量标定 Ch.4 样本量，W10–W11 主表，W12 鲁棒性。
+v0.4 按"一次运行，多处消费"原则重排周次：单数据集 τ-bench 1,320 episodes，Gate 判定复用正式实验数据，Pilot 提前到 W7–W8，W8 增加 G3 冒烟，W9 末用实测效应量标定 Ch.4 样本量，W10–W11 主表，W12 鲁棒性（仅到达扰动）。
 
 | 周次 | 目标 | Gate / 产物 |
 |---|---|---|
 | W1–W2 | 冻结模型/后端/主机；Q-storage codec spike | G0 |
-| W3–W5 | τ-bench 495 + BFCL 800 轨迹录制 | 可重放 trace |
+| W3–W4 | τ-bench 1,320 episodes 轨迹录制 | 可重放 trace |
 | W6–W7 | Ch.1 画像 + G1 判定（复用 trace） | E1 画像 |
 | W7–W8 | Ch.2 Pilot + Ch.3 reuse 侧（并行）→ G2 存在性判定 | G2 Pilot |
 | W8 | G3 冒烟（主 cell × 4 无损对照 × 100 子集） | G3 冒烟 |
 | W9 | Ch.3 fidelity 侧 + G4 判定 | G4 |
-| W9 末 | 用实测效应量标定 Ch.4 样本量（封顶 495/800） | 样本量冻结 |
+| W9 末 | 用实测效应量标定 Ch.4 样本量（封顶 1,320） | 样本量冻结 |
 | W10–W11 | Ch.4 主表（G2/G3 最终确认复用主表） | E4 主表 |
-| W12 | Ch.5 鲁棒性（STB 500 录制在此窗口） | E5 鲁棒性 |
+| W12 | Ch.5 鲁棒性（到达扰动 replay，无 STB 录制） | E5 鲁棒性 |
 | W13 | 复跑冻结 / W14 写作 | 冻结结果 |
 
 如果 G0、G1、G2、G3 或 G4 任一关键门槛失败，路线 A 停止并转路线 B；不能删除量化后继续沿用 reuse–fidelity 主标题（G5 已删除，不再作为 gate，详见 §7）。GNN 和第二模型只有在主结果已稳定且仍有时间时加入。
@@ -929,12 +912,7 @@ v0.3 按"一次运行，多处消费"原则重排周次：Gate 判定复用正�
 - ICML 2026 official paper list: <https://icml.cc/Downloads/2026>
 - Agent Memory: <https://arxiv.org/abs/2603.04428>
 - HybridFlow: <https://arxiv.org/abs/2512.22137>
-- MuSiQue: <https://github.com/StonyBrookNLP/musique>
-- 2WikiMultihopQA: <https://aclanthology.org/2020.coling-main.580/>
-- LMSYS-Chat-1M: <https://proceedings.iclr.cc/paper_files/paper/2024/hash/5f9bfdfe3685e4ccdbc0e7fb29cccf2a-Abstract-Conference.html>
 - τ-bench: <https://proceedings.iclr.cc/paper_files/paper/2025/hash/1b126cc38b8638e07bef37e7b2bb72bf-Abstract-Conference.html>
-- BFCL: <https://gorilla.cs.berkeley.edu/leaderboard>
-- StableToolBench: <https://github.com/THUNLP-MT/StableToolBench>
 - NVIDIA GeForce RTX 4090 D: <https://www.nvidia.cn/geforce/graphics-cards/40-series/rtx-4090-d/>
 - IEEE ICWS 2026 CFP: <https://services.conferences.computer.org/2026/icws/icws-call-for-papers/>
 - IEEE EDGE 2026 CFP: <https://services.conferences.computer.org/2026/edge/edge-call-for-papers/>

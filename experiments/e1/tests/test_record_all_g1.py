@@ -1,11 +1,8 @@
 """Test _record_all_g1: multi-seed × multi-dataset outer loop with checkpoint/resume.
 
-Background: G1 records 7720 episodes (165 tau-bench × 8 seeds +
-800 BFCL × 8 seeds). The outer loop iterates dataset → seed → task,
-writes one JSON per episode, and skips existing files on resume.
+Background: G1 records 1320 episodes (165 tau-bench × 8 seeds). The outer loop iterates seed → task, writes one JSON per episode, and skips existing files on resume.
 
-Tests use mock adapters / mock inner methods so they run without
-real tau-bench / bfcl-eval / GPU dependencies.
+Tests use mock adapters / mock inner methods so they run without real tau-bench / GPU dependencies.
 """
 
 import json
@@ -37,55 +34,6 @@ class _MockTauAdapter:
         pass
 
 
-class _MockBFCLAdapter:
-    """Mock BFCL adapter with 2 entries (test-only)."""
-
-    def __init__(self, subset="multi_turn_base", seed=0):
-        self.subset = subset
-        self.seed = seed
-
-    def load_entries(self):
-        return [
-            ({"id": "bfcl-0", "question": [], "initial_config": {},
-              "involved_classes": []},
-             {"id": "bfcl-0", "ground_truth": []}),
-            ({"id": "bfcl-1", "question": [], "initial_config": {},
-              "involved_classes": []},
-             {"id": "bfcl-1", "ground_truth": []}),
-        ]
-
-    def init_episode(self, entry, gt, seed=0):
-        class _Ep:
-            entry_id = entry["id"]
-            subset = self.subset
-            user_turns = []
-            tool_calls = []
-            tool_results = []
-            agent_responses = []
-            valid = None
-            _backend_instances = {}
-            _model_name = "mock"
-            _gt = gt
-            _entry = entry
-        return _Ep()
-
-    def execute_tool_calls(self, calls, episode):
-        return ["ok"] * len(calls)
-
-    def validate_episode(self, episode):
-        episode.valid = True
-        return True
-
-    def get_tool_schema_for_qwen(self, episode):
-        return "no tools"
-
-    def close_episode(self, episode):
-        pass
-
-    def close(self):
-        pass
-
-
 def _make_recorder(tmp_path, config=None):
     """Build a bypass-__init__ TrajectoryRecorder with mock-friendly config."""
     recorder = object.__new__(rt.TrajectoryRecorder)
@@ -101,7 +49,6 @@ def _make_recorder(tmp_path, config=None):
                 "datasets": ["tau-bench"],
                 "seeds": [42, 123],
                 "tau_bench": {"user_model": "gpt-4o-mini"},
-                "bfcl_v3": {"subsets": ["multi_turn_base"]},
             },
             "output": {"resume": True},
         }
@@ -233,61 +180,6 @@ def test_record_all_g1_max_episodes_caps_per_seed(tmp_path):
     assert len(run_calls) == 4
 
 
-def test_record_all_g1_bfcl_naming(tmp_path):
-    """BFCL files must be {subset}_{entry_id}_seed{seed}.json under bfcl_v3/."""
-    config = {
-        "workload": {
-            "datasets": ["bfcl_v3"],
-            "seeds": [42],
-            "bfcl_v3": {"subsets": ["multi_turn_base"]},
-        },
-        "output": {"resume": True},
-    }
-    recorder = _make_recorder(tmp_path, config=config)
-    recorder._init_adapter = lambda dataset, seed, domain="retail", subset=None: _MockBFCLAdapter(subset=subset, seed=seed)
-
-    def mock_run_bfcl(adapter, episode, seed):
-        return {"meta": {"workflow_id": f"{episode.entry_id}_seed{seed}"}, "steps": []}
-
-    recorder._run_episode_bfcl = mock_run_bfcl
-
-    written = recorder._record_all_g1()
-
-    bfcl_dir = tmp_path / "bfcl_v3"
-    assert (bfcl_dir / "multi_turn_base_bfcl-0_seed42.json").exists()
-    assert (bfcl_dir / "multi_turn_base_bfcl-1_seed42.json").exists()
-    assert written == 2
-
-
-def test_record_all_g1_dataset_filter_bfcl_only(tmp_path):
-    """dataset_filter='bfcl_v3' should skip tau-bench."""
-    config = {
-        "workload": {
-            "datasets": ["tau-bench", "bfcl_v3"],
-            "seeds": [42],
-            "tau_bench": {"user_model": "gpt-4o-mini"},
-            "bfcl_v3": {"subsets": ["multi_turn_base"]},
-        },
-        "output": {"resume": True},
-    }
-    recorder = _make_recorder(tmp_path, config=config)
-
-    def init_adapter(dataset, seed, domain="retail", subset=None):
-        if dataset == "tau-bench":
-            raise AssertionError("tau-bench should not be initialized when filter=bfcl_v3")
-        return _MockBFCLAdapter(subset=subset, seed=seed)
-
-    recorder._init_adapter = init_adapter
-    recorder._run_episode_bfcl = lambda adapter, episode, seed: {"meta": {}, "steps": []}
-
-    recorder._record_all_g1(dataset_filter="bfcl_v3")
-
-    bfcl_dir = tmp_path / "bfcl_v3"
-    assert bfcl_dir.exists()
-    # tau_bench dir should NOT exist
-    assert not (tmp_path / "tau_bench").exists()
-
-
 def test_record_all_g1_init_error_logged_not_raised(tmp_path):
     """_init_adapter failure should be logged, not raised."""
     recorder = _make_recorder(tmp_path)
@@ -309,8 +201,8 @@ def test_trace_output_excludes_global_block_index(tmp_path):
     """Trace JSON files must NOT contain the global_block_index field.
 
     Background: The global block index accumulates across all episodes
-    (up to 7720). Writing it into every trace file causes O(n²) disk
-    usage (~300GB for 7720 episodes) and leaks cross-episode metadata
+    (up to 1320). Writing it into every trace file causes O(n²) disk
+    usage (~300GB for 1320 episodes) and leaks cross-episode metadata
     into per-episode traces. The index is kept in RAM
     (``self._global_block_index``) for the lifetime of the recorder and
     can be reconstructed from per-episode ``block_assignments`` during
@@ -351,37 +243,3 @@ def test_trace_output_excludes_global_block_index(tmp_path):
         )
         assert "meta" in trace
         assert "steps" in trace
-
-
-def test_trace_output_excludes_global_block_index_bfcl(tmp_path):
-    """Same as above but for BFCL path."""
-    config = {
-        "workload": {
-            "datasets": ["bfcl_v3"],
-            "seeds": [42],
-            "bfcl_v3": {"subsets": ["multi_turn_base"]},
-        },
-        "output": {"resume": True},
-    }
-    recorder = _make_recorder(tmp_path, config=config)
-
-    def mock_run_episode_bfcl(adapter, episode, seed):
-        return {
-            "meta": {"workflow_id": f"{episode.entry_id}_seed{seed}"},
-            "steps": [{"role": "system", "block_assignments": []}],
-        }
-
-    recorder._init_adapter = lambda dataset, seed, domain="retail", subset=None: _MockBFCLAdapter(subset=subset or "multi_turn_base", seed=seed)
-    recorder._run_episode_bfcl = mock_run_episode_bfcl
-
-    recorder._record_all_g1(
-        dataset_filter="bfcl_v3",
-        seed_filter=42,
-    )
-
-    trace_files = list((tmp_path / "bfcl_v3").glob("*.json"))
-    assert len(trace_files) >= 1
-    for tf in trace_files:
-        with open(tf, "r", encoding="utf-8") as f:
-            trace = json.load(f)
-        assert "global_block_index" not in trace

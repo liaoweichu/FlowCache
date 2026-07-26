@@ -1,0 +1,21 @@
+- [x] experiment-designs.md §0.4 数据集组合表删除 SWE 轨迹行和 Toolathlon 行
+- [x] experiment-designs.md §0.4 总量描述：~4,120 → ~3,720（修正 spec 算术笔误）
+- [x] experiment-designs.md §0.4.4 排除数据集清单新增 SWE 和 Toolathlon 行及排除理由
+- [x] experiment-designs.md §0.4 新增"数据集数与同领域论文对比"段落（§0.4.7）
+- [x] experiment-designs.md Ch.5 表格删除 SWE 200 和 Toolathlon 200 行
+- [x] experiment-designs.md Ch.5 鲁棒性轴从 3 轴调整为 2 轴（family-out / 到达扰动）
+- [x] experiment-designs.md Ch.5 §7.3 风险段落更新（E6.12 rebuttal 策略）
+- [x] experiment-scope-redesign/spec.md §3 Ch.5 表格数据来源列移除 SWE/Toolathlon
+- [x] experiment-scope-redesign/spec.md §5 数据集体系表删除 SWE/Toolathlon 行，总量 ~4,120 → ~3,720
+- [x] experiment-scope-redesign/spec.md §5 核心样本总量降幅 53% → 58%
+- [x] experiment-scope-redesign/spec.md §8 规模对比表核心数据集 7 → 5，降幅 42% → 58%
+- [x] experiment-scope-redesign/spec.md §7.3 鲁棒性风险段落更新
+- [x] reconsider-g1-sample-size/spec.md 总样本量描述补充全册 ~3,720 说明
+- [x] reconsider-g1-sample-size/spec.md Impact 部分引用本 spec
+- [x] config.yaml 无 swe_trajectory / toolathlon 配置（确认已无引用）
+- [x] config.yaml workload.datasets 不包含 swe_trajectory / toolathlon（已是 ["tau-bench", "bfcl_v3"]）
+- [x] g1-experiment-implementation.md §2.1 算力预算表无 SWE/Toolathlon 行（原表已无）
+- [x] g1-experiment-implementation.md §2 决策表新增 Ch.5 压力数据集精简行
+- [x] 所有现有测试 PASS（43 passed, 3 skipped in 3.80s）
+- [x] config.yaml 加载正确，无 swe_trajectory / toolathlon 引用
+- [x] 额外: trim-dataset-portfolio/spec.md 修正算术笔误（3,220 → 3,720，4 处）

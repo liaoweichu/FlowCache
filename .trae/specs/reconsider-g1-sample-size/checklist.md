@@ -1,0 +1,13 @@
+- [ ] experiment-designs.md G1.2 表格 BFCL 行显示 800（不是 6,400）
+- [ ] experiment-designs.md G1.3 表格样本量行显示 2,120（不是 7,720）
+- [ ] experiment-designs.md 移除了 "BFCL 8 decode seeds 依据" 段落
+- [ ] experiment-designs.md 新增 "BFCL 单 seed 依据" 段落，含同领域论文样本量对比表
+- [ ] config.yaml workload.bfcl_v3.seeds = [0]（单 seed）
+- [ ] config.yaml workload.bfcl_v3.decode_mode = "greedy"
+- [ ] config.yaml workload.seeds 注释明确仅用于 τ-bench
+- [ ] record_trajectories.py `_record_bfcl_g1` 使用 bfcl_v3.seeds（单 seed），不用全局 8 seeds
+- [ ] record_trajectories.py `_run_episode_bfcl` 调用 `_generate_response` 时 seed=None（greedy）
+- [ ] 新增防回归测试：BFCL trace 文件数 = 800
+- [ ] g1-experiment-implementation.md §2.1 算力预算表显示 ~15.5 GPU 小时（不是 ~50）
+- [ ] g1-experiment-implementation.md §2 决策表 BFCL 行更新为单 seed
+- [ ] 所有现有测试 PASS（py -m pytest experiments/e1/tests/ -v）

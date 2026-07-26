@@ -359,7 +359,16 @@ def plot_working_set(data: Dict, output_path: str):
 # ---------------------------------------------------------------------------
 
 def plot_oracle_comparison(data: Dict, output_path: str):
-    """Plot 4: Oracle vs LRU vs GDSF grouped bar chart."""
+    """Plot 4: 6-baseline grouped bar chart (LRU / GDSF / SizeCost / APC-LRU / Belady / Oracle-Cost).
+
+    Bars are color-coded by category:
+      * Simple heuristics (LRU, GDSF, SizeCost, APC-LRU) — blue family.
+      * Oracle upper bounds (Belady, Oracle-Cost) — orange/red family.
+      * Closest baseline placeholder (Phase 2, optional) — green; skipped if absent.
+
+    Headroom annotation above each budget group:
+    ``Oracle-Cost hit% - max(LRU, GDSF, SizeCost, APC-LRU) hit%``.
+    """
     results = data.get("results")
     if results is None:
         _warn_missing("Oracle Comparison", "results")
@@ -371,62 +380,104 @@ def plot_oracle_comparison(data: Dict, output_path: str):
         _warn_missing("Oracle Comparison", "results (empty)")
         return
 
-    budgets_pct = []
-    lru_rates = []
-    gdsf_rates = []
-    oracle_rates = []
+    # Baseline series in display order. ``key`` is the JSON field name.
+    # ``category`` controls the color family.
+    series = [
+        # Simple heuristics — blue family.
+        ("LRU",         "lru",         "simple",   "#4C72B0"),
+        ("GDSF",        "gdsf",        "simple",   "#5B8BC0"),
+        ("SizeCost",    "sizecost",    "simple",   "#7FA8D6"),
+        ("APC-LRU",     "apc_lru",     "simple",   "#A8C4E6"),
+        # Oracle upper bounds — orange/red family.
+        ("Belady",      "oracle",      "oracle",   "#DD8452"),
+        ("Oracle-Cost", "oracle_cost", "oracle",   "#C44E2E"),
+    ]
 
+    budgets_pct: List[str] = []
+    rates_by_series: Dict[str, List[float]] = {s[1]: [] for s in series}
     for bk in budget_keys:
         entry = results[bk]
         budget_float = float(bk.replace("budget_", ""))
         budgets_pct.append(f"{int(budget_float * 100)}%")
-        lru_rates.append(entry.get("lru", {}).get("hit_rate", 0.0))
-        gdsf_rates.append(entry.get("gdsf", {}).get("hit_rate", 0.0))
-        oracle_rates.append(entry.get("oracle", {}).get("hit_rate", 0.0))
+        for _, key, _, _ in series:
+            rates_by_series[key].append(
+                entry.get(key, {}).get("hit_rate", 0.0)
+            )
 
-    fig, ax = plt.subplots(figsize=(9, 5))
+    n_groups = len(budgets_pct)
+    n_bars = len(series)
+    fig, ax = plt.subplots(figsize=(11, 6))
 
-    x = np.arange(len(budgets_pct))
-    width = 0.22
+    x = np.arange(n_groups)
+    # Spread n_bars across a total band of 0.8 (so bars touch within a group).
+    total_width = 0.8
+    bar_width = total_width / n_bars
+    # Offsets so the group is centered on x.
+    offsets = np.arange(n_bars) - (n_bars - 1) / 2.0
+    offsets = offsets * bar_width
 
-    bars_lru = ax.bar(x - width, lru_rates, width, label="LRU",
-                       color="#4C72B0", edgecolor="white", alpha=0.9)
-    bars_gdsf = ax.bar(x, gdsf_rates, width, label="GDSF",
-                        color="#DD8452", edgecolor="white", alpha=0.9)
-    bars_oracle = ax.bar(x + width, oracle_rates, width, label="Oracle",
-                          color="#55A868", edgecolor="white", alpha=0.9)
+    bars_by_key: Dict[str, object] = {}
+    for (label, key, category, color), off in zip(series, offsets):
+        rates = rates_by_series[key]
+        bars = ax.bar(x + off, rates, bar_width, label=label,
+                      color=color, edgecolor="white", alpha=0.9)
+        bars_by_key[key] = bars
 
-    # Add value labels on bars
-    for bars, rates in [(bars_lru, lru_rates), (bars_gdsf, gdsf_rates),
-                          (bars_oracle, oracle_rates)]:
+    # Add value labels on bars.
+    for _, key, _, _ in series:
+        bars = bars_by_key[key]
+        rates = rates_by_series[key]
         for bar, rate in zip(bars, rates):
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width() / 2., height + 0.005,
-                    f"{rate:.1%}", ha="center", va="bottom", fontsize=7,
+                    f"{rate:.1%}", ha="center", va="bottom", fontsize=6,
                     rotation=0)
 
-    # Add headroom annotations (gap between oracle and best heuristic)
-    for i in range(len(budgets_pct)):
-        best_heuristic = max(lru_rates[i], gdsf_rates[i])
-        headroom = oracle_rates[i] - best_heuristic
+    # Headroom annotations: Oracle-Cost hit% - max(simple heuristics) hit%.
+    simple_keys = [s[1] for s in series if s[2] == "simple"]
+    oracle_cost_key = "oracle_cost"
+    for i in range(n_groups):
+        best_simple = max(rates_by_series[k][i] for k in simple_keys)
+        oracle_cost_rate = rates_by_series[oracle_cost_key][i]
+        headroom = oracle_cost_rate - best_simple
         if headroom > 0.005:
-            mid_x = x[i]
-            top_y = max(lru_rates[i], gdsf_rates[i], oracle_rates[i])
+            top_y = max(
+                max(rates_by_series[k][i] for k in simple_keys),
+                rates_by_series[oracle_cost_key][i],
+            )
             ax.annotate(
-                f"+{headroom:.1%}",
-                xy=(mid_x, top_y + 0.02),
+                f"headroom +{headroom:.1%}",
+                xy=(x[i], top_y + 0.025),
                 ha="center", fontsize=7,
                 color="darkgreen", fontweight="bold",
-                bbox=dict(boxstyle="round,pad=0.2", facecolor="lightgreen", alpha=0.6),
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="lightgreen",
+                          alpha=0.6),
             )
+
+    # Subtitle annotates the global headroom at the smallest budget level
+    # (typically where headroom is largest), for quick visual reference.
+    if n_groups > 0:
+        best_simple_0 = max(rates_by_series[k][0] for k in simple_keys)
+        headroom_0 = rates_by_series[oracle_cost_key][0] - best_simple_0
+        subtitle = (
+            f"Headroom (leftmost) = Oracle-Cost − max(simple) = "
+            f"{rates_by_series[oracle_cost_key][0]:.1%} − "
+            f"{best_simple_0:.1%} = +{headroom_0:.1%}"
+        )
+    else:
+        subtitle = ""
 
     ax.set_xlabel("KV Budget Level", fontsize=11)
     ax.set_ylabel("命中率 (Hit Rate)", fontsize=11)
-    ax.set_title("Oracle vs Heuristic Eviction Performance", fontsize=13, fontweight="bold")
+    title = "Oracle vs Heuristic Eviction Performance (6 Baselines)"
+    if subtitle:
+        ax.set_title(f"{title}\n{subtitle}", fontsize=12, fontweight="bold")
+    else:
+        ax.set_title(title, fontsize=13, fontweight="bold")
     ax.set_xticks(x)
     ax.set_xticklabels(budgets_pct)
-    ax.set_ylim(0, 1.05)
-    ax.legend(loc="upper left", fontsize=9)
+    ax.set_ylim(0, 1.10)
+    ax.legend(loc="upper left", fontsize=8, ncol=2)
     ax.grid(axis="y", alpha=0.3)
 
     plt.tight_layout()

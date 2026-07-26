@@ -11,7 +11,7 @@
         "hit_rate": 0.0,
         "evictions": 87,
         "saved_prefill_ms": 0.0,
-        "miss_cost_ms": 752.0
+        "miss_cost_ms": 453.14
       },
       "gdsf": {
         "hits": 0,
@@ -19,7 +19,7 @@
         "hit_rate": 0.0,
         "evictions": 87,
         "saved_prefill_ms": 0.0,
-        "miss_cost_ms": 752.0
+        "miss_cost_ms": 453.14
       },
       "oracle": {
         "hits": 12,
@@ -27,7 +27,39 @@
         "hit_rate": 0.1276595744680851,
         "evictions": 75,
         "saved_prefill_ms": 96.0,
-        "miss_cost_ms": 656.0
+        "miss_cost_ms": 357.14
+      },
+      "sizecost": {
+        "hits": 0,
+        "misses": 94,
+        "hit_rate": 0.0,
+        "evictions": 87,
+        "saved_prefill_ms": 0.0,
+        "miss_cost_ms": 453.14
+      },
+      "apc_lru": {
+        "hits": 0,
+        "misses": 94,
+        "hit_rate": 0.0,
+        "evictions": 91,
+        "saved_prefill_ms": 449.35,
+        "miss_cost_ms": 453.14
+      },
+      "pbkv_inspired": {
+        "hits": 2,
+        "misses": 92,
+        "hit_rate": 0.02127659574468085,
+        "evictions": 89,
+        "saved_prefill_ms": 16.0,
+        "miss_cost_ms": 437.14
+      },
+      "oracle_cost": {
+        "hits": 12,
+        "misses": 82,
+        "hit_rate": 0.1276595744680851,
+        "evictions": 75,
+        "saved_prefill_ms": 96.0,
+        "miss_cost_ms": 357.14
       }
     },
     "budget_0.25": {
@@ -39,7 +71,7 @@
         "hit_rate": 0.09574468085106383,
         "evictions": 66,
         "saved_prefill_ms": 72.0,
-        "miss_cost_ms": 680.0
+        "miss_cost_ms": 381.14
       },
       "gdsf": {
         "hits": 9,
@@ -47,7 +79,7 @@
         "hit_rate": 0.09574468085106383,
         "evictions": 66,
         "saved_prefill_ms": 72.0,
-        "miss_cost_ms": 680.0
+        "miss_cost_ms": 381.14
       },
       "oracle": {
         "hits": 18,
@@ -55,7 +87,39 @@
         "hit_rate": 0.19148936170212766,
         "evictions": 57,
         "saved_prefill_ms": 144.0,
-        "miss_cost_ms": 608.0
+        "miss_cost_ms": 309.14
+      },
+      "sizecost": {
+        "hits": 10,
+        "misses": 84,
+        "hit_rate": 0.10638297872340426,
+        "evictions": 65,
+        "saved_prefill_ms": 80.0,
+        "miss_cost_ms": 373.14
+      },
+      "apc_lru": {
+        "hits": 9,
+        "misses": 85,
+        "hit_rate": 0.09574468085106383,
+        "evictions": 80,
+        "saved_prefill_ms": 457.35,
+        "miss_cost_ms": 381.14
+      },
+      "pbkv_inspired": {
+        "hits": 9,
+        "misses": 85,
+        "hit_rate": 0.09574468085106383,
+        "evictions": 80,
+        "saved_prefill_ms": 72.0,
+        "miss_cost_ms": 381.14
+      },
+      "oracle_cost": {
+        "hits": 18,
+        "misses": 76,
+        "hit_rate": 0.19148936170212766,
+        "evictions": 57,
+        "saved_prefill_ms": 144.0,
+        "miss_cost_ms": 309.14
       }
     },
     "budget_0.50": {
@@ -67,7 +131,7 @@
         "hit_rate": 0.09574468085106383,
         "evictions": 47,
         "saved_prefill_ms": 72.0,
-        "miss_cost_ms": 680.0
+        "miss_cost_ms": 381.14
       },
       "gdsf": {
         "hits": 10,
@@ -75,7 +139,7 @@
         "hit_rate": 0.10638297872340426,
         "evictions": 46,
         "saved_prefill_ms": 80.0,
-        "miss_cost_ms": 672.0
+        "miss_cost_ms": 373.14
       },
       "oracle": {
         "hits": 18,
@@ -83,7 +147,39 @@
         "hit_rate": 0.19148936170212766,
         "evictions": 38,
         "saved_prefill_ms": 144.0,
-        "miss_cost_ms": 608.0
+        "miss_cost_ms": 309.14
+      },
+      "sizecost": {
+        "hits": 18,
+        "misses": 76,
+        "hit_rate": 0.19148936170212766,
+        "evictions": 38,
+        "saved_prefill_ms": 144.0,
+        "miss_cost_ms": 309.14
+      },
+      "apc_lru": {
+        "hits": 9,
+        "misses": 85,
+        "hit_rate": 0.09574468085106383,
+        "evictions": 60,
+        "saved_prefill_ms": 457.35,
+        "miss_cost_ms": 381.14
+      },
+      "pbkv_inspired": {
+        "hits": 18,
+        "misses": 76,
+        "hit_rate": 0.19148936170212766,
+        "evictions": 51,
+        "saved_prefill_ms": 144.0,
+        "miss_cost_ms": 309.14
+      },
+      "oracle_cost": {
+        "hits": 18,
+        "misses": 76,
+        "hit_rate": 0.19148936170212766,
+        "evictions": 38,
+        "saved_prefill_ms": 144.0,
+        "miss_cost_ms": 309.14
       }
     },
     "budget_1.00": {
@@ -95,7 +191,7 @@
         "hit_rate": 0.19148936170212766,
         "evictions": 0,
         "saved_prefill_ms": 144.0,
-        "miss_cost_ms": 608.0
+        "miss_cost_ms": 309.14
       },
       "gdsf": {
         "hits": 18,
@@ -103,7 +199,7 @@
         "hit_rate": 0.19148936170212766,
         "evictions": 0,
         "saved_prefill_ms": 144.0,
-        "miss_cost_ms": 608.0
+        "miss_cost_ms": 309.14
       },
       "oracle": {
         "hits": 18,
@@ -111,7 +207,39 @@
         "hit_rate": 0.19148936170212766,
         "evictions": 0,
         "saved_prefill_ms": 144.0,
-        "miss_cost_ms": 608.0
+        "miss_cost_ms": 309.14
+      },
+      "sizecost": {
+        "hits": 18,
+        "misses": 76,
+        "hit_rate": 0.19148936170212766,
+        "evictions": 0,
+        "saved_prefill_ms": 144.0,
+        "miss_cost_ms": 309.14
+      },
+      "apc_lru": {
+        "hits": 18,
+        "misses": 76,
+        "hit_rate": 0.19148936170212766,
+        "evictions": 0,
+        "saved_prefill_ms": 465.35,
+        "miss_cost_ms": 309.14
+      },
+      "pbkv_inspired": {
+        "hits": 18,
+        "misses": 76,
+        "hit_rate": 0.19148936170212766,
+        "evictions": 0,
+        "saved_prefill_ms": 144.0,
+        "miss_cost_ms": 309.14
+      },
+      "oracle_cost": {
+        "hits": 18,
+        "misses": 76,
+        "hit_rate": 0.19148936170212766,
+        "evictions": 0,
+        "saved_prefill_ms": 144.0,
+        "miss_cost_ms": 309.14
       }
     }
   }

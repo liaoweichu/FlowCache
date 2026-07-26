@@ -1,9 +1,9 @@
 """
 Test that experiments/e1/config.yaml supports G1 multi-dataset + 8 seeds + resume.
 
-Background: G1 records 7720 episodes (tau-bench 165×8 + BFCL 800×8) and needs
+Background: G1 records 1320 episodes (tau-bench 165×8) and needs
 config support for: workload.datasets list, workload.seeds (8 entries),
-workload.bfcl_v3.subsets (4 entries), and output.resume flag.
+and output.resume flag.
 """
 
 import sys
@@ -25,22 +25,13 @@ def test_config_has_workload_datasets_list():
     cfg = _load_cfg()
     assert "workload" in cfg
     assert "datasets" in cfg["workload"]
-    assert set(cfg["workload"]["datasets"]) >= {"tau-bench", "bfcl_v3"}
+    assert cfg["workload"]["datasets"] == ["tau-bench"]
 
 
 def test_config_has_8_seeds():
     cfg = _load_cfg()
     seeds = cfg["workload"].get("seeds")
     assert isinstance(seeds, list) and len(seeds) == 8
-
-
-def test_config_has_bfcl_subsets():
-    cfg = _load_cfg()
-    bfcl = cfg["workload"].get("bfcl_v3", {})
-    assert "subsets" in bfcl
-    assert len(bfcl["subsets"]) == 4
-    # Subsets must include multi_turn_base
-    assert any("multi_turn_base" in s for s in bfcl["subsets"])
 
 
 def test_config_has_resume_flag():
@@ -67,4 +58,4 @@ def test_config_trace_subdirs_present():
     cfg = _load_cfg()
     subdirs = cfg.get("output", {}).get("trace_subdirs")
     assert subdirs is not None
-    assert set(subdirs) >= {"tau_bench", "bfcl_v3"}
+    assert set(subdirs) == {"tau_bench"}

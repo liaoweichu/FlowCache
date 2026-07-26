@@ -150,16 +150,16 @@ Rollout 预算：495×~1.5 min + 800×~1 min + 500×~1.5 min ≈ **33–40 GPU �
 
 | 数据集 | 样本数 | 选取规则 | 角色 | 许可 |
 |---|---|---|---|---|
-| **SWE-rebench-openhands-trajectories**（67k+ 条，平均 64.3 轮；备选 nvidia/Open-SWE-Traces 207k） | **500 轨迹** | 按轨迹长度 / 仓库分层抽样 | 真实重试 / 失败命令 / 分支——**接管原合成 DAG 的结构多样性角色**（Continuum、ThunderAgent 同类选择） | CC BY 4.0 |
-| **Toolathlon-Trajectories**（5k+ 条：17 模型 × 3 次 × 108 任务；消息级时间戳、timeout / fail / max_turn_exceeded 状态） | **500 轨迹** | 按模型分层抽样 | 真实工具等待时间与失败/终止状态——**接管原合成 tool-wait 角色** | CC BY 4.0 |
 | **CATraces**（CacheWise 开源真实 Claude Code 会话，~10M tokens） | 全部可用会话（~100–200，TBD 实测） | 全量 | 真实 coding-agent 长会话；与最近工作（CacheWise, arXiv:2606.16824）直接可比 | 见其仓库 |
+
+> **v0.4 注**：SWE-rebench-openhands-trajectories 与 Toolathlon-Trajectories 已从核心数据集组合中移除（详见 §0.4.4 排除清单与 trim-dataset-portfolio spec）。Branch 结构角色由 τ-bench 内部 replay 扰动覆盖（删边/错标后继），tool-wait 角色由 τ-bench/STB 工具调用实测支撑。
 
 **Tier 3：质量与长上下文**
 
 | 数据集 | 样本数 | 选取规则 | 角色 | 同类论文依据 |
 |---|---|---|---|---|
 | **LongBench** | **1,000**（21 子任务分层） | 按子任务分层 | KV 量化质量主战场（长上下文） | ARKV（arXiv:2603.08727） |
-| **GSM8K** | **300** | 随机抽样，种子冻结 | 量化 accuracy | QKVShare / GraphFlow / ARKV |
+| **GSM8K** | **100**（v0.4 从 300 降） | 随机抽样，种子冻结 | 量化 accuracy sanity（Ch.3） | QKVShare / GraphFlow / ARKV |
 | **MuSiQue** | **300**（原 100） | 按底层问题分组去重后抽样 | 多跳 QA 质量 sanity | 项目原有 |
 | **2WikiMultihopQA** | **300**（原 100） | 同上 | 多跳 QA 质量 sanity | 项目原有 |
 
@@ -171,7 +171,9 @@ Rollout 预算：495×~1.5 min + 800×~1 min + 500×~1.5 min ≈ **33–40 GPU �
 | **BurstGPT** | **2,000 会话窗口** | 按真实 session ID + 时间戳抽取连续窗口 | 真实到达 / 并发 / 会话结构——**替代纯 Poisson 假设的主证据** |
 | **Mooncake trace** | 抽样分析（窗口 TBD） | 按前缀块 hash 抽样 | 大规模前缀块共享结构（E1 画像 + E6 压力面） |
 
-**总量**：**~8,800 workflow 级样本**（495 + 800 + 500 + 500 + 500 + ~150 + 1,000 + 300 + 300 + 300 + 2,000 + 2,000；CATraces 以实测为准）。
+**总量**：**~7,800 workflow 级样本**（495 + 800 + 500 + ~150 + 1,000 + 300 + 300 + 300 + 2,000 + 2,000；CATraces 以实测为准）。v0.4 移除 SWE 轨迹 500 + Toolathlon 500 后较 v0.2 的 ~8,800 减少约 1,000。
+
+> **v0.4 核心样本总量**：**~3,720**（τ-bench 1,320 + BFCL 800 + LongBench 1,000 + GSM8K 100 + StableToolBench 500；trim-dataset-portfolio spec）。核心数据集数封顶 5；辅助数据集（CATraces、MuSiQue、2WikiMultihopQA、LMSYS、BurstGPT、Mooncake）不计入核心总量。spec 原文写 ~3,220 系算术笔误（1,320+800+1,000+100+500=3,720，非 3,220），本册按正确和值 ~3,720 记录。
 
 **规模与边界说明**：
 
@@ -191,10 +193,10 @@ Rollout 预算：495×~1.5 min + 800×~1 min + 500×~1.5 min ≈ **33–40 GPU �
 
 | 数据集 | 核验项 | 不满足时的降级 |
 |---|---|---|
-| StableToolBench 500 | 每 workflow 工具调用次数、API 故障注入事件计数（虚拟 API 服务器缓存命中时确定性重放）、缓存命中率 | 降级为"family 泛化 + 任务成功率"；等待/重试结论由 Toolathlon 与 τ-bench 支撑 |
-| Toolathlon 500 | 消息级时间戳完整率、timeout / fail / max_turn_exceeded 事件计数、per-tool 等待分布 | 时间戳缺失比例高时，等待时间结论降级为描述性 |
-| SWE 轨迹 500 | 重试 / 失败命令事件计数、轨迹轮数分布 | 若普遍无重试，分支敏感性改由 Toolathlon 承担并记录 |
+| StableToolBench 500 | 每 workflow 工具调用次数、API 故障注入事件计数（虚拟 API 服务器缓存命中时确定性重放）、缓存命中率 | 降级为"family 泛化 + 任务成功率"；等待/重试结论由 τ-bench 支撑（v0.4 移除 Toolathlon 后） |
 | BurstGPT 2,000 | session ID 连续性与时间戳完整性 | 降级为次要到达证据，Poisson/MMPP 假设保留为主并标注 |
+
+> **v0.4 注**：原 Toolathlon 500 与 SWE 轨迹 500 核验行已随数据集移除而删除（trim-dataset-portfolio spec）。
 
 冻结清单：`experiments/subsets/` 下每个数据集一个冻结文件（task / trajectory / session ID 列表 + 选取种子）。
 
@@ -208,6 +210,8 @@ Rollout 预算：495×~1.5 min + 800×~1 min + 500×~1.5 min ≈ **33–40 GPU �
 | WebArena / OSWorld | 自托管 Docker/VM 基建过重；OSWorld 的 WAIT/FAIL/DONE 语义列为可选扩展，不进 14 周主证据包 |
 | Azure LLM Inference Trace | 公开可得性与字段未核实，暂不使用 |
 | 任何"会话暂停/恢复"原生数据集 | 公开调研确认**不存在**；暂停/恢复语义由 replay 框架的到达模拟产生（实验操作，非数据集） |
+| **SWE 轨迹**（v0.4 移除，原 Ch.5 压力面 200） | 200 样本不足以单独成章；同领域论文鲁棒性章通常 0–1 个数据集；SWE 解决率低（Qwen2.5-7B 小模型能力不足）；与 FlowCache C1–C3 主线（trace 协议 / 联合控制器 / reuse-fidelity 错位）关联弱。Migration：rebuttal 时可扩展到 500 episodes 补做 |
+| **Toolathlon**（v0.4 移除，原 Ch.5 压力面 200） | 200 样本证据力弱；多 agent 协作场景与 FlowCache 单 agent + 工具 workload 主线偏离；适配器集成成本高。Migration：rebuttal 时可引用 τ-bench retail/airline 两域作为 workload 多样性证据 |
 
 ### 0.4.5 统一运行参数
 
@@ -224,12 +228,80 @@ Rollout 预算：495×~1.5 min + 800×~1 min + 500×~1.5 min ≈ **33–40 GPU �
 
 | 原合成 DAG 角色（涉及章节） | 替代方案（全部为真实数据或 replay 时操作） |
 |---|---|
-| 结构因果敏感性：分支率/深度/next-use 与 locality 关系（E1、E2） | SWE 轨迹按深度 / 宽度 / 重试次数**分层**做剂量–反应分析（真实结构分层，非生成） |
+| 结构因果敏感性：分支率/深度/next-use 与 locality 关系（E1、E2） | **τ-bench / BFCL / STB 真实轨迹**按深度 / 宽度分层做剂量–反应分析；v0.4 移除 SWE 轨迹后改用 τ-bench 内部结构差异（真实结构分层，非生成） |
 | DAG 边缺失/噪声、branch 误预测（E6 轴 3/4） | **replay 时特征扰动**：对预测器输入的已声明后继做删边/错标——作用于特征的实验操作，不是数据集 |
-| tool-wait 受控扫描（G3、E7-F4） | Toolathlon 真实等待分布 + replay 时时间缩放（×0.5 / ×2 / 重尾化，参数扰动） |
+| tool-wait 受控扫描（G3、E7-F4） | **τ-bench / STB 工具调用实测等待分布** + replay 时时间缩放（×0.5 / ×2 / 重尾化，参数扰动）；v0.4 移除 Toolathlon 后改用 τ-bench/STB 支撑 |
 | burst arrival（E6 轴 5） | BurstGPT 真实突发窗口为主证据；MMPP 合成模型降为次要参照 |
-| 深链 parent 缺失（E7-F5） | SWE 长轨迹（≥60 轮）压力面 |
-| 取消语义（原 cancel 族） | Toolathlon 的 max_turn_exceeded / fail 状态；WebArena 不可达任务（可选扩展） |
+| 深链 parent 缺失（E7-F5） | **τ-bench 长会话压力 cell**（预算 10%）；v0.4 移除 SWE 长轨迹后改用 τ-bench 内部长会话覆盖 |
+| 取消语义（原 cancel 族） | **τ-bench / STB 工具失败与重试状态**；WebArena 不可达任务（可选扩展）；v0.4 移除 Toolathlon 后改用 τ-bench/STB 的工具失败语义 |
+
+### 0.4.7 数据集数与同领域论文对比（v0.4 新增）
+
+trim-dataset-portfolio spec 要求 FlowCache 核心数据集数封顶 5，下表对照同领域 KV cache 管理 / 前缀缓存论文的数据集规模：
+
+| # | 论文 | Venue/Year | 数据集数 | 总样本量 | 来源 |
+|---|---|---|---|---|---|
+| 1 | **CacheGen** | SIGCOMM 2024 (arXiv 2310.07240) | **4** | **662 contexts** | 论文 §1 摘要："four datasets (662 contexts in total)" |
+| 2 | **EvicPress** | arXiv 2512.14946 (2025-12) | **12** | **~600 contexts**（估算） | 论文摘要："Evaluation on 12 datasets and 5 models" |
+| 3 | **KVFlow** | NeurIPS 2025 (arXiv 2507.07400) | **~2** | 未明确（合成 workflow） | 论文 §4 实验：参数化合成 |
+| 4 | **vLLM / PagedAttention** | SOSP 2023 | **2** | ~1,000s requests/batch | 论文 §10 评估（ShareGPT, Alpaca） |
+| 5 | **SGLang / RadixAttention** | NeurIPS 2024 (arXiv 2312.07104) | **~4–5** | ~1,000s 总样本 | 论文 §5 评估（MMLU/HellaSwag/GSM-8K/ShareGPT/MT-Bench） |
+| 6 | **τ-bench 原论文** | ICLR 2025 (arXiv 2406.12045) | **1** | **1,320 episodes** | 论文主表 pass^k 评估（165 tasks × 8 seeds） |
+| 7 | **FlowCache v0.4** | 本册 | **5**（核心） | **~3,720 samples**（核心：τ-bench 1,320 + BFCL 800 + LongBench 1,000 + GSM8K 100 + STB 500） | trim-dataset-portfolio spec |
+
+**对比结论**：
+
+- 同领域论文数据集数中位数 **2 个**（排除生产 trace 论文），范围 1–4 个（排除 EvicPress 12 和 Ada-KV 29 子任务）。
+- 同领域论文总样本量中位数 **~660 contexts**，范围 150–1,320 episodes。
+- FlowCache v0.4 的 5 个核心数据集是中位数的 **2.5×**（v0.3 的 7 个为 3.5×），~3,720 样本是中位数的 **5.6×**（v0.3 的 ~4,120 为 6.2×）。
+- v0.4 精简后与同领域论文的差距缩小，且 5 个核心数据集按 3 层角色（主表 2 + 质量面 2 + 鲁棒性 1）分层，每层均有明确分工，不存在冗余。
+
+### 0.4.8 为何不能只用 GSM8K（v0.4 新增）
+
+**背景**：QKVShare（arXiv:2605.03884，2026-05 预印本，未被任何会议/期刊正式接收）仅用 GSM8K 150 problems 就完成了多 agent KV handoff 论文。审稿人可能质疑：FlowCache 为何不效仿，只用 GSM8K？
+
+**核心回答**：QKVShare 与 FlowCache 的评估场景根本不同，GSM8K 无法支撑 FlowCache 的 C1/C2/C3 任一主张。
+
+#### 0.4.8.1 场景差异
+
+| 维度 | QKVShare | FlowCache |
+|---|---|---|
+| 评估场景 | inter-agent handoff（agent 间 KV 传递） | intra-agent multi-turn（单 agent 内 tool-call 暂停/恢复） |
+| KV 操作位置 | agent 之间 | agent 内部（跨 turn） |
+| 数学任务角色 | 载体任务，验证 handoff 后精度 | 不适用——FlowCache 不评估数学推理 |
+| 多轮结构来源 | hop 数（2-5 agent 串联） | tool-call 轮次（τ-bench 平均 10+ 轮） |
+| KV 管理决策 | 量化 bit 分配（per-token） | 驻留/驱逐 + 精度联合（per-block） |
+
+QKVShare 的"多 hop"是 agent 间串联，每个 agent 完整消费 KV 后传给下一个；FlowCache 的"多轮"是单 agent 内 tool-call 暂停/恢复，KV 必须在 tool 执行期间驻留或被驱逐。两者所需的工作负载结构完全不同。
+
+#### 0.4.8.2 GSM8K 与 FlowCache 三条核心主张的匹配度
+
+| FlowCache 核心主张 | 所需工作负载特征 | GSM8K 是否具备 | 说明 |
+|---|---|:---:|---|
+| **C1：trace 协议** | 多轮 agent 工具调用，产生可追踪的 block-level KV 复用结构 | ❌ | GSM8K 是单轮输入→单轮输出，无工具调用、无多轮会话、无 KV block 复用模式 |
+| **C2：联合 precision+residency 控制器** | 跨 tool-call 边界的 KV cache 驻留/驱逐决策（暂停/恢复语义） | ❌ | GSM8K 无 tool-call 边界，无 pause/resume，整个 prefill 一次完成 |
+| **C3：reuse-fidelity 错位实证** | 前缀复用机会（R）与保真风险（D）的错位可被利用 | ❌ | GSM8K 每题独立，无共享前缀（除 few-shot prompt），无 reuse 机会即无错位可利用 |
+
+#### 0.4.8.3 若强行只用 GSM8K 的后果
+
+| 实验 | 用 GSM8K 替代后的后果 |
+|---|---|
+| **Ch.1 工作负载画像** | 无 multi-turn 结构可画像；overlap/LCP/next-use/working-set 全部退化为 0 或无意义 |
+| **Ch.2 R-D 错位 Pilot** | 无 reuse 机会 → R 维度恒为 0 → 无法构造 R-D 错位四象限 → G2 判定 NO-GO → 路线 A 直接终止 |
+| **Ch.3 估计器有效性** | reuse 侧无数据可训练；fidelity 侧可做但仅剩单维度，无法支撑 C2 的"联合"主张 |
+| **Ch.4 端到端主结果** | 无多轮 workload → 无 cache hit → 所有策略退化为 No-Cache → FlowCache-Joint 与 baseline 无差异 |
+| **Ch.5 鲁棒性** | 无 family-out 可做（GSM8K 只有一个 domain） |
+
+**结论**：强行只用 GSM8K 会导致 FlowCache 的 C1/C2/C3 三条主张全部无法验证，实验体系崩塌。
+
+#### 0.4.8.4 GSM8K 在 FlowCache 中的合理角色
+
+GSM8K 在 FlowCache 中的角色**且仅是** Ch.3 fidelity 质量面的 accuracy sanity（100 samples）：
+
+- **用途**：验证 Q8/Q4 量化后模型基础推理能力未崩（accuracy 非劣界检验）
+- **样本量**：100（QKVShare 用 150，FlowCache 用 100 已足够；GSM8K 测试集总量 1,319，100 为随机抽样子集）
+- **不可替代性**：低——LongBench 的 QA 子任务可覆盖类似功能，但 GSM8K 是领域最通用的 accuracy sanity benchmark，保留成本低（100 samples 录制 < 0.5 GPU 小时）
+- **角色边界**：不作为主表、画像、鲁棒性数据集；不扩大样本量；不因 QKVShare 用 150 而调整
 
 ## 0.5 Cache-Compatible 序列化规则（IDEA §6.2）
 
@@ -578,8 +650,8 @@ G1 验证 FlowCache 的**第一核心假设**（IDEA §0.3-1）：
 | 数据集 | 样本数（Ch.5 用量） | v0.2 原计划用量 | 说明 |
 |---|---|---|---|
 | StableToolBench | 500 | 500 | Ch.5 family-out 轴 |
-| SWE-rebench-openhands-trajectories | 200 | 500 | Ch.5 压力面 |
-| Toolathlon-Trajectories | 200 | 500 | Ch.5 压力面 |
+
+> **v0.4 注（trim-dataset-portfolio spec）**：SWE-rebench-openhands-trajectories（原 200）与 Toolathlon-Trajectories（原 200）已从 Ch.5 移除。Ch.5 鲁棒性压力面仅保留 StableToolBench 500 作 family-out 主证据；branch 噪声轴改由 τ-bench 内部 replay 扰动（删边/错标后继）覆盖，不另设数据集。Migration：rebuttal 时可扩展 STB 到更大样本或补做 SWE 500。
 
 **BFCL v3 multi-turn 集成方式**（基于 2026-07-25 调研）：
 
@@ -614,7 +686,7 @@ trace 来源：E1 录制的可重放 trace（τ-bench 与 BFCL 均为 rollout �
 | GDSF | 强启发式 | size-aware |
 | SizeCost | 强启发式（age + size + measured recompute cost） | IDEA §4.3 第一档 |
 | Oracle-Belady | 上界（未来已知） | 离线计算 |
-| Oracle-Cost | 上界（未来已知 + 成本模型） | 离线计算，成本按 IDEA §2.1 实测建模 |
+| Oracle-Cost | 上界（未来已知 + 成本模型） | 离线计算，cost model：驱逐时选 `saved_prefill_ms / next_use_distance` 最小的块；`block_cost` 来自 step 级 `prefill_ms` 按 token 范围比例分摊（见 `experiments/e1/compare_oracle.py:build_access_trace`） |
 | **KVFlow 或 PBKV（≥1 个）** | closest baseline 可比性判定 | 公平协议（同引擎/模型/trace/预算）下忠实运行；不可忠实复现 → 标 `*-inspired` 并记录不兼容原因清单 |
 
 **可比性判定流程**：①获取官方代码/论文协议 → ②接口适配评估 → ③在同一 open-loop replay 上运行 → ④若引擎/语义不兼容，记录具体不兼容点（5 项以内）并给出 inspired variant 的忠实度说明 → ⑤两个均失败则触发 IDEA §11"所有 closest baseline 均无法忠实比较"风险条目。
@@ -623,12 +695,12 @@ trace 来源：E1 录制的可重放 trace（τ-bench 与 BFCL 均为 rollout �
 
 | 检查项 | KVFlow | PBKV |
 |---|---|---|
-| 官方代码/协议可获得性 | TBD | TBD |
-| 所需引擎钩子（block index / eviction hook / prefetch hook）本后端是否具备 | TBD | TBD |
-| 其缓存语义是否与本研究 exact-prefix 语义一致 | TBD | TBD |
-| 其特征是否违反本研究禁止特征清单（未来信息泄漏检查） | TBD | TBD |
-| 在本 replay 协议下可忠实运行的 trace 覆盖率 | TBD | TBD |
-| 判定（faithful / inspired / 不可比 + 原因 ≤ 5 项） | TBD | TBD |
+| 官方代码/协议可获得性 | AVAILABLE（[github.com/PanZaifeng/KVFlow](https://github.com/PanZaifeng/KVFlow)，NeurIPS 2025，Apache-2.0，末次 commit 2026-03-13） | UNAVAILABLE（arXiv 2605.06472 无代码链接，多轮搜索无官方/第三方 repo） |
+| 所需引擎钩子（block index / eviction hook / prefetch hook）本后端是否具备 | NEEDS_ADAPTER：仓库含魔改 SGLang + SScheduler PFEngine，需将 τ-bench `block_assignments` 翻译为 SGLang prefix-tree 请求 + `PlanManager.update_agent_timestep(...)`；Rust/CUDA 编译需 WSL2/Linux | N/A：无代码 |
+| 其缓存语义是否与本研究 exact-prefix 语义一致 | NEEDS_ADAPTER：ASG（Agent Step Graph）抽象与 `block_hash`/`parent_hash` DAG 天然契合，但需适配层 | N/A |
+| 其特征是否违反本研究禁止特征清单（未来信息泄漏检查） | TBD（待 adapter 实现后验证） | N/A |
+| 在本 replay 协议下可忠实运行的 trace 覆盖率 | TBD（待 adapter 实现后测量） | N/A |
+| 判定（faithful / inspired / 不可比 + 原因 ≤ 5 项） | **faithful（待 adapter 实现）**：官方代码可用，τ-bench trace 需 adapter 但语义兼容 | **inspired variant**：无官方代码，按论文 GraphSAGE + workflow-history attention + 多步预测核心 idea 实现 `pbkv_inspired.py`，明确标注差异 |
 
 ## G1.5 测试指标
 
@@ -2211,15 +2283,16 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 
 在分布偏移与扰动下检验 FlowCache 的稳健性，给出主结论的适用边界：
 
-1. **workflow-family-out**：真实 family 之间互泛化（IDEA §8 E6 首项，与 G5 主判定面一致，v0.2 扩为双通道）；
+1. **workflow-family-out**：真实 family 之间互泛化（IDEA §8 E6 首项，与 G5 主判定面一致；v0.4 精简为单通道，仅 τ-bench ↔ StableToolBench）；
 2. **9 个扰动轴**上的性能保持率与失效模式（v0.2：扰动全部由真实数据驱动或 replay 时操作实现，无合成数据集）。
+
+> **v0.4 注（trim-dataset-portfolio spec）**：鲁棒性章节从 3 轴（family-out / 到达扰动 / branch 噪声）精简为 2 轴（family-out / 到达扰动）。branch 噪声轴用 τ-bench 内部 replay 扰动覆盖（删边/错标后继，轴 3/4），不另设数据集。原 family-out 通道②（SWE ↔ Toolathlon）已移除。
 
 ## E6.2 数据集与子集定义
 
 | 数据 | 样本数 | 用途 |
 |---|---|---|
-| τ-bench ↔ StableToolBench | 495 ↔ 500 | family-out 通道①（工具型互泛化） |
-| SWE ↔ Toolathlon | 500 ↔ 500 | family-out 通道②（真实轨迹互泛化，结构差异最大） |
+| τ-bench ↔ StableToolBench | 495 ↔ 500 | family-out 通道①（工具型互泛化，v0.4 唯一通道） |
 | BFCL | 800 | 长度维度的补充面（其 long_context 类 200 条天然提供上下文长度轴） |
 | LMSYS-Chat-1M | 2,000 | 负对照（burst 与纯追加场景） |
 | BurstGPT | 2,000 窗口 | 真实 burst arrival 证据（轴 5 主证据） |
@@ -2228,7 +2301,7 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 ## E6.3 样本数与功效分析
 
 - 每个扰动轴：主 cell（预算 25%、并发 8）× 495 episodes × 3 种子；
-- family-out：双向各 500 test 单元；
+- family-out：双向各 500 test 单元（v0.4 单通道：τ-bench ↔ STB）；
 - 功效：描述性 + CI；鲁棒性结论以"退化幅度是否在预注册可接受带内"判定（带：TBD，建议 p95 TTFT 退化 ≤ 20%、goodput 退化 ≤ 15%，W12 前预注册）。
 
 ## E6.4 对照与扰动轴（IDEA §8 E6 全量，v0.2 真实数据化）
@@ -2237,12 +2310,12 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 
 | # | 扰动轴 | 操作化（v0.2：真实数据 / replay 时操作） |
 |---|---|---|
-| 1 | workflow-family-out | 双通道交叉（E6.2） |
+| 1 | workflow-family-out | 单通道交叉（E6.2；v0.4 移除 SWE↔Toolathlon 通道②，仅 τ-bench↔STB） |
 | 2 | 不同上下文长度 | BFCL long_context 类 + LongBench 长度分层（真实长度分布） |
 | 3 | DAG 边缺失/噪声 | **replay 时特征扰动**：对预测器输入的已声明后继随机删边 p ∈ {5%, 15%, 30%}（实验操作，非数据集；缓存兼容性判定不受影响，IDEA §1.4 铁律） |
-| 4 | branch misprediction | **replay 时特征扰动**：分支标签错标（错误率档位 TBD） |
+| 4 | branch misprediction | **replay 时特征扰动**：分支标签错标（错误率档位 TBD）；v0.4 起由 τ-bench 内部 replay 扰动覆盖（删边/错标后继），不另设数据集 |
 | 5 | burst arrival | **BurstGPT 真实突发窗口**（主证据）；MMPP 合成模型次要参照（×2/×4 强度） |
-| 6 | 工具等待分布变化 | Toolathlon 真实等待分布 + replay 时时间缩放（×0.5 / ×2 / 重尾化） |
+| 6 | 工具等待分布变化 | **τ-bench / STB 工具调用实测等待分布** + replay 时时间缩放（×0.5 / ×2 / 重尾化）；v0.4 移除 Toolathlon 后改用 τ-bench/STB 支撑 |
 | 7 | GPU budget 突变 | 运行中预算阶跃（如 50% → 10%），观察恢复 |
 | 8 | CPU 带宽竞争 | 注入并发 PCIe 负载（受控背景传输） |
 | 9 | predictor calibration drift | 用旧校准参数跑新分布（时间错位模拟） |
@@ -2281,7 +2354,7 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 | 步骤 | 内容 | 产物 |
 |---|---|---|
 | 6.1 | 扰动轴参数冻结（预注册可接受带） | `experiments/e6/perturbation-config.yaml` |
-| 6.2 | family-out 双通道运行 | 结果表 |
+| 6.2 | family-out 单通道运行（v0.4：τ-bench↔STB） | 结果表 |
 | 6.3 | 各扰动轴运行（主 cell） | 结果表 |
 | 6.4 | 质量子集 + 失效归因 | 归因记录 |
 | 6.5 | 汇总 | `experiments/e6/e6-report.md` |
@@ -2310,8 +2383,6 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 |---|---|---|---|---|---|---|
 | 1 family-out ① | τ→STB | TBD | TBD | TBD | TBD | TBD |
 | 1 family-out ① | STB→τ | TBD | TBD | TBD | TBD | TBD |
-| 1 family-out ② | SWE→Toolathlon | TBD | TBD | TBD | TBD | TBD |
-| 1 family-out ② | Toolathlon→SWE | TBD | TBD | TBD | TBD | TBD |
 | 2 上下文长度 | 分层 | TBD | TBD | TBD | TBD | TBD |
 | 3 特征删边 | 5% / 15% / 30% | TBD | TBD | TBD | TBD | TBD |
 | 4 branch 错标 | 5% / 15% / 30% | TBD | TBD | TBD | TBD | TBD |
@@ -2321,6 +2392,8 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 | 8 CPU 竞争 | 25% / 50% | TBD | TBD | TBD | TBD | TBD |
 | 9 calibration drift | val→test | TBD | TBD | TBD | TBD | TBD |
 | 10 前缀共享压力（Mooncake） | 抽样窗口 | TBD | TBD | TBD | TBD | TBD |
+
+> **v0.4 注**：原"1 family-out ②（SWE→Toolathlon / Toolathlon→SWE）"两行已随 SWE/Toolathlon 数据集移除而删除。
 
 **表 E6-2：LMSYS 负对照（2,000 会话）**
 
@@ -2333,6 +2406,11 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 
 - 某轴失效 → 如实报告失效条件（这本身是贡献 3 的"失败条件"证据，IDEA §9-3）；
 - 时间不足 → 裁剪轴 2/8/10 并记录，保留轴 1/3/5/6/9 为核心。
+- **v0.4 鲁棒性压力面 rebuttal 策略（trim-dataset-portfolio spec）**：v0.4 将 Ch.5 压力面从 3 数据集（STB 500 + SWE 200 + Toolathlon 200）精简为 1 数据集（仅 STB 500）。若 rebuttal 时审稿人要求补充压力面证据：
+  - **首选**：扩展 StableToolBench 到更大样本（如 500 → 1,000）增强 family-out 统计功效；
+  - **次选**：补做 SWE 轨迹 500 episodes（当前 200 样本不足，扩到 500 后可单独成章）；
+  - **多 agent 场景**：引用 τ-bench retail/airline 两域作为 workload 多样性证据，替代 Toolathlon 的多 agent 协作场景；
+  - 当前 14 周主证据包不做上述扩展，仅在 rebuttal 阶段按需启动。
 
 ## E6.13 与 IDEA 各节的对应关系
 
