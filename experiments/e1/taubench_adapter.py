@@ -306,7 +306,14 @@ class TauBenchAdapter:
         Qwen 兼容的文本描述。
         """
         tools = self._env.tools_info
-        lines = ["Available tools (use <tool_call> JSON to invoke):"]
+        lines = [
+            "When you need to use a tool, you MUST output a tool call in EXACTLY this format:",
+            '<function_call>',
+            '{"name": "tool_name", "arguments": {"arg1": "val1", "arg2": "val2"}}',
+            '</function_call>',
+            "",
+            "Available tools:",
+        ]
         for tool in tools:
             if isinstance(tool, dict) and "function" in tool:
                 fn = tool["function"]

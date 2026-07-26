@@ -23,6 +23,7 @@ tau-bench only（datasets: ["tau-bench"]），_run_episode_bfcl 路径与 BFCLAd
 
 import json
 import logging
+import multiprocessing as mp
 import os
 import re
 import sys
@@ -49,9 +50,23 @@ BLOCK_SIZE = 16          # tokens per block
 MAX_NEW_TOKENS = 512     # max generated tokens per assistant turn
 MAX_WORKFLOW_TURNS = 30  # safety limit on conversation turns
 
-# Regex for tau-bench style tool call parsing (<function_call>...</function_call>)
+# Regex for tool call parsing
+# Qwen2.5 may emit tool calls in several formats:
+#  1. <function_call>{"name": "...", "arguments": {...}}</function_call> (ideal)
+#  2. <tool_call>{"name": "...", "arguments": {...}}</tool_call> (alt tag)
+#  3. func_name(arg1=val1, arg2=val2) (Python-style, with or without ```python)
+#  4. ```json\n{"name": "...", "arguments": {...}}\n``` (JSON block)
 _TOOL_CALL_RE = re.compile(
-    r"<function_call>\s*(.*?)\s*</function_call>", re.DOTALL
+    r"<(?:function_call|tool_call)>\s*(.*?)\s*</(?:function_call|tool_call)>",
+    re.DOTALL,
+)
+# Matches Python-style: func_name(key1=val1, key2="val2", ...)
+_PY_TOOL_CALL_RE = re.compile(
+    r"(?:```python\s*)?([a-zA-Z_][a-zA-Z0-9_]*)\(([^)]*(?:\([^)]*\)[^)]*)*)\)",
+)
+# Matches ```json { ... } ``` blocks
+_JSON_BLOCK_RE = re.compile(
+    r"```json\s*(\{.*?\})\s*```", re.DOTALL,
 )
 
 # ---------------------------------------------------------------------------
@@ -167,25 +182,105 @@ _SYNTHETIC_WORKFLOWS = [
 
 def parse_tool_call(text: str) -> Optional[Dict]:
     """
-    Extract the first <function_call>...</function_call> block from model output
-    and parse it as JSON.
+    Extract a tool call from model output, supporting multiple formats
+    that Qwen2.5 may emit:
 
-    Returns a dict with {'name': ..., 'arguments': {...}} or None if no tool call found.
+    1. <function_call>{"name": "foo", "arguments": {...}}</function_call>
+    2. <tool_call>{"name": "foo", "arguments": {...}}</tool_call>
+    3. foo(arg1="val1", arg2=42)  (Python-style, with or without ```python)
+    4. ```json {"name": "foo", "arguments": {...}} ``` (JSON block)
+
+    Returns a dict with {'name': ..., 'arguments': {...}} or None.
     """
+    # --- Strategy 1: XML tags (<function_call> or <tool_call>) ---
     match = _TOOL_CALL_RE.search(text)
-    if not match:
-        return None
-    raw = match.group(1).strip()
-    try:
-        parsed = json.loads(raw)
-        # Handle both {name, arguments} and flat argument dicts
-        if "name" in parsed and "arguments" in parsed:
-            return {"name": str(parsed["name"]), "arguments": parsed["arguments"]}
+    if match:
+        raw = match.group(1).strip()
+        try:
+            parsed = json.loads(raw)
+            if "name" in parsed and "arguments" in parsed:
+                return {"name": str(parsed["name"]), "arguments": parsed["arguments"]}
+            else:
+                return {"name": "unknown_tool", "arguments": parsed}
+        except json.JSONDecodeError:
+            pass  # fall through to next strategy
+
+    # --- Strategy 2: Python-style func_name(key=val, ...) ---
+    py_match = _PY_TOOL_CALL_RE.search(text)
+    if py_match:
+        func_name = py_match.group(1)
+        args_str = py_match.group(2)
+        arguments = _parse_python_kwargs(args_str)
+        if func_name and func_name not in ("json", "python", "python3", "py"):
+            return {"name": func_name, "arguments": arguments}
+
+    # --- Strategy 3: ```json {...} ``` block ---
+    json_match = _JSON_BLOCK_RE.search(text)
+    if json_match:
+        try:
+            parsed = json.loads(json_match.group(1))
+            if "name" in parsed and "arguments" in parsed:
+                return {"name": str(parsed["name"]), "arguments": parsed["arguments"]}
+            elif isinstance(parsed, dict):
+                return {"name": "unknown_tool", "arguments": parsed}
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
+def _parse_python_kwargs(args_str: str) -> Dict:
+    """Parse Python-style keyword arguments like key1="val1", key2=42, key3=true.
+
+    Returns a simple dict of string values (numbers/booleans are stringified
+    since tau-bench tools accept strings via JSON anyway).
+    """
+    result: Dict[str, str] = {}
+    if not args_str.strip():
+        return result
+
+    # Simple key=value parser (handles quoted strings, unquoted numbers/bools)
+    i = 0
+    n = len(args_str)
+    while i < n:
+        # Skip whitespace and commas
+        while i < n and args_str[i] in " ,\t\n":
+            i += 1
+        if i >= n:
+            break
+        # Read key
+        key_start = i
+        while i < n and args_str[i] not in "= ,\t\n":
+            i += 1
+        key = args_str[key_start:i].strip()
+        # Skip =
+        while i < n and args_str[i] != "=":
+            i += 1
+        i += 1  # skip =
+        # Read value
+        while i < n and args_str[i] in " \t\n":
+            i += 1
+        if i >= n:
+            break
+        if args_str[i] == '"':
+            # Quoted string
+            i += 1
+            val_start = i
+            while i < n and args_str[i] != '"':
+                if args_str[i] == '\\':
+                    i += 2
+                else:
+                    i += 1
+            value = args_str[val_start:i]
+            i += 1  # skip closing quote
         else:
-            return {"name": "unknown_tool", "arguments": parsed}
-    except json.JSONDecodeError:
-        logger.warning("Failed to parse tool call JSON: %s", raw[:120])
-        return None
+            # Unquoted (number, boolean, identifier)
+            val_start = i
+            while i < n and args_str[i] not in " ,\t\n)":
+                i += 1
+            value = args_str[val_start:i]
+        result[key] = value
+    return result
 
 
 def _parse_bfcl_tool_calls(text: str) -> List[str]:
@@ -313,13 +408,18 @@ class TrajectoryRecorder:
       6. Save the complete trajectory as JSON.
     """
 
-    def __init__(self, config_path: str = "experiments/e1/config.yaml"):
+    def __init__(self, config_path: str = "experiments/e1/config.yaml",
+                 gpu_id: Optional[int] = None):
         self._config_path = config_path
         self._config = self._load_config(config_path)
         self._block_size = int(self._config.get("cache", {}).get("block_size", BLOCK_SIZE))
+        self._gpu_id = gpu_id  # None = use all GPUs (device_map="auto")
 
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        logger.info("Using device: %s", self._device)
+        if gpu_id is not None:
+            self._device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
+        else:
+            self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logger.info("Using device: %s (gpu_id=%s)", self._device, gpu_id)
 
         self._model, self._tokenizer = self._init_model()
 
@@ -457,10 +557,17 @@ class TrajectoryRecorder:
         # insufficient room for generate's KV cache → OOM mid-episode.
         max_memory = {}
         if torch.cuda.is_available():
-            gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
-            # Reserve ~25% of GPU for KV cache + activations
-            model_budget_gb = max(1.0, gpu_mem_gb * 0.75)
-            max_memory = {0: f"{model_budget_gb:.1f}GB", "cpu": "64GB"}
+            # When gpu_id is set, pin model to that single GPU
+            if self._gpu_id is not None:
+                device_map = {"": f"cuda:{self._gpu_id}"}
+                gpu_mem_gb = torch.cuda.get_device_properties(self._gpu_id).total_memory / 1e9
+                model_budget_gb = max(1.0, gpu_mem_gb * 0.75)
+                max_memory = {self._gpu_id: f"{model_budget_gb:.1f}GB", "cpu": "64GB"}
+            else:
+                gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+                # Reserve ~25% of GPU for KV cache + activations
+                model_budget_gb = max(1.0, gpu_mem_gb * 0.75)
+                max_memory = {0: f"{model_budget_gb:.1f}GB", "cpu": "64GB"}
             logger.info(
                 "GPU memory budget: %.1fGB model / %.1fGB total (reserving %.1fGB for KV+activations)",
                 model_budget_gb, gpu_mem_gb, gpu_mem_gb - model_budget_gb,
@@ -1723,15 +1830,23 @@ class TrajectoryRecorder:
         return written
 
     def _record_tau_bench_g1(
-        self, seeds: List[int], resume: bool, max_episodes: Optional[int]
+        self, seeds: List[int], resume: bool, max_episodes: Optional[int],
+        task_start: int = 0, task_end: Optional[int] = None,
     ) -> int:
         """Record all tau-bench episodes across (retail, airline) × seeds.
 
         Pipelining: runs CONCURRENT_EPISODES in parallel threads.
         While one thread waits for DeepSeek API (step_respond), the other
         thread uses GPU (model.generate), achieving ~2-3x speedup.
+
+        Args:
+            task_start: First task index to process (for chunked multi-GPU).
+            task_end: Last task index (exclusive). None = all tasks.
         """
-        CONCURRENT_EPISODES = 3
+        # Initialize counters (also used by multi-GPU workers that
+        # bypass _record_all_g1).
+        self._skip_count = getattr(self, "_skip_count", 0)
+        self._oom_log = getattr(self, "_oom_log", [])
         written = 0
         _write_lock = threading.Lock()
 
@@ -1749,15 +1864,20 @@ class TrajectoryRecorder:
                 })
                 continue
 
+            # Apply task range for chunked multi-GPU processing
+            effective_start = max(0, task_start)
+            effective_end = min(num_tasks, task_end) if task_end is not None else num_tasks
+            effective_start = min(effective_start, effective_end)
+
             for seed in seeds:
                 if max_episodes is not None and written >= max_episodes:
                     break
 
-                task_idx = 0
-                while task_idx < num_tasks:
+                task_idx = effective_start
+                while task_idx < effective_end:
                     # Build batch of up to CONCURRENT_EPISODES
                     batch_args = []
-                    while len(batch_args) < CONCURRENT_EPISODES and task_idx < num_tasks:
+                    while len(batch_args) < CONCURRENT_EPISODES and task_idx < effective_end:
                         if max_episodes is not None and (written + len(batch_args)) >= max_episodes:
                             break
                         task_id = f"{domain}-{task_idx}"
@@ -1813,6 +1933,21 @@ class TrajectoryRecorder:
                                 "dataset": "tau-bench", "task_id": args["task_id"],
                                 "seed": args["seed"], "error": "OOM",
                             })
+                        except RuntimeError as exc:
+                            # Some CUDA OOM variants manifest as RuntimeError
+                            if "out of memory" in str(exc).lower():
+                                torch.cuda.empty_cache()
+                                logger.error("OOM (RuntimeError): %s seed=%d: %s",
+                                             args["task_id"], args["seed"], exc)
+                                self._oom_log.append({
+                                    "dataset": "tau-bench", "task_id": args["task_id"],
+                                    "seed": args["seed"], "error": f"OOM: {exc}",
+                                })
+                            else:
+                                logger.error(
+                                    "RuntimeError: %s seed=%d task=%s: %s",
+                                    args["domain"], args["seed"], args["task_id"], exc,
+                                )
                         except Exception as exc:
                             logger.error(
                                 "Episode failed: %s seed=%d task=%s: %s",
@@ -1904,6 +2039,221 @@ def _safe_filename(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Multi-GPU recording (6× RTX 4090D)
+# ---------------------------------------------------------------------------
+#
+# Each GPU runs as an independent subprocess (multiprocessing.spawn).
+# Within each GPU, CONCURRENT_EPISODES threads pipeline DeepSeek API
+# calls with model.generate() for 2-3× speedup.
+#
+# With 6 GPUs × 3 concurrent = ~18× throughput vs single-threaded.
+
+_NUM_GPUS = 6                  # number of GPUs to use
+CONCURRENT_EPISODES = 3        # parallel threads per GPU
+
+
+def _gpu_worker_process(
+    physical_gpu_id: int,
+    seed_queue: mp.Queue,
+    config_path: str,
+    output_dir: str,
+    max_episodes: Optional[int],
+    resume: bool,
+    result_queue: mp.Queue,
+):
+    """Standalone worker for one GPU (runs in a spawned subprocess).
+
+    Sets CUDA_VISIBLE_DEVICES so torch only sees this GPU, then creates
+    a TrajectoryRecorder pinned to cuda:0 (the only visible GPU).
+    Pulls seeds one at a time from ``seed_queue`` (dynamic load-balancing
+    across GPUs) and puts (written, skipped, oom) per-seed into
+    ``result_queue``.
+    """
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(physical_gpu_id)
+    # Must re-import torch AFTER setting CUDA_VISIBLE_DEVICES
+    import torch
+
+    # Configure logging for this subprocess (per-GPU log file to avoid contention)
+    pid = os.getpid()
+    log_path = os.path.join(
+        os.path.dirname(__file__), f"record_trajectories_gpu{physical_gpu_id}.log"
+    )
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setFormatter(logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(message)s"
+    ))
+    logging.getLogger().addHandler(file_handler)
+    logger = logging.getLogger(__name__)
+    logger.info("[GPU %d | PID %d] Worker started", physical_gpu_id, pid)
+
+    recorder = None
+    total_written = 0
+    total_skipped = 0
+    total_oom = 0
+    all_oom_log = []
+
+    try:
+        while True:
+            try:
+                item = seed_queue.get(timeout=3)
+            except Exception:
+                # Queue empty (timeout) → done
+                break
+
+            if item is None:
+                break
+
+            seed, chunk_start, chunk_end = item
+            logger.info("[GPU %d] Picked up seed %d tasks [%d, %d)",
+                        physical_gpu_id, seed, chunk_start, chunk_end)
+            if recorder is None:
+                recorder = TrajectoryRecorder(config_path=config_path, gpu_id=0)
+                if output_dir:
+                    recorder._output_dir = Path(output_dir)
+                    recorder._output_dir.mkdir(parents=True, exist_ok=True)
+
+            try:
+                written = recorder._record_tau_bench_g1(
+                    [seed], resume, max_episodes,
+                    task_start=chunk_start, task_end=chunk_end)
+                total_written += written
+                total_skipped += getattr(recorder, "_skip_count", 0)
+                oom_log = getattr(recorder, "_oom_log", [])
+                total_oom += len(oom_log)
+                all_oom_log.extend(oom_log)
+                logger.info("[GPU %d] seed %d done: %d written, %d skipped",
+                            physical_gpu_id, seed, written,
+                            getattr(recorder, "_skip_count", 0))
+            except Exception as exc:
+                logger.exception("[GPU %d] seed %d crashed: %s", physical_gpu_id, seed, exc)
+                total_oom += 1
+                all_oom_log.append({"gpu": physical_gpu_id, "seed": seed, "error": f"seed_crash: {exc}"})
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+        result_queue.put({
+            "gpu_id": physical_gpu_id,
+            "written": total_written,
+            "skipped": total_skipped,
+            "oom": total_oom,
+            "oom_log": all_oom_log,
+        })
+    except Exception as exc:
+        logger.exception("[GPU %d] Worker crashed: %s", physical_gpu_id, exc)
+        result_queue.put({
+            "gpu_id": physical_gpu_id,
+            "written": total_written,
+            "skipped": total_skipped,
+            "oom": total_oom + 1,
+            "oom_log": all_oom_log + [{"gpu": physical_gpu_id, "error": f"worker_crash: {exc}"}],
+        })
+    finally:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+
+def _run_multi_gpu_recording(
+    config_path: str,
+    all_seeds: List[int],
+    output_dir: str,
+    max_episodes: Optional[int],
+    resume: bool,
+    num_gpus: int = _NUM_GPUS,
+) -> int:
+    """Orchestrate multi-GPU recording with dynamic load-balancing.
+
+    All seeds go into a shared queue. Each GPU worker pulls one seed
+    at a time, processes it, then pulls the next. When the queue is
+    empty, the worker exits. This ensures all GPUs stay busy until
+    every seed is complete, regardless of how long each seed takes.
+
+    Returns:
+        Total episodes written across all GPUs.
+    """
+    logger = logging.getLogger(__name__)
+    logger.info("=== Multi-GPU recording: %d GPUs, %d seeds (task-chunk queue) ===",
+                num_gpus, len(all_seeds))
+
+    ctx = mp.get_context("spawn")
+    seed_queue = ctx.Queue()
+    result_queue = ctx.Queue()
+
+    # Split each seed's 165 tasks into chunks of ~30 tasks
+    # so all 6 GPUs can work on the same seed in parallel.
+    CHUNK_SIZE = 30
+    total_chunks = 0
+    for seed in all_seeds:
+        for chunk_start in range(0, 165, CHUNK_SIZE):
+            chunk_end = min(chunk_start + CHUNK_SIZE, 165)
+            seed_queue.put((seed, chunk_start, chunk_end))
+            total_chunks += 1
+
+    logger.info("Queued %d task chunks (chunk_size=%d)", total_chunks, CHUNK_SIZE)
+
+    processes = []
+    for gpu_id in range(num_gpus):
+        p = ctx.Process(
+            target=_gpu_worker_process,
+            args=(gpu_id, seed_queue, config_path, output_dir, max_episodes, resume, result_queue),
+            name=f"gpu-{gpu_id}",
+        )
+        processes.append(p)
+        p.start()
+        logger.info("Launched GPU %d worker (PID %d)", gpu_id, p.pid)
+
+    # Wait for all workers
+    total_written = 0
+    total_skipped = 0
+    total_oom = 0
+    all_oom_log = []
+
+    for p in processes:
+        p.join()
+        logger.info("GPU worker PID %d finished", p.pid)
+
+    # Collect results
+    while not result_queue.empty():
+        try:
+            result = result_queue.get_nowait()
+            total_written += result["written"]
+            total_skipped += result["skipped"]
+            total_oom += result["oom"]
+            all_oom_log.extend(result.get("oom_log", []))
+            logger.info(
+                "GPU %d: %d written, %d skipped, %d OOM",
+                result["gpu_id"], result["written"], result["skipped"], result["oom"],
+            )
+        except Exception:
+            break
+
+    # Write combined recording report
+    report = {
+        "experiment": "E1",
+        "multi_gpu": num_gpus,
+        "total_episodes_written": total_written,
+        "skip_count": total_skipped,
+        "oom_count": total_oom,
+        "oom_log": all_oom_log,
+        "max_episodes": max_episodes,
+        "resume": resume,
+        "all_seeds": list(all_seeds),
+    }
+    output_path = Path(output_dir) if output_dir else Path("experiments/e1/traces/bf16")
+    report_path = output_path / "_recording_report.json"
+    try:
+        with open(report_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2, ensure_ascii=False, default=str)
+    except Exception as exc:
+        logger.warning("Failed to write recording report: %s", exc)
+
+    logger.info(
+        "Multi-GPU recording done: %d GPUs, %d written, %d skipped, %d OOM",
+        num_gpus, total_written, total_skipped, total_oom,
+    )
+    return total_written
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -1954,6 +2304,11 @@ def _build_arg_parser():
         "--output-dir", default="",
         help="Override output directory for trajectory files.",
     )
+    parser.add_argument(
+        "--num-gpus", type=int, default=1,
+        help="Number of GPUs to use (default: 1). Uses multi-GPU mode with "
+             "multiprocessing when > 1.",
+    )
     return parser
 
 
@@ -1961,6 +2316,30 @@ def main():
     """Entry point for E1 trajectory recording."""
     args = _build_arg_parser().parse_args()
 
+    # ── Multi-GPU path ──
+    if args.num_gpus > 1 and not args.subset:
+        # Multi-GPU recording via multiprocessing
+        # Load config to read seeds
+        config_path = args.config
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+        all_seeds = cfg.get("workload", {}).get("seeds", [42])
+
+        written = _run_multi_gpu_recording(
+            config_path=config_path,
+            all_seeds=list(all_seeds),
+            output_dir=args.output_dir,
+            max_episodes=args.max_episodes,
+            resume=args.resume,
+            num_gpus=args.num_gpus,
+        )
+        print(f"\n{'='*60}")
+        print(f"E1 Multi-GPU Recording complete ({args.num_gpus} GPUs).")
+        print(f"Episodes written:  {written}")
+        print(f"{'='*60}")
+        return
+
+    # ── Single-GPU / legacy path ──
     recorder = TrajectoryRecorder(config_path=args.config)
 
     if args.output_dir:
