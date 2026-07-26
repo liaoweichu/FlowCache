@@ -50,3 +50,56 @@ output:
   figure_dir: "figures"
   report_format: ["json", "markdown"]
   resume: true  # checkpoint/resume: skip existing trace files on restart
+
+# --- Baselines ---
+# NOTE: This section is DESCRIPTIVE ONLY. compare_oracle.py currently hardcodes
+# the baseline list in its main() function; this section documents the
+# selection decisions for traceability. To add/remove a baseline at runtime,
+# edit compare_oracle.py main(); this section is the single source of truth
+# for *which* baselines are enabled and *why* (variant / source paper).
+# G1 verdict 模块通过 `experiments/g1/run_grid.py` 调用本配置（读取 baselines
+# 列表与 trace_source），产出 experiments/g1/results/raw_results.csv。
+baselines:
+  # Simple heuristics (block-level, no future information)
+  - name: lru
+    type: simple_heuristic
+    enabled: true
+  - name: gdsf
+    type: simple_heuristic
+    enabled: true
+  - name: sizecost
+    type: simple_heuristic
+    enabled: true
+  - name: apc_lru
+    type: simple_heuristic
+    enabled: true
+
+  # Oracle upper bounds (offline, future-aware)
+  - name: belady
+    type: oracle
+    enabled: true
+  - name: oracle_cost
+    type: oracle
+    enabled: true
+
+  # Closest baselines — inspired variants (no faithful code available or
+  # API-level proxy incompatible with block-level trace replay)
+  - name: pbkv_inspired
+    type: closest_inspired
+    enabled: true
+    variant: inspired
+    source_paper: "arXiv 2605.06472"
+    note: "No official code; GraphSAGE-style reuse prediction + chain-aware eviction"
+  - name: thunderagent_inspired
+    type: closest_inspired
+    enabled: true
+    variant: inspired
+    source_paper: "arXiv 2602.13692 (ICML 2026 Spotlight)"
+    note: "API-level proxy not block-level cache; program-aware + 2^{-t} time decay"
+
+  # Closest baseline — faithful reproduction (AutoDL Linux, adapter in progress)
+  - name: kvflow_faithful
+    type: closest_faithful
+    enabled: true
+    source_paper: "arXiv 2507.07400 (NeurIPS 2025)"
+    note: "AutoDL Linux + CUDA + Rust toolchain; requires τ-bench adapter (SGLang prefix-tree + PlanManager.update_agent_timestep)"

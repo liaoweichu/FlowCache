@@ -4,6 +4,8 @@
 > **上游设计**：`experiments/experiment-designs.md` G1/E1 章节（v0.3.1）、`.trae/specs/experiment-scope-redesign/spec.md` v0.3
 > **创建日期**：2026-07-25
 > **状态**：planning
+>
+> **⚠️ v0.5（2026-07-26） supersession 注**：本文档中所有 BFCL 作为数据集的引用（"τ-bench + BFCL 800"、"7,720 episodes"、BFCL 6,400 / 8 seeds、BFCL 集成方式等）**已全部作废**。当前设计为单数据集 τ-bench 1,320 episodes（165 tasks × 8 seeds），BFCL 不再作为数据集（详见 `experiments/experiment-designs.md` v0.5 注与 `IDEA.rewritten.md` §6.1）。本文档保留作为历史决策记录，不再代表当前计划。BFCL 相关代码（`bfcl_adapter.py`）作为 disabled adapter 保留，`config.yaml` 已设为 τ-bench only。
 
 ---
 

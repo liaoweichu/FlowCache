@@ -15,6 +15,10 @@ Design notes:
 - Legacy run_workflow path uses mock simulators (kept for backward compat).
 - Block identity uses G0 8-tuple SHA-256 (16 hex chars).
 - Timing uses time.perf_counter() for wall-clock measurement on the critical path.
+
+⚠️ v0.5（2026-07-26）注：BFCL 不再作为 FlowCache 数据集。当前 config.yaml 已设为
+tau-bench only（datasets: ["tau-bench"]），_run_episode_bfcl 路径与 BFCLAdapter 不会被
+实例化。BFCL 相关代码作为 disabled 路径保留以备 rebuttal，详见 experiment-designs.md v0.5 注。
 """
 
 import json

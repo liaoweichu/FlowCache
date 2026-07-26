@@ -1,7 +1,7 @@
 # FlowCache 14 周执行计划与 Stage Gate 管理
 
 > 本文件基于 `IDEA.rewritten.md` 的 Section 7（可行性门槛 G0–G5）、Section 8（正式实验计划 E1–E7）、Section 11（风险、收缩与转向）和 Section 12（14 周执行计划）形式化而成，不引入新的研究内容或实验。
-> 最后更新：2026-07-24
+> 最后更新：2026-07-26（v0.5：BFCL 全面移除，单数据集 τ-bench 1,320 episodes）
 
 ---
 
@@ -34,8 +34,8 @@
 | 周次 | 目标 | 对应 Gate / Experiment | 产物 | 失败动作 |
 |---|---|---|---|---|
 | W1 | 冻结一个主模型、后端和主机配置；完成 Q-storage codec/staging spike | G0（loadability/codec） | 模型/后端/主机配置冻结记录；Q-storage codec spike 报告；allocated/reserved 峰值测量 | G0 失败：允许切换一次受支持的模型/后端；仍失败则路线 A No-Go，转路线 B，不进入预测器开发 |
-| W2 | 实现 block identity、precision lineage、父链、invalidation 和 exactness tests；冻结主工具 workload（τ-bench/BFCL/StableToolBench）与真实轨迹子集 | G0（exactness） | block identity/lineage/父链实现；exactness test 通过证据；主工具 workload 与真实轨迹子集冻结 | 同 W1（G0 失败动作） |
-| W3–W5 | Tier 1 主 workload（τ-bench 495/BFCL 800/STB 500）rollout 录制与 compiler/trace/replay；Tier 2 真实轨迹（SWE/Toolathlon/CATraces）整理；Tier 4 静态集整理 | —（可重放 trace） | 可重放 trace；cache-compatible 序列化规则；0.4.3 核验报告 | trace 不可重放则阻塞 G1，间接触发 G1 失败动作 |
+| W2 | 实现 block identity、precision lineage、父链、invalidation 和 exactness tests；冻结主工具 workload（τ-bench 1,320 episodes / StableToolBench）与真实轨迹子集 | G0（exactness） | block identity/lineage/父链实现；exactness test 通过证据；主工具 workload 与真实轨迹子集冻结 | 同 W1（G0 失败动作） |
+| W3–W5 | Tier 1 主 workload（τ-bench 1,320 / STB 500）rollout 录制与 compiler/trace/replay；Tier 2 真实轨迹（SWE/Toolathlon/CATraces）整理；Tier 4 静态集整理 | —（可重放 trace） | 可重放 trace；cache-compatible 序列化规则；0.4.3 核验报告 | trace 不可重放则阻塞 G1，间接触发 G1 失败动作 |
 | W6 | LRU/GDSF、同引擎 APC、offline oracle；至少一个 PBKV/KVFlow closest baseline | G1（opportunity/comparability） | LRU/GDSF/APC/oracle 实现；至少一个 closest baseline 可公平运行；oracle headroom 测量 | G1 失败：转向"何时工作流结构产生物理 KV 复用"的 benchmark/characterization 论文（即路线 B） |
 | W7 | workload characterization 与无泄漏 split | E1 | E1 画像报告（workflow 长度/深度/宽度/分支率/工具等待、exact-prefix overlap、LCP tokens、next-use distance、working-set size、KV 占比、oracle vs LRU/heuristic headroom）；无泄漏 split | E1 画像若显示 exact-prefix overlap 过低或 oracle headroom 很小，反映 G1 未真正通过，需回溯 |
 | W7–W8 | GPU BF16↔CPU BF16↔evict、heuristic/survival reuse estimator 与简单 controller | G3 / G5 | 无损 residency 控制器；heuristic/survival reuse estimator；简单 controller；G3/G5 评估 | G3 失败：路线 A No-Go；可保留实现作为工程基线，但不以无损 residency 单独投稿该主张。G5 失败：保留简单、可解释的 controller，不为论文形式强行加入 GNN（不触发路线切换） |

@@ -3,6 +3,8 @@
 > **目标**：理清整个计划的完成流程，解释 Gate 与 E1-E7 的关系，并根据 IDEA 三条核心贡献评价每个正式实验是否应该存在。
 > **日期**：2026-07-25
 > **上游文档**：IDEA.rewritten.md、execution-plan.md、ccfa.yaml、experiments/experiment-designs.md
+>
+> **⚠️ v0.5（2026-07-26） supersession 注**：本审查基于 v0.2 数据集体系（5 数据集：τ-bench / BFCL / StableToolBench / SWE / Toolathlon），其中所有"τ-bench + BFCL"作为主表数据集组合的论述（§3 E1/E4/E5/E6 节、§5 节省表"E1 τ-bench 495 + BFCL 800"等）**已全部作废**。当前设计为单数据集 τ-bench 1,320 episodes（165 tasks × 8 seeds），BFCL 不再作为数据集（详见 `experiments/experiment-designs.md` v0.5 注与 `IDEA.rewritten.md` §6.1）。本文档保留作为 v0.2 必要性审查的历史决策记录，**不再代表当前数据集体系**。StableToolBench 移至 Ch.5 family-out 证据；SWE/Toolathlon 仅 Ch.5 出现。
 
 ---
 

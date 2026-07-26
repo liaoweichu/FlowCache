@@ -74,14 +74,58 @@ Repo activity:
   - vLLM is NOT used; KVFlow is SGLang-based (paper explicitly compares against SGLang hierarchical radix cache baseline)
   - GraphSAGE / PyG / DGL: NOT required by KVFlow (KVFlow uses a deterministic steps-to-execution computation over ASG, no learned predictor)
   - HuggingFace Transformers (model weights via `--model-path`)
-- **4090D 24GB feasibility**: YES (with caveats). The paper reports experiments on Qwen2.5-7B and Llama-3.1-8B at `--max-total-tokens 100000` with `--enable-hierarchical-cache`. A 7B model in fp16 (~14–15 GB weights) leaves ~9–10 GB for KV cache and CUDA graphs on a 4090D — tight but workable for single-workflow latency experiments. The README's example invocation (`--max-total-tokens 100000 --hicache-size 20`) suggests this is the intended configuration class. Caveats: (1) high-concurrency multi-workflow scenarios from the paper likely exceed 24 GB; (2) Rust toolchain + CUDA build may need a Linux environment (Windows native support is uncertain — likely needs WSL2).
+- **4090D 24GB feasibility**: YES (with caveats). The paper reports experiments on Qwen2.5-7B and Llama-3.1-8B at `--max-total-tokens 100000` with `--enable-hierarchical-cache`. A 7B model in fp16 (~14–15 GB weights) leaves ~9–10 GB for KV cache and CUDA graphs on a 4090D — tight but workable for single-workflow latency experiments. The README's example invocation (`--max-total-tokens 100000 --hicache-size 20`) suggests this is the intended configuration class. Caveats: (1) high-concurrency multi-workflow scenarios from the paper likely exceed 24 GB; (2) Rust toolchain + CUDA build needs a Linux environment (Windows native support is uncertain — AutoDL Linux used as of 2026-07-26).
+- **Linux feasibility (AutoDL)**: YES (active, 2026-07-26 upgrade). AutoDL Linux platform provides root + CUDA toolkit + sufficient disk (~20GB for SGLang + Rust build). KVFlow `kvflow_faithful` entry in `experiments/e1/config.yaml` upgraded from `enabled: false / deferred` to `enabled: true / active`. τ-bench adapter engineering (clone → compile → adapter → run) is a follow-up independent task.
 
 ### Recommendation
-KVFlow has an official, publicly available, Apache-2.0-licensed codebase built on a modified SGLang. It is the more practical choice for a faithful reproduction, but it requires (i) a Linux/WSL2 build environment with CUDA + Rust toolchain, (ii) a custom τ-bench trace adapter that translates `block_assignments` into SGLang prefix-tree requests and ASG step metadata via the SScheduler API, and (iii) a 7B-class model that fits in 24 GB. Plan for ~1–2 weeks of adapter engineering before any baseline number can be reproduced.
+KVFlow has an official, publicly available, Apache-2.0-licensed codebase built on a modified SGLang. It is the more practical choice for a faithful reproduction. As of 2026-07-26, the AutoDL Linux environment is available (root + CUDA + Rust toolchain), so the original WSL2/Linux constraint no longer applies. Remaining work: (i) a custom τ-bench trace adapter that translates `block_assignments` into SGLang prefix-tree requests and ASG step metadata via the SScheduler API, and (ii) a 7B-class model that fits in 24 GB. Plan for ~1–2 weeks of adapter engineering before any baseline number can be reproduced. Status: **active faithful reproduction** (config.yaml `enabled: true`); adapter implementation in progress.
+
+---
+
+## ThunderAgent (arXiv 2602.13692, ICML 2026 Spotlight)
+
+### Search results
+- WebSearch `"ThunderAgent github arxiv 2602.13692 program-aware KV code"` — top hit is the official repo `https://github.com/ThunderAgent-org/ThunderAgent`. ICML 2026 virtual page links to the same repo.
+- WebFetch `https://arxiv.org/abs/2602.13692` — abstract page; the paper is "ThunderAgent: Program-aware KV Cache Management for Agent Inference" (ICML 2026 Spotlight).
+- WebFetch `https://github.com/ThunderAgent-org/ThunderAgent` — confirmed official repo. README explicitly states: "ThunderAgent itself does not require a GPU" — it is a FastAPI proxy that routes OpenAI-compatible requests to vLLM / SGLang / SkyRL backends with program-aware capacity scheduling. The only API change required from the client side is adding `program_id` to `extra_body`.
+- Repo activity:
+  - Created: 2026-02-10.
+  - Last commit: 2026-06-06 (144 commits total — active maintenance).
+  - Branches: 1, Tags: 0, Issues: 3 open.
+  - Languages: Python 100% (pure Python, no Rust/CUDA compilation).
+  - License: MIT.
+  - Integrations: NVIDIA Dynamo 2.0, SkyRL.
+
+### Official code availability
+- **Status**: AVAILABLE
+- **Repo URL**: https://github.com/ThunderAgent-org/ThunderAgent
+- **Last commit**: 2026-06-06
+- **Trace input format**: OpenAI-compatible API calls; the only augmentation is `program_id` in `extra_body`. CLI: `thunderagent --backend-type vllm --backends http://localhost:8000 --port 9000`. The agent runtime is FastAPI; it does not consume a JSON block-assignment trace.
+- **τ-bench compatibility**: NEEDS_ADAPTER (inspired variant). ThunderAgent is an API-level proxy, not a block-level cache policy. Its core mechanisms — `--use-acting-token-decay` (priority ∝ 2^{-t} where t is the time since the workflow's last activity), `--router tr` (program-aware capacity scheduling), and `--gpu-memory-pressure` (online feedback) — operate at the request/program level, not on individual KV blocks. To run on our τ-bench traces (`block_hash`/`parent_hash`/`token_range_*`), we would need to (a) map each `program_id` to a `workflow_id` carried in the trace, (b) translate the API-level time-decay policy into a block-level priority score, and (c) drop the GPU-memory-pressure feedback loop (no live backend in open-loop replay).
+- **Windows feasibility**: YES (native). Pure Python 100%, `pip install -e .` with no Rust/CUDA build. Core deps: fastapi, httpx, uvicorn. ThunderAgent itself is CPU-bound (it proxies to a separate vLLM/SGLang backend), so it runs natively on Windows.
+- **4090D 24GB feasibility**: N/A for the proxy itself (CPU-only). Backend inference (vLLM/SGLang with a 7B model) requires GPU but is decoupled from the proxy. For our inspired variant on the open-loop trace replay, no GPU is needed at all — it is a pure Python cache policy.
+
+### Recommendation
+ThunderAgent has public, MIT-licensed, pure-Python code and is ICML 2026 Spotlight with industrial adoption (NVIDIA Dynamo 2.0, SkyRL). However, ThunderAgent is an API-level proxy, not a block-level cache policy — a faithful reproduction would require a live vLLM/SGLang backend and a τ-bench adapter that translates `block_assignments` into OpenAI-compatible requests with `program_id`. Instead, we capture ThunderAgent's three distinguishing ideas at the block-cache level as an **inspired variant**:
+1. **Program-aware (workflow-aware) grouping** — blocks belonging to the same `workflow_id` are managed as a group; per-workflow last-activity timestamp is tracked.
+2. **Time decay** — priority score includes a `2^{-(now - workflow_last_activity) * decay_rate}` factor; blocks from paused workflows decay exponentially.
+3. **Capacity scheduling across workflows** — when evicting, prefer blocks from the most-paused workflow (the block with the minimum composite priority score is evicted, plus its prefix-chain descendants).
+
+The inspired variant likely UNDERESTIMATES ThunderAgent's true performance (the paper's online decay-rate tuning + GPU-pressure feedback would adapt better than our hand-tuned rate). If this inspired variant already shows non-trivial improvement over simple heuristics, the faithful ThunderAgent would likely show even larger improvement.
+
+Implemented in `experiments/e1/baselines/thunderagent_inspired.py` (258 lines), with 9 unit tests in `test_thunderagent_inspired.py` (all passing). Integrated into `experiments/e1/compare_oracle.py` as the `thunderagent_inspired` baseline alongside `pbkv_inspired`.
 
 ---
 
 ## Overall Recommendation
-- **Chosen closest baseline**: KVFlow (faithful reproduction via official repo) + PBKV-inspired variant (lightweight reimplementation on top of our existing τ-bench harness).
-- **Reasoning**: KVFlow is the only one of the two with public official code, is NeurIPS-2025-accepted, is Apache-2.0, and is built on SGLang which is the same engine family PBKV targets — so KVFlow's repo can serve as the faithful-reproduction anchor and its ASG abstraction maps cleanly onto our `block_hash`/`parent_hash` traces. PBKV has no public code (paper is a 2.5-month-old preprint with no venue), so faithful reproduction is impossible; instead we capture PBKV's two distinguishing ideas (multi-step lookahead reuse score + hierarchical eviction of retired-workflow private cache first) as an inspired variant layered on top of either the KVFlow codebase or our own simulator.
-- **Implementation plan**: (1) Clone `https://github.com/PanZaifeng/KVFlow`, build SGLang + sgl-kernel under WSL2 with CUDA, smoke-test the example YAML config with a 7B model on the 4090D. (2) Write a τ-bench adapter that converts each `block_assignments` step into (a) an SGLang prefix-cache request and (b) an SScheduler `PlanManager.update_agent_timestep(...)` call, constructing the ASG from `parent_hash` chains. (3) Once KVFlow baseline numbers are reproduced on a subset of `experiments/e1/traces/bf16/tau_bench/*.json`, implement the PBKV-inspired variant (GraphSAGE multi-step lookahead + hierarchical eviction) on top of the same harness for head-to-head comparison.
+- **Chosen closest baselines**: KVFlow (faithful reproduction via official repo, **AutoDL Linux environment available as of 2026-07-26, adapter implementation in progress**) + PBKV-inspired variant + ThunderAgent-inspired variant (two lightweight reimplementations on top of our existing τ-bench harness).
+- **Reasoning**:
+  - **KVFlow** is the only candidate with public official code that is NeurIPS-2025-accepted, Apache-2.0, and built on SGLang (same engine family PBKV targets). It is the faithful-reproduction anchor; its ASG abstraction maps cleanly onto our `block_hash`/`parent_hash` traces. As of 2026-07-26, AutoDL Linux environment is available (root + CUDA + Rust toolchain), so the original WSL2/Linux constraint no longer applies. `kvflow_faithful` upgraded to `enabled: true` in config.yaml; adapter implementation in progress.
+  - **PBKV-inspired** captures PBKV's two distinguishing ideas (GraphSAGE-style multi-step lookahead reuse score + chain-aware hierarchical eviction) because PBKV has no public code (2.5-month-old preprint, no venue). Faithful reproduction is impossible.
+  - **ThunderAgent-inspired** captures ThunderAgent's three distinguishing ideas (program-aware workflow grouping + 2^{-t} time decay + cross-workflow capacity scheduling) because ThunderAgent is an API-level proxy, not a block-level cache policy. ICML 2026 Spotlight + NVIDIA Dynamo 2.0 adoption gives this variant the strongest venue/industrial-validation backing among the three.
+  - The two inspired variants are **complementary**: PBKV-inspired focuses on *reuse prediction* (GraphSAGE-style features + multi-step lookahead), while ThunderAgent-inspired focuses on *workflow-aware time decay* (program-level scheduling + exponential decay). Together they cover the two main axes of the closest-baseline landscape that simple heuristics (LRU/GDSF/SizeCost/APC-LRU) miss.
+- **Implementation plan**:
+  1. (Done) Implement PBKV-inspired variant: `baselines/pbkv_inspired.py` + `test_pbkv_inspired.py`, integrated into `compare_oracle.py`.
+  2. (Done) Implement ThunderAgent-inspired variant: `baselines/thunderagent_inspired.py` + `test_thunderagent_inspired.py` (9 unit tests, all passing), integrated into `compare_oracle.py` as `thunderagent_inspired`.
+  3. (Active, 2026-07-26 upgrade) KVFlow faithful reproduction: clone `https://github.com/PanZaifeng/KVFlow`, build modified SGLang + sgl-kernel + Rust on **AutoDL Linux** with CUDA, smoke-test the example YAML config with a 7B model on the 4090D. Write a τ-bench adapter that converts each `block_assignments` step into (a) an SGLang prefix-cache request and (b) an SScheduler `PlanManager.update_agent_timestep(...)` call, constructing the ASG from `parent_hash` chains. Status: `kvflow_faithful.enabled` upgraded to `true` in config.yaml; adapter engineering (~1–2 weeks) is the next independent task. The two inspired variants already provide immediate closest-baseline coverage for G1 while the adapter is being built.
+  4. (Done) Run all baselines on τ-bench traces via `compare_oracle.py`; the output JSON now contains `pbkv_inspired` and `thunderagent_inspired` alongside the 6 heuristic/oracle baselines (LRU, GDSF, SizeCost, APC-LRU, Belady, Oracle-Cost).

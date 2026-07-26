@@ -451,23 +451,23 @@
 ## 5. 对 FlowCache 的启示
 
 ### 5.1 数据集数对比
-| 维度 | FlowCache（计划） | CCF-A/B 中位数 | CCF-A/B 范围 |
+| 维度 | FlowCache v0.5 | CCF-A/B 中位数 | CCF-A/B 范围 |
 |------|-----------------|--------------|-------------|
-| 数据集数 | 5（τ-bench + BFCL + GSM8K + HotpotQA + StableToolBench） | 2 | 1-7 |
-| 核心样本量 | ~3,720 | ~1,320（明确披露类） | 60-1,500（明确）/ 13M（生产） |
+| 数据集数 | 1（v0.5 移除 BFCL 后单数据集 τ-bench） | 2 | 1-7 |
+| 核心样本量 | ~1,320 | ~1,320（明确披露类） | 60-1,500（明确）/ 13M（生产） |
 
-FlowCache 数据集数（5）高于中位数（2），样本量（~3,720）高于明确披露类中位数（~1,320）。
+FlowCache v0.5 数据集数（1）低于中位数（2），样本量（~1,320）与明确披露类中位数（~1,320）持平。
 
 ### 5.2 数据集选择对标
-- **τ-bench**：FlowCache 主表使用 τ-bench，与原论文（1,320 episodes）对齐，CCF-A/B 领域认可度高
+- **τ-bench**：FlowCache 主表使用 τ-bench，与原论文（1,320 episodes, 165 tasks × 8 seeds）对齐，CCF-A/B 领域认可度高
 - **LongBench**：领域内最常用长上下文 benchmark（5 篇论文使用），但 FlowCache 非 KV 压缩方向，可不作为主表
-- **GSM8K**：3 篇论文使用，适合作为精度 sanity check（FlowCache 计划 100 samples，合理）
+- **BFCL**：v0.5 已移除，rebuttal 时可按 IDEA.rewritten.md §6.1 migration 规则补作跨工具家族泛化证据
 - **生产 trace**：4 篇系统类论文使用生产 trace，FlowCache 作为研究原型可不使用生产 trace
 
 ### 5.3 样本量论证
 - **明确披露类的样本量范围**：60-1,500（中位数 ~1,320）
-- **FlowCache 主表样本量**：τ-bench 1,320 + BFCL 800 = 2,120
-- **结论**：FlowCache 主表样本量（2,120）在明确披露类范围内（60-1,500 的上区间），与 τ-bench 原论文（1,320）和 SAGA（1,312）同量级，论证充分
+- **FlowCache 主表样本量**：τ-bench 1,320（165 tasks × 8 seeds）
+- **结论**：FlowCache 主表样本量（1,320）与 τ-bench 原论文（1,320）完全对齐，与 SAGA（1,312）同量级，是 pass^k (k≤8) 评估的必要样本量，论证充分
 
 ### 5.4 关键发现
 1. **样本量披露率低**：仅 40% 的 CCF-A/B 论文明确披露精确样本数，多数论文仅给数据集名称

@@ -34,6 +34,9 @@ from trace_utils import load_all_trajectories
 # Import the PBKV-inspired closest-baseline variant (see
 # baselines/pbkv_inspired.py for the inspired-variant caveats).
 from baselines.pbkv_inspired import PBKVInspiredCache
+# Import the ThunderAgent-inspired closest-baseline variant (see
+# baselines/thunderagent_inspired.py for the inspired-variant caveats).
+from baselines.thunderagent_inspired import ThunderAgentInspiredCache
 
 
 # ---------------------------------------------------------------------------
@@ -802,6 +805,18 @@ def main() -> None:
             pbkv.access(acc["block_hash"], acc.get("parent_hash", ""),
                         acc["prefill_ms"])
 
+        # --- ThunderAgent-Inspired (closest-baseline inspired variant) ---
+        # Workflow-aware time-decay: blocks from paused workflows decay as
+        # 2^{-t * decay_rate}. Pass workflow_id for program-aware scheduling.
+        thunderagent = ThunderAgentInspiredCache(capacity,
+                                                 future_accesses=future_accesses,
+                                                 decay_rate=0.05)
+        for acc in access_trace:
+            thunderagent.access(acc["block_hash"],
+                                acc.get("parent_hash", ""),
+                                acc["prefill_ms"],
+                                acc.get("workflow_id", ""))
+
         # --- Oracle-Cost (cost-aware Belady) ---
         oracle_cost = OracleCostCache(capacity, future_accesses)
         for idx, acc in enumerate(access_trace):
@@ -858,6 +873,14 @@ def main() -> None:
                 "evictions": pbkv.evictions,
                 "saved_prefill_ms": round(pbkv.saved_prefill_ms, 2),
                 "miss_cost_ms": round(pbkv.miss_cost_ms, 2),
+            },
+            "thunderagent_inspired": {
+                "hits": thunderagent.hits,
+                "misses": thunderagent.misses,
+                "hit_rate": thunderagent.hits / total if total else 0.0,
+                "evictions": thunderagent.evictions,
+                "saved_prefill_ms": round(thunderagent.saved_prefill_ms, 2),
+                "miss_cost_ms": round(thunderagent.miss_cost_ms, 2),
             },
             "oracle_cost": {
                 "hits": oracle_cost.hits,

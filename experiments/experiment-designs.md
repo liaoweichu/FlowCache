@@ -8,10 +8,11 @@
 > **创建日期**：2026-07-25
 > **修订记录**：
 > - v0.1（2026-07-25）：初版
-> - **v0.2（2026-07-25）：数据集体系重构**——应用户要求：①全册禁止自建/合成数据集（移除合成 prompt 集与合成可控 DAG，G0 改用真实数据天然结构）；②数据集种类与样本总量大幅扩充（~880 → ~8,800 workflow 级样本）；③引入 BFCL、SWE 轨迹、Toolathlon、CATraces、LongBench、GSM8K、BurstGPT、Mooncake，选择依据对齐同类论文（详见 0.4）
+> - **v0.2（2026-07-25）：数据集体系重构**——应用户要求：①全册禁止自建/合成数据集（移除合成 prompt 集与合成可控 DAG，G0 改用真实数据天然结构）；②数据集种类与样本总量大幅扩充（~880 → ~8,800 workflow 级样本）；③引入 BFCL、SWE 轨迹、Toolathlon、CATraces、LongBench、GSM8K、BurstGPT、Mooncake，选择依据对齐同类论文（详见 0.4）；**v0.5（2026-07-26）注：BFCL 全面移除，不再作为数据集**
 > - **v0.3（2026-07-25）：实验体系精简**——按 `.trae/specs/experiment-scope-redesign/spec.md`（状态：approved-pending-implementation）落地：13 章 → 5 章 + 2 个小判定（G0、G3 冒烟）；核心数据集 12+ → 7；workflow 样本 ~8,800 → ~4,120；E4 replay ~702 → ~100。G1/G2/G4 不再独立运行，复用正式实验数据判定。**v0.3 重构分批进行**：本次仅对齐 G1/Ch.1 与 E1 章节顶部；其余章节（G3/G4/E2–E7）保留 v0.2 形式，待对应周次前再重构
 > - **v0.3.1（2026-07-25）：τ-bench seeds 数升级**——基于 τ-bench 原论文（arXiv 2406.12045, ICLR 2025）调研，pass^k 指标用 k∈{1,2,4,8}，3 seeds 只能算 pass^3 不足以区分 consistency。τ-bench 主表样本量从 495（165 × 3 seeds）升级为 **1,320（165 × 8 seeds）**，与原论文 pass^8 完全对齐。本次仅同步更新 G1.2/G1.3/G1.11.1 与 spec v0.3 §5/§8；**G3/G4/E1/E4/E5/E6 等章节中的 "495 episodes" 与 "3 seeds" 引用暂保留 v0.2 形式**，待对应章节 v0.3 重构时统一更新为 1,320 / 8 seeds
-> **状态**：designed — G1/Ch.1 已按 v0.3 对齐；其余章节按 v0.2 形式待 v0.3 重构
+> - **v0.5（2026-07-26）：BFCL 全面移除**——应用户决定（IDEA.rewritten.md v0.4 已将 BFCL 标记为"已删除 + rebuttal 可补"，config.yaml 已是 τ-bench only），BFCL 不再作为数据集：①删除 G1.2/G1.11.1/G3.2/G5.2/E1.2/E2.2/E4.2/E5.2/E6.2 等数据集表中的 BFCL 行；②删除 G1.2 中 BFCL 集成方式与 8 decode seeds 依据整段；③"τ-bench + BFCL" → "τ-bench"，"1,320 + 6,400 = 7,720" → "1,320"，"τ-bench / BFCL / STB" → "τ-bench / STB"；④保留 v0.2/v0.3/v0.4 历史变更记录中 BFCL 的引用作为决策记录；⑤rebuttal 时若需补做 BFCL，按 IDEA.rewritten.md v0.4 的 migration 规则执行
+> **状态**：designed — G1/Ch.1 已按 v0.3 对齐；v0.5 已全面移除 BFCL 数据集（单数据集 τ-bench 1,320 episodes）；其余章节按 v0.2 形式待 v0.3 重构
 
 ---
 
@@ -141,10 +142,11 @@ CPU offload 结果依赖主机。若比较不同机器，PCIe 与主机差异必
 | 数据集 | 样本数 | 选取规则 | 角色 | 同类论文依据 | 冻结状态 |
 |---|---|---|---|---|---|
 | **τ-bench** | 165 全量 × 3 user-simulator seeds = **495 episodes** | 全量不抽样；3 个用户模拟器种子（pass^k 惯例） | 主 A：多轮工具、任务成功率、同域共享前缀 | 项目原有（ICLR 2025） | W2 冻结 seeds |
-| **BFCL v3 multi-turn** | **800**（base / miss_func / miss_param / long_context 各 200） | 全量 4 类 | 主 B：多轮函数调用、状态校验、静态可重放 | Continuum（arXiv:2511.02230） | W2 冻结 |
 | **StableToolBench** | **500**（I1/I2/I3 分层） | 按测试子集分层抽样；须通过 0.4.3 核验 | 主 C：工具 family 泛化、API 故障注入事件 | 项目原有（80 → 500） | W2 冻结 |
 
-Rollout 预算：495×~1.5 min + 800×~1 min + 500×~1.5 min ≈ **33–40 GPU 小时**（W3–W5 录制窗，见 execution-plan.md 修订）。
+Rollout 预算：495×~1.5 min + 500×~1.5 min ≈ **~25 GPU 小时**（W3–W5 录制窗，见 execution-plan.md 修订）。
+
+> **v0.5（2026-07-26）注**：原 BFCL v3 multi-turn（800 episodes）行已删除——BFCL 不再作为数据集（IDEA.rewritten.md v0.4 + config.yaml 单数据集 τ-bench only）。rebuttal 时若需补做，按 IDEA.rewritten.md v0.4 的 migration 规则执行。
 
 **Tier 2：真实 agent 轨迹（零 rollout，直接 replay）**
 
@@ -171,9 +173,11 @@ Rollout 预算：495×~1.5 min + 800×~1 min + 500×~1.5 min ≈ **33–40 GPU �
 | **BurstGPT** | **2,000 会话窗口** | 按真实 session ID + 时间戳抽取连续窗口 | 真实到达 / 并发 / 会话结构——**替代纯 Poisson 假设的主证据** |
 | **Mooncake trace** | 抽样分析（窗口 TBD） | 按前缀块 hash 抽样 | 大规模前缀块共享结构（E1 画像 + E6 压力面） |
 
-**总量**：**~7,800 workflow 级样本**（495 + 800 + 500 + ~150 + 1,000 + 300 + 300 + 300 + 2,000 + 2,000；CATraces 以实测为准）。v0.4 移除 SWE 轨迹 500 + Toolathlon 500 后较 v0.2 的 ~8,800 减少约 1,000。
+**总量**：**~7,000 workflow 级样本**（495 + 500 + ~150 + 1,000 + 300 + 300 + 300 + 2,000 + 2,000；CATraces 以实测为准）。v0.4 移除 SWE 轨迹 500 + Toolathlon 500 后较 v0.2 的 ~8,800 减少约 1,000；v0.5 移除 BFCL 800 后再减 800。
 
-> **v0.4 核心样本总量**：**~3,720**（τ-bench 1,320 + BFCL 800 + LongBench 1,000 + GSM8K 100 + StableToolBench 500；trim-dataset-portfolio spec）。核心数据集数封顶 5；辅助数据集（CATraces、MuSiQue、2WikiMultihopQA、LMSYS、BurstGPT、Mooncake）不计入核心总量。spec 原文写 ~3,220 系算术笔误（1,320+800+1,000+100+500=3,720，非 3,220），本册按正确和值 ~3,720 记录。
+> **v0.4 核心样本总量**：**~2,920**（τ-bench 1,320 + LongBench 1,000 + GSM8K 100 + StableToolBench 500；trim-dataset-portfolio spec）。核心数据集数封顶 4（v0.5 移除 BFCL 后）；辅助数据集（CATraces、MuSiQue、2WikiMultihopQA、LMSYS、BurstGPT、Mooncake）不计入核心总量。
+>
+> **v0.5（2026-07-26）注**：BFCL 800 已从核心样本总量中移除（1,320 + 1,000 + 100 + 500 = 2,920，非 v0.4 的 3,720）。核心数据集数从 5 降为 4。
 
 **规模与边界说明**：
 
@@ -228,7 +232,7 @@ Rollout 预算：495×~1.5 min + 800×~1 min + 500×~1.5 min ≈ **33–40 GPU �
 
 | 原合成 DAG 角色（涉及章节） | 替代方案（全部为真实数据或 replay 时操作） |
 |---|---|
-| 结构因果敏感性：分支率/深度/next-use 与 locality 关系（E1、E2） | **τ-bench / BFCL / STB 真实轨迹**按深度 / 宽度分层做剂量–反应分析；v0.4 移除 SWE 轨迹后改用 τ-bench 内部结构差异（真实结构分层，非生成） |
+| 结构因果敏感性：分支率/深度/next-use 与 locality 关系（E1、E2） | **τ-bench / STB 真实轨迹**按深度 / 宽度分层做剂量–反应分析；v0.4 移除 SWE 轨迹后改用 τ-bench 内部结构差异（真实结构分层，非生成） |
 | DAG 边缺失/噪声、branch 误预测（E6 轴 3/4） | **replay 时特征扰动**：对预测器输入的已声明后继做删边/错标——作用于特征的实验操作，不是数据集 |
 | tool-wait 受控扫描（G3、E7-F4） | **τ-bench / STB 工具调用实测等待分布** + replay 时时间缩放（×0.5 / ×2 / 重尾化，参数扰动）；v0.4 移除 Toolathlon 后改用 τ-bench/STB 支撑 |
 | burst arrival（E6 轴 5） | BurstGPT 真实突发窗口为主证据；MMPP 合成模型降为次要参照 |
@@ -247,14 +251,14 @@ trim-dataset-portfolio spec 要求 FlowCache 核心数据集数封顶 5，下表
 | 4 | **vLLM / PagedAttention** | SOSP 2023 | **2** | ~1,000s requests/batch | 论文 §10 评估（ShareGPT, Alpaca） |
 | 5 | **SGLang / RadixAttention** | NeurIPS 2024 (arXiv 2312.07104) | **~4–5** | ~1,000s 总样本 | 论文 §5 评估（MMLU/HellaSwag/GSM-8K/ShareGPT/MT-Bench） |
 | 6 | **τ-bench 原论文** | ICLR 2025 (arXiv 2406.12045) | **1** | **1,320 episodes** | 论文主表 pass^k 评估（165 tasks × 8 seeds） |
-| 7 | **FlowCache v0.4** | 本册 | **5**（核心） | **~3,720 samples**（核心：τ-bench 1,320 + BFCL 800 + LongBench 1,000 + GSM8K 100 + STB 500） | trim-dataset-portfolio spec |
+| 7 | **FlowCache v0.5** | 本册 | **4**（核心，v0.5 移除 BFCL） | **~2,920 samples**（核心：τ-bench 1,320 + LongBench 1,000 + GSM8K 100 + STB 500） | trim-dataset-portfolio spec |
 
 **对比结论**：
 
 - 同领域论文数据集数中位数 **2 个**（排除生产 trace 论文），范围 1–4 个（排除 EvicPress 12 和 Ada-KV 29 子任务）。
 - 同领域论文总样本量中位数 **~660 contexts**，范围 150–1,320 episodes。
-- FlowCache v0.4 的 5 个核心数据集是中位数的 **2.5×**（v0.3 的 7 个为 3.5×），~3,720 样本是中位数的 **5.6×**（v0.3 的 ~4,120 为 6.2×）。
-- v0.4 精简后与同领域论文的差距缩小，且 5 个核心数据集按 3 层角色（主表 2 + 质量面 2 + 鲁棒性 1）分层，每层均有明确分工，不存在冗余。
+- FlowCache v0.5 的 4 个核心数据集是中位数的 **2×**（v0.4 的 5 个为 2.5×，v0.3 的 7 个为 3.5×），~2,920 样本是中位数的 **4.4×**（v0.4 的 ~3,720 为 5.6×，v0.3 的 ~4,120 为 6.2×）。
+- v0.5 精简后与同领域论文的差距进一步缩小，且 4 个核心数据集按 3 层角色（主表 1 + 质量面 2 + 鲁棒性 1）分层，每层均有明确分工，不存在冗余。
 
 ### 0.4.8 为何不能只用 GSM8K（v0.4 新增）
 
@@ -391,7 +395,7 @@ GSM8K 在 FlowCache 中的角色**且仅是** Ch.3 fidelity 质量面的 accurac
 | logit KL | 量化干预 vs BF16 的逐 token logit KL 散度（continuation 前 K=64 token 均值） | token |
 | top-k change | continuation 前 K 个 token 中 top-5 集合变化比例 | token |
 | 工具调用一致性 | 函数名/参数 JSON 与 BF16 基线的精确匹配 | call |
-| 任务成功率 | 数据库最终状态匹配（τ-bench）或等价二值标准（BFCL 状态校验） | workflow |
+| 任务成功率 | 数据库最终状态匹配（τ-bench） | workflow |
 | QA EM/F1 | exact match / token-level F1 | question |
 | PR-AUC / Brier / ECE | 预测器的排序质量 / 校准指标 | predictor |
 | Precision@budget | 给定保留预算下预测"将复用"的精确率 | predictor |
@@ -414,6 +418,7 @@ GSM8K 在 FlowCache 中的角色**且仅是** Ch.3 fidelity 质量面的 accurac
 | Oracle-Belady | 离线 Belady（未来已知）驱逐 | 上界参照 |
 | Oracle-Cost | 离线 cost-aware oracle（未来已知 + 成本模型） | 上界参照 |
 | KVFlow† / PBKV† | 至少一个在公平协议下忠实运行的 closest baseline；无法忠实复现的标 `*-inspired` 并先解决可比性 | 最近工作 baseline |
+| ThunderAgent-inspired† | ICML 2026 Spotlight，纯 Python 100%，原生 Windows 可跑；API 级代理非块级缓存，提取 program-aware + 2^{-t} time decay 核心 idea | 最近工作 baseline（inspired variant） |
 | Uniform-Q8 / Uniform-Q4 | 全部 inactive block 统一 Q8 / Q4 存储（同容量规则） | 量化 baseline |
 | Reuse-Only | 只用复用价值估计决定驻留（精度统一） | 消融 baseline |
 | Fidelity-Only | 只用保真风险估计决定精度（驻留用强启发式） | 消融 baseline |
@@ -421,7 +426,7 @@ GSM8K 在 FlowCache 中的角色**且仅是** Ch.3 fidelity 质量面的 accurac
 | FlowCache-Joint | 本文联合 precision/residency controller | 待验方法 |
 | FlowCache-Lossless | 仅 GPU BF16 ↔ CPU BF16 ↔ evict 的 FlowCache 无损版本（G3） | 中间版本 |
 
-†：PBKV/KVFlow 的可比性判定流程见 G1 章；若两者均无法忠实运行，按 IDEA §11"所有 closest baseline 均无法忠实比较"风险处理，inspired variant 只能作次要补充。
+†：PBKV/KVFlow/ThunderAgent 的可比性判定流程见 G1 章 G1.4.1 检查清单。PBKV 无官方代码 → inspired variant；ThunderAgent 官方代码可用但为 API 级代理非块级缓存 → inspired variant；KVFlow 官方代码可用但需 WSL2 + CUDA + Rust → faithful 待 adapter。若三者均无法忠实运行，按 IDEA §11"所有 closest baseline 均无法忠实比较"风险处理，inspired variant 只能作次要补充。
 
 ---
 
@@ -616,7 +621,7 @@ G0 是**确定性正确性验证**而非统计推断，样本量由覆盖性决�
 > **周次**：W6（v0.2 起，原 W5 顺延） | **依赖**：G0、E1 | **关键路径**：是
 > **失败动作**：转向"何时工作流结构产生物理 KV 复用"的 benchmark/characterization 论文（路线 B）
 >
-> **v0.3 对齐说明（2026-07-25）**：按 spec v0.3，G1 不再独立运行，**复用 Ch.1（即 E1+G1 合并）画像数据**做判定。判定逻辑（headroom ≥ 10% + closest baseline 可比性）与阈值不变；数据来源从"独立 Gate 实验"改为"E1 画像 + oracle headroom 表"。本章数据集体系同步精简：StableToolBench/SWE/Toolathlon 移出（仅在 Ch.5 出现），主表仅保留 τ-bench 495 + BFCL 800。原 v0.2 的 G1.11.1 表 G1-3（StableToolBench 确认表）降级为附录，不参与 Go/No-Go 判定。
+> **v0.3 对齐说明（2026-07-25）**：按 spec v0.3，G1 不再独立运行，**复用 Ch.1（即 E1+G1 合并）画像数据**做判定。判定逻辑（headroom ≥ 10% + closest baseline 可比性）与阈值不变；数据来源从"独立 Gate 实验"改为"E1 画像 + oracle headroom 表"。本章数据集体系同步精简：StableToolBench/SWE/Toolathlon 移出（仅在 Ch.5 出现），主表仅保留 τ-bench 495 + BFCL 800（v0.5 移除 BFCL，仅 τ-bench 1,320）。原 v0.2 的 G1.11.1 表 G1-3（StableToolBench 确认表）降级为附录，不参与 Go/No-Go 判定。
 
 ## G1.1 实验目标与 Gate 关系
 
@@ -639,11 +644,10 @@ G1 验证 FlowCache 的**第一核心假设**（IDEA §0.3-1）：
 | 数据集 | 样本数 | 说明 |
 |---|---|---|
 | τ-bench | **1,320 episodes（165 任务 × 8 seeds，retail + airline 两域）** | 主判定 workload ①；LLM 用户模拟器（`llm_user`）+ 真实工具 backend；8 seeds 与原论文 pass^k（k≤8）对齐 |
-| BFCL v3 multi-turn | **6,400 episodes（4 子集 × 200 × 8 decode seeds：`multi_turn_base` / `miss_func` / `miss_param` / `long_context`）** | 主判定 workload ②；scripted user turns（1–7 轮/episode）+ 8 个真实 sim 工具类 + 状态验证；8 decode seeds 与 τ-bench 对齐（seed 在 agent decode 而非 user simulator，方法论互补） |
 
 **τ-bench seeds 数冻结依据（2026-07-25 调研后冻结）**：τ-bench 原论文（arXiv 2406.12045, ICLR 2025）主表用 165 任务全量，pass^k 指标用 k∈{1,2,4,8}。3 seeds 只能算 pass^3，统计上不足以区分 consistency；8 seeds 与原论文 pass^8 完全对齐，最稳健。相比 3 seeds 增量 660 episodes，按 4090D ~30s/episode 估算约 5.5 GPU 小时。原 v0.3 的 495（3 seeds）已升级为 1320（8 seeds）。
 
-**BFCL 8 decode seeds 依据（2026-07-26 用户确认）**：BFCL 默认 temperature=0（greedy），单 seed 跑出的 800 episodes 无法做 pass^k 分析。用户确认 BFCL 也用 8 decode seeds（do_sample=True, temperature=0.7），与 τ-bench 的 8 user simulator seeds 对齐。二者方法论互补：τ-bench seed 在 user simulator（变整个对话轨迹），BFCL seed 在 agent decode（变 agent 输出，user turns 固定）。总量从 800 升级为 6400，按 4090D ~20s/episode 估算约 36 GPU 小时。
+> **v0.5（2026-07-26）注**：原 G1.2 表中 BFCL v3 multi-turn 行（6,400 episodes，4 子集 × 200 × 8 decode seeds）已删除——BFCL 不再作为数据集。原"BFCL 8 decode seeds 依据"段落与"BFCL v3 multi-turn 集成方式"段落（含可用性、样本结构、多轮真实性、工具 backend、用户模拟器、集成命令、样本量对齐 7 项）整段删除。rebuttal 时若需补做 BFCL，按 IDEA.rewritten.md v0.4 的 migration 规则执行。
 
 **v0.3 移出主表的数据集**（仅在 Ch.5 鲁棒性章节使用，不参与 G1 判定）：
 
@@ -653,29 +657,19 @@ G1 验证 FlowCache 的**第一核心假设**（IDEA §0.3-1）：
 
 > **v0.4 注（trim-dataset-portfolio spec）**：SWE-rebench-openhands-trajectories（原 200）与 Toolathlon-Trajectories（原 200）已从 Ch.5 移除。Ch.5 鲁棒性压力面仅保留 StableToolBench 500 作 family-out 主证据；branch 噪声轴改由 τ-bench 内部 replay 扰动（删边/错标后继）覆盖，不另设数据集。Migration：rebuttal 时可扩展 STB 到更大样本或补做 SWE 500。
 
-**BFCL v3 multi-turn 集成方式**（基于 2026-07-25 调研）：
-
-- **可用性**：GitHub `ShishirPatil/gorilla/berkeley-function-call-leaderboard/`、HuggingFace `gorilla-llm/Berkeley-Function-Calling-Leaderboard`、PyPI `pip install bfcl-eval`；Apache 2.0；ICML 2025 配套论文
-- **样本结构**：JSONL，字段含 `id` / `question`（user turns list）/ `function`（tools 定义）/ `initial_config`（后端状态初始化）/ `ground_truth`（多轮交互轨迹）/ `group_id`
-- **多轮真实性**：每 episode 含 1–7 个 user turn；每 turn 内部可多步 function call → 单 episode 的 LLM 调用数远多于 user turn 数；前文（system + tool schema + 历史 turns）在后续 turn 中成为可重用的 exact prefix → 产生 inactive KV
-- **工具 backend**：8 个 sim 类（Vehicle Control / Trading Bots / Travel Booking / Gorilla File System / Message API / Twitter API / Ticket API / Math API），纯 Python 实现，状态可 `copy.deepcopy` 快照/恢复；评估采用状态验证（验证 backend 终态而非 AST 匹配）
-- **用户模拟器**：**不提供 LLM 用户模拟器**，user turns 是 scripted 固定序列写在数据集里。与 τ-bench 的 `llm_user` 形成方法论互补（一个 simulated user、一个 scripted user）。**报告需明确披露**此差异，并解释这反而提升可复现性
-- **集成命令**：`bfcl generate --test-category multi_turn_base`（其余 3 子集类同）；用 `--include-input-log` 拿到完整 `inference_log`（含 user/assistant/tool/state_info 角色）；用 `utils/visualize_multi_turn_ground_truth_conversation.py` 获取 oracle trajectory
-- **样本量对齐**：vLLM × Mooncake blog（2026-05）使用 610 traces 做 workload characterization，800 BFCL episodes 与之同量级；但 BFCL 单 episode turn 数较少（1–7 vs Codex 33 中位数），**报告时需补充 total LLM calls 指标**（预计 5K–15K）
-
-trace 来源：E1 录制的可重放 trace（τ-bench 与 BFCL 均为 rollout 录制；到达结构主证据 BurstGPT，Poisson λ=4 为建模参照，H=1000，block_size=16）。
+trace 来源：E1 录制的可重放 trace（τ-bench 为 rollout 录制；到达结构主证据 BurstGPT，Poisson λ=4 为建模参照，H=1000，block_size=16）。
 
 ## G1.3 样本数与功效分析
 
 | 项 | 值 | 依据 |
 |---|---|---|
-| 判定单元 | 1,320 episodes（τ-bench，165 任务 × 8 seeds）+ 6,400（BFCL，4 子集 × 200 × 8 decode seeds） | workflow/episode 为统计单位 |
+| 判定单元 | 1,320 episodes（τ-bench，165 任务 × 8 seeds） | workflow/episode 为统计单位 |
 | unique block 数（估计） | 随 episode 量上升（原 80 任务 ~300–600；全量 ×8 后 TBD） | g2-pilot §2.4 外推 |
 | 判定效应量 | oracle vs 最佳简单策略的 miss-cost 或 p95 TTFT 差距 ≥ 10% | IDEA §7 G1 内部参考阈值 |
-| 功效 | 7,720 paired episodes 下 CI 半宽显著小于 80 单元情形（0.8.3）；8 seeds 支持 pass^k（k≤8）分析 | 0.8.3 预注册规则 + τ-bench 原论文 pass^k 对齐 |
-| 样本量封顶 | τ-bench 1,320 + BFCL 6,400 = 7,720 episodes（不再追加 STB/SWE/Toolathlon） | spec v0.3 §5 主表仅 τ-bench + BFCL；STB/SWE/Toolathlon 仅 Ch.5 |
-| 报告补充指标 | total LLM calls（预计 15K–50K）、平均 turn/episode、pass^k（k∈{1,2,4,8}） | BFCL 单 episode turn 数较少（1–7），需补 total LLM calls 才能跨论文对比；pass^k 与 τ-bench 原论文对齐 |
-| seeds 数冻结 | 8 seeds（2026-07-25 调研后冻结，2026-07-26 用户确认 BFCL 也用 8 decode seeds） | τ-bench 原论文（arXiv 2406.12045, ICLR 2025）用 k≤8；3 seeds 只能算 pass^3 不足以区分 consistency；BFCL 8 decode seeds 与 τ-bench 对齐，方法论互补（前者 seed 在 agent decode，后者 seed 在 user simulator） |
+| 功效 | 1,320 paired episodes 下 CI 半宽显著小于 80 单元情形（0.8.3）；8 seeds 支持 pass^k（k≤8）分析 | 0.8.3 预注册规则 + τ-bench 原论文 pass^k 对齐 |
+| 样本量封顶 | τ-bench 1,320 episodes（v0.5 移除 BFCL 后单数据集；不再追加 STB/SWE/Toolathlon） | spec v0.3 §5 主表原 τ-bench + BFCL，v0.5 移除 BFCL；STB/SWE/Toolathlon 仅 Ch.5 |
+| 报告补充指标 | total LLM calls（预计 5K–15K）、平均 turn/episode、pass^k（k∈{1,2,4,8}） | pass^k 与 τ-bench 原论文对齐 |
+| seeds 数冻结 | 8 seeds（2026-07-25 调研后冻结） | τ-bench 原论文（arXiv 2406.12045, ICLR 2025）用 k≤8；3 seeds 只能算 pass^3 不足以区分 consistency |
 
 ## G1.4 Baseline / 对照
 
@@ -687,20 +681,21 @@ trace 来源：E1 录制的可重放 trace（τ-bench 与 BFCL 均为 rollout �
 | SizeCost | 强启发式（age + size + measured recompute cost） | IDEA §4.3 第一档 |
 | Oracle-Belady | 上界（未来已知） | 离线计算 |
 | Oracle-Cost | 上界（未来已知 + 成本模型） | 离线计算，cost model：驱逐时选 `saved_prefill_ms / next_use_distance` 最小的块；`block_cost` 来自 step 级 `prefill_ms` 按 token 范围比例分摊（见 `experiments/e1/compare_oracle.py:build_access_trace`） |
-| **KVFlow 或 PBKV（≥1 个）** | closest baseline 可比性判定 | 公平协议（同引擎/模型/trace/预算）下忠实运行；不可忠实复现 → 标 `*-inspired` 并记录不兼容原因清单 |
+| **KVFlow 或 PBKV（≥1 个）** | closest baseline 可比性判定 | 公平协议（同引擎/模型/trace/预算）下忠实运行；不可忠实复现 → 标 `*-inspired` 并记录不兼容原因清单。KVFlow faithful 已于 2026-07-26 在 AutoDL Linux 上激活（`config.yaml: kvflow_faithful.enabled: true`），adapter 实现中 |
+| **ThunderAgent-inspired** | 补充 closest baseline（workflow-aware time decay） | ICML 2026 Spotlight，纯 Python 100%，原生 Windows 可跑；ThunderAgent 是 API 级代理非块级缓存策略，提取 time decay (2^{-t}) + program-aware 调度核心 idea 实现 `baselines/thunderagent_inspired.py` |
 
 **可比性判定流程**：①获取官方代码/论文协议 → ②接口适配评估 → ③在同一 open-loop replay 上运行 → ④若引擎/语义不兼容，记录具体不兼容点（5 项以内）并给出 inspired variant 的忠实度说明 → ⑤两个均失败则触发 IDEA §11"所有 closest baseline 均无法忠实比较"风险条目。
 
 ### G1.4.1 Closest baseline 可比性检查清单（逐项留痕）
 
-| 检查项 | KVFlow | PBKV |
-|---|---|---|
-| 官方代码/协议可获得性 | AVAILABLE（[github.com/PanZaifeng/KVFlow](https://github.com/PanZaifeng/KVFlow)，NeurIPS 2025，Apache-2.0，末次 commit 2026-03-13） | UNAVAILABLE（arXiv 2605.06472 无代码链接，多轮搜索无官方/第三方 repo） |
-| 所需引擎钩子（block index / eviction hook / prefetch hook）本后端是否具备 | NEEDS_ADAPTER：仓库含魔改 SGLang + SScheduler PFEngine，需将 τ-bench `block_assignments` 翻译为 SGLang prefix-tree 请求 + `PlanManager.update_agent_timestep(...)`；Rust/CUDA 编译需 WSL2/Linux | N/A：无代码 |
-| 其缓存语义是否与本研究 exact-prefix 语义一致 | NEEDS_ADAPTER：ASG（Agent Step Graph）抽象与 `block_hash`/`parent_hash` DAG 天然契合，但需适配层 | N/A |
-| 其特征是否违反本研究禁止特征清单（未来信息泄漏检查） | TBD（待 adapter 实现后验证） | N/A |
-| 在本 replay 协议下可忠实运行的 trace 覆盖率 | TBD（待 adapter 实现后测量） | N/A |
-| 判定（faithful / inspired / 不可比 + 原因 ≤ 5 项） | **faithful（待 adapter 实现）**：官方代码可用，τ-bench trace 需 adapter 但语义兼容 | **inspired variant**：无官方代码，按论文 GraphSAGE + workflow-history attention + 多步预测核心 idea 实现 `pbkv_inspired.py`，明确标注差异 |
+| 检查项 | KVFlow | PBKV | ThunderAgent |
+|---|---|---|---|
+| 官方代码/协议可获得性 | AVAILABLE（[github.com/PanZaifeng/KVFlow](https://github.com/PanZaifeng/KVFlow)，NeurIPS 2025，Apache-2.0，末次 commit 2026-03-13） | UNAVAILABLE（arXiv 2605.06472 无代码链接，多轮搜索无官方/第三方 repo） | AVAILABLE（[github.com/ThunderAgent-org/ThunderAgent](https://github.com/ThunderAgent-org/ThunderAgent)，ICML 2026 Spotlight，MIT，末次 commit 2026-06-06，144 commits） |
+| 所需引擎钩子（block index / eviction hook / prefetch hook）本后端是否具备 | NEEDS_ADAPTER：仓库含魔改 SGLang + SScheduler PFEngine，需将 τ-bench `block_assignments` 翻译为 SGLang prefix-tree 请求 + `PlanManager.update_agent_timestep(...)`；AutoDL Linux + CUDA + Rust toolchain 可用（2026-07-26 升级，原 WSL2 约束不再适用） | N/A：无代码 | NEEDS_ADAPTER（inspired variant）：ThunderAgent 是 FastAPI 代理（OpenAI 兼容 API + `program_id`），非块级缓存策略；需将 API 级 time decay 适配为 block 级优先级评分，并丢弃 `--gpu-memory-pressure` 在线反馈（open-loop replay 无活动后端） |
+| 其缓存语义是否与本研究 exact-prefix 语义一致 | NEEDS_ADAPTER：ASG（Agent Step Graph）抽象与 `block_hash`/`parent_hash` DAG 天然契合，但需适配层 | N/A | NEEDS_ADAPTER：program-aware 调度与 `workflow_id` 自然契合；prefix-chain eviction 与 APC-LRU/PBKV-Inspired 语义一致 |
+| 其特征是否违反本研究禁止特征清单（未来信息泄漏检查） | TBD（待 adapter 实现后验证） | N/A | 通过：inspired variant 仅使用决策时可见的 `workflow_id` 与历史访问时间，无未来信息泄漏 |
+| 在本 replay 协议下可忠实运行的 trace 覆盖率 | TBD（待 adapter 实现后测量） | N/A | 100%（inspired variant 在所有 τ-bench trace 上可运行；trace 需携带 `workflow_id` 字段，缺失时退化为默认 workflow ""） |
+| 判定（faithful / inspired / 不可比 + 原因 ≤ 5 项） | **faithful（AutoDL Linux adapter 实现中）**：官方代码可用，AutoDL Linux + CUDA + Rust 可编译（2026-07-26 升级），τ-bench trace 需 adapter 但语义兼容；`config.yaml` 中 `kvflow_faithful.enabled: true` | **inspired variant**：无官方代码，按论文 GraphSAGE + workflow-history attention + 多步预测核心 idea 实现 `pbkv_inspired.py`，明确标注差异 | **inspired variant**：官方代码可用但为 API 级代理非块级缓存；按论文 program-aware + 2^{-t} time decay + cross-workflow capacity scheduling 核心 idea 实现 `thunderagent_inspired.py`，明确标注差异（无 GPU pressure 反馈、无在线 decay rate 调优、hand-tuned decay_rate=0.05） |
 
 ## G1.5 测试指标
 
@@ -745,9 +740,9 @@ trace 来源：E1 录制的可重放 trace（τ-bench 与 BFCL 均为 rollout �
 | 1.1 | 复用 E1 trace 与画像报告，确认输入完整 | 输入清单 |
 | 1.2 | 实现/接入 LRU、GDSF、SizeCost、APC-LRU | 策略代码 |
 | 1.3 | 实现离线 Oracle-Belady / Oracle-Cost | oracle 模块（可复用 `experiments/e1/compare_oracle.py`） |
-| 1.4 | PBKV/KVFlow 可比性评估与适配 | 可比性记录 |
-| 1.5 | 全网格运行（策略 × 预算 × 数据集 × 3 种子） | 原始结果表 |
-| 1.6 | 统计分析与判定 | `experiments/g1/g1-verdict.md` |
+| 1.4 | PBKV/KVFlow/ThunderAgent 可比性评估与适配 | 可比性记录（[RESEARCH_NOTES.md](e1/baselines/RESEARCH_NOTES.md) + G1.4.1 检查清单）；PBKV-inspired 与 ThunderAgent-inspired 已实现并集成到 `compare_oracle.py`，KVFlow faithful 已于 2026-07-26 在 AutoDL Linux 激活，adapter 实现中 |
+| 1.5 | 全网格运行（策略 × 预算 × 数据集 × 3 种子） | 原始结果表（`experiments/g1/run_grid.py` → `results/raw_results.csv`） |
+| 1.6 | 统计分析与判定 | `experiments/g1/verdict.py` → `experiments/g1/g1-verdict.md` + `g1-verdict.json` |
 
 ## G1.10 硬件与时间预算
 
@@ -762,10 +757,10 @@ trace 来源：E1 录制的可重放 trace（τ-bench 与 BFCL 均为 rollout �
 
 | 产物 | 路径 |
 |---|---|
-| 策略对比原始结果 | `experiments/g1/results/*.csv` |
-| headroom 图（策略 × 预算） | `figures/g1-headroom.png` |
+| 策略对比原始结果 | `experiments/g1/run_grid.py` → `experiments/g1/results/raw_results.csv` |
+| headroom 图（策略 × 预算） | `experiments/g1/plot_headroom.py` → `experiments/g1/figures/g1-headroom.png` |
 | closest baseline 可比性记录 | `experiments/g1/baseline-comparability.md` |
-| 判定报告 | `experiments/g1/g1-verdict.md` |
+| 判定报告 | `experiments/g1/verdict.py` → `experiments/g1/g1-verdict.md` + `g1-verdict.json` |
 
 ### G1.11.1 结果表格模板（完成后填充，不发明数字）
 
@@ -777,21 +772,22 @@ trace 来源：E1 录制的可重放 trace（τ-bench 与 BFCL 均为 rollout �
 | LRU | TBD | TBD | TBD | TBD | TBD | TBD |
 | GDSF | TBD | TBD | TBD | TBD | TBD | TBD |
 | SizeCost | TBD | TBD | TBD | TBD | TBD | TBD |
-| Closest baseline† | TBD | TBD | TBD | TBD | TBD | TBD |
+| PBKV-inspired† | TBD | TBD | TBD | TBD | TBD | TBD |
+| ThunderAgent-inspired† | TBD | TBD | TBD | TBD | TBD | TBD |
+| KVFlow（faithful，AutoDL Linux adapter 实现中） | TBD | TBD | TBD | TBD | TBD | TBD |
 | Oracle-Belady | TBD | TBD | TBD | TBD | TBD | TBD |
 | Oracle-Cost | TBD | TBD | TBD | TBD | TBD | TBD |
 | **oracle vs 最佳简单策略相对差** | TBD | TBD | TBD | TBD | TBD | TBD |
 
-†：G1.4.1 判定后填入实际可用的 closest baseline 名称。
+†：G1.4.1 判定后填入实际可用的 closest baseline 名称。PBKV-inspired 与 ThunderAgent-inspired 均为 inspired variant（无官方代码 / API 级代理非块级缓存），KVFlow faithful 已于 2026-07-26 在 AutoDL Linux 激活（`config.yaml: kvflow_faithful.enabled: true`），adapter 实现中。
 
-**表 G1-2：headroom 第二主表（BFCL 800，结构同表 G1-1）**。
+**表 G1-2：headroom 第二主表（v0.5 移除 BFCL 800，本表已删除；rebuttal 时若补做 BFCL 可恢复同构主表，结构同表 G1-1）**。
 
 **表 G1-3：locality 画像摘要（判定输入，与 E1/Ch.1 共享数据）**
 
 | 数据集 | exact-prefix overlap | LCP tokens (median / p95) | next-use distance (median / p95) | share_count ≥ 2 的 block 占比 | KV/总显存占比 |
 |---|---|---|---|---|---|
 | τ-bench | TBD | TBD | TBD | TBD | TBD |
-| BFCL | TBD | TBD | TBD | TBD | TBD |
 
 > **v0.3 注**：原 v0.2 的 G1-3 确认表（StableToolBench 500）与 G1-4 locality 摘要中的 STB/SWE/Toolathlon 行已删除，这些数据集移至 Ch.5 鲁棒性章节。如需 STB 确认性参照，在 Ch.5 family-out 轴中给出。
 
@@ -833,9 +829,10 @@ G3 验证：在**只用无损动作**（GPU BF16 ↔ CPU BF16 ↔ Evict，IDEA �
 | 数据集 | 样本数 | 说明 |
 |---|---|---|
 | τ-bench | 495 episodes | 主判定 workload |
-| BFCL v3 multi-turn | 800 | 第二主判定 workload |
 | StableToolBench | 500（核验通过后） | 确认性 workload |
 | Toolathlon 轨迹 | 500（取含工具等待时间戳的子集） | 真实 tool-wait 分布对驻留收益的影响（接管原合成 tool-wait 族角色；replay 时时间缩放 ×0.5/×2 作敏感性，属参数扰动非数据集） |
+
+> **v0.5（2026-07-26）注**：原 BFCL v3 multi-turn 800 行已删除——BFCL 不再作为数据集。
 
 trace 与到达模型同 G1（BurstGPT 主证据 + Poisson 参照，H=1000，3 个 replay 种子）。
 
@@ -844,7 +841,7 @@ trace 与到达模型同 G1（BurstGPT 主证据 + Poisson 参照，H=1000，3 �
 | 项 | 值 |
 |---|---|
 | 析因单元 | 3 KV 预算（10%/25%/50%）× 3 并发（4/8/16）= 9 cell / 数据集 |
-| 每 cell | 495 episodes（τ-bench）/ 800（BFCL）× 3 replay 种子 |
+| 每 cell | 495 episodes（τ-bench）× 3 replay 种子 |
 | 判定效应量 | p95 TTFT 改善 ≥ ~15%（固定质量下）；吞吐下降 ≤ ~5%（IDEA §7 G3 内部参考） |
 | 功效规则 | 495 paired episodes 下 CI 半宽 ~2× 窄于原 80 单元设计（0.8.3）；首跑测 CV 后按规则决定是否增加种子 |
 
@@ -950,7 +947,7 @@ IDEA §2.1 要求所有成本按父前缀长度、block 大小、batch/concurren
 | FlowCache-Lossless | TBD | — | TBD | — | TBD | TBD | TBD |
 | Oracle-Cost | TBD | TBD | TBD | TBD | TBD | TBD | — |
 
-**表 G3-2：全 9 cell 摘要（τ-bench；BFCL 800 另出同构主表，StableToolBench 500 出确认表）**
+**表 G3-2：全 9 cell 摘要（τ-bench；v0.5 移除 BFCL 800 同构主表；StableToolBench 500 出确认表）**
 
 | 预算 | 并发 | FlowCache p95 TTFT | 最佳简单策略 p95 TTFT | 相对改善 [95% CI] | 吞吐变化 [95% CI] | 判定达标? |
 |---|---|---|---|---|---|---|
@@ -1201,10 +1198,11 @@ GNN 是可选实现，不是论文贡献本身。
 | 数据集 | 角色 | 样本数 |
 |---|---|---|
 | τ-bench | train / validation / in-family test（episode 级 group split） | 495 episodes：train 297 / val 99 / test 99（按 task 分组，同 task 的 3 seeds 必同 split；prefix dedup；种子冻结） |
-| BFCL v3 multi-turn | train 扩充 + in-family test | 800：train 480 / val 160 / test 160（按类别分层，同上分组规则） |
 | StableToolBench | **workflow-family-out test 通道 ①**（G5 主判定面） | 500（全量只作 test，绝不参与训练/调参） |
 | SWE 轨迹 | **workflow-family-out test 通道 ②**（结构差异最大的 family） | 500（全量只作 test） |
 | LMSYS-Chat-1M | 负对照（仅追加式会话，next-use 接近确定） | 2,000（仅描述性报告：学习预测器不应优于简单规则） |
+
+> **v0.5（2026-07-26）注**：原 BFCL v3 multi-turn 行（train 480 / val 160 / test 160）已删除——BFCL 不再作为数据集。
 
 标签与特征：与 E2 共享（来自 open-loop replay 的真实 exact-prefix block access；特征集见 E2 章，遵守 Part 0.5 禁止特征清单）。
 
@@ -1212,7 +1210,7 @@ GNN 是可选实现，不是论文贡献本身。
 
 | 项 | 值 |
 |---|---|
-| 训练样本 | τ-bench train 297 + BFCL train 480 episodes → 预计 ≥ 1,000 unique block 的正/负 next-use 标签（TBD） |
+| 训练样本 | τ-bench train 297 episodes → 预计 unique block 的正/负 next-use 标签数 TBD（v0.5 移除 BFCL train 480 后样本量下降，必要时 rebuttal 补 BFCL train 扩充） |
 | 判定效应量 | 净端到端收益 ≥ ~5%，或 policy regret 改善 ≥ ~10%（IDEA §7 G5 内部参考，均含模型推理开销） |
 | 功效规则 | family-out test 500（通道①）/ 500（通道②）paired 比较；按 0.8.3 规则评估 CI 宽度，不足时增加 replay 种子压缩方差 |
 | 负对照期望 | LMSYS 上学习模型相对简单规则的 regret 差 ≈ 0（若显著为负，说明学习器过拟合工具型分布） |
@@ -1248,7 +1246,7 @@ GNN 是可选实现，不是论文贡献本身。
 
 ## G5.6 运行协议
 
-- 训练/校准只用 train/val（τ-bench + BFCL）；阈值与超参在 val 上选择；test（in-family + 两条 family-out 通道）只跑一次冻结配置（Part 0.6）；
+- 训练/校准只用 train/val（τ-bench）；阈值与超参在 val 上选择；test（in-family + 两条 family-out 通道）只跑一次冻结配置（Part 0.6）；
 - 系统面评估在 open-loop replay 中把各预测器接入 G3 的 controller（动作空间 A₀），同 trace 同预算；
 - 预测器推理开销计入 controller overhead（IDEA §4.5：论文必须同时报告收益和自身成本）。
 
@@ -1297,7 +1295,7 @@ GNN 是可选实现，不是论文贡献本身。
 
 ### G5.11.1 结果表格模板（完成后填充，不发明数字）
 
-**表 G5-1：family-out 主判定表（通道①：train τ-bench+BFCL → test StableToolBench 500）**
+**表 G5-1：family-out 主判定表（通道①：train τ-bench → test StableToolBench 500；v0.5 移除 BFCL train 扩充）**
 
 | 预测器 | policy regret (ms) | vs SizeCost regret 改善 [95% CI] | 净端到端收益（含推理开销）[95% CI] | 推理耗时 ms/decision | 达标? |
 |---|---|---|---|---|---|
@@ -1308,7 +1306,7 @@ GNN 是可选实现，不是论文贡献本身。
 
 **表 G5-2：family-out 通道②（test SWE 500，同构表）**。
 
-**表 G5-3：in-family test（τ-bench test 99 + BFCL test 160，同构附表）**。
+**表 G5-3：in-family test（τ-bench test 99；v0.5 移除 BFCL test 160 同构附表）**。
 
 **表 G5-4：LMSYS 负对照（2,000 会话）**
 
@@ -1340,7 +1338,7 @@ GNN 是可选实现，不是论文贡献本身。
 > **周次**：W7（v0.2 起，原 W6 顺延） | **对应 Gate**：G1 | **实验状态**：τ-bench 管线代码已有基础（`experiments/e1/`），需扩展至全数据集组合
 > **定位**：中心 claim 的前提，**不放在附录**（IDEA §8 E1）
 >
-> **v0.3 对齐说明（2026-07-25）**：按 spec v0.3，**E1 已并入 Ch.1（与 G1 合并）**。本章保留作为画像方法的详细参考（指标定义、序列化规则、执行步骤模板）。**数据集范围以 G1.2 为准**（仅 τ-bench 495 + BFCL 800）；本章 E1.2 表格列出的 12 数据集 v0.2 计划已被 spec v0.3 §5 精简为 7 核心 + 2 辅助，主表用量见 G1.2，Ch.5 用量见 spec v0.3 §5。原 E1.10 的 ~33–40 GPU 小时 Tier-1 录制预算，v0.3 缩减为 ~20 GPU 小时（spec v0.3 §8）。
+> **v0.3 对齐说明（2026-07-25）**：按 spec v0.3，**E1 已并入 Ch.1（与 G1 合并）**。本章保留作为画像方法的详细参考（指标定义、序列化规则、执行步骤模板）。**数据集范围以 G1.2 为准**（仅 τ-bench 495 + BFCL 800；v0.5 移除 BFCL，仅 τ-bench）；本章 E1.2 表格列出的 12 数据集 v0.2 计划已被 spec v0.3 §5 精简为 7 核心 + 2 辅助，主表用量见 G1.2，Ch.5 用量见 spec v0.3 §5。原 E1.10 的 ~33–40 GPU 小时 Tier-1 录制预算，v0.3 缩减为 ~20 GPU 小时（spec v0.3 §8）。
 
 ## E1.1 实验目标
 
@@ -1355,7 +1353,6 @@ E1 是描述性 + 测量性实验，为 G1 判定提供中心证据，同时为�
 | 数据集 | 样本数 | E1 中的角色 |
 |---|---|---|
 | τ-bench | 495 episodes（rollout 录制） | 主画像对象 ① |
-| BFCL v3 multi-turn | 800（rollout 录制） | 主画像对象 ② |
 | StableToolBench | 500（rollout 录制 + 核验） | 主画像对象 ③ |
 | SWE-rebench-openhands-trajectories | 500（真实轨迹整理） | 结构画像：真实重试/分支（接管原合成 DAG 角色） |
 | Toolathlon-Trajectories | 500（真实轨迹整理） | 工具等待时间画像（真实时间戳） |
@@ -1413,7 +1410,7 @@ E1 复用并扩展已有管线（`experiments/e1/`：`record_trajectories.py`、
 
 | 步骤 | 脚本 | 产物 |
 |---|---|---|
-| BF16 轨迹录制（τ-bench/BFCL/StableToolBench rollout） | `record_trajectories.py`（扩展多数据集适配） | `experiments/e1/traces/bf16/<dataset>/*.json` |
+| BF16 轨迹录制（τ-bench/StableToolBench rollout） | `record_trajectories.py`（扩展多数据集适配） | `experiments/e1/traces/bf16/<dataset>/*.json` |
 | 真实轨迹整理（SWE/Toolathlon/CATraces → 统一 trace 格式） | 新增 `import_real_traces.py` | `experiments/e1/traces/real/<dataset>/` |
 | 静态文本整理（LongBench/QA/GSM8K/LMSYS/BurstGPT/Mooncake） | 新增 `import_static.py` | `experiments/e1/traces/static/<dataset>/` |
 | block identity/父链/去重 | `trace_utils.py` | block 索引 |
@@ -1458,7 +1455,7 @@ E1 复用并扩展已有管线（`experiments/e1/`：`record_trajectories.py`、
 
 | 步骤 | 内容 | 产物 |
 |---|---|---|
-| 1.1 | τ-bench 495 / BFCL 800 / StableToolBench 500 rollout 录制（W3–W5 窗） | traces/bf16/ |
+| 1.1 | τ-bench 495 / StableToolBench 500 rollout 录制（W3–W5 窗） | traces/bf16/ |
 | 1.2 | SWE/Toolathlon/CATraces 真实轨迹整理 + 核验（0.4.3） | traces/real/ + 核验报告 |
 | 1.3 | 静态集整理（LongBench/QA/GSM8K/LMSYS/BurstGPT/Mooncake） | traces/static/ |
 | 1.4 | 画像 + oracle headroom（复用管线） | outputs/figures |
@@ -1469,7 +1466,7 @@ E1 复用并扩展已有管线（`experiments/e1/`：`record_trajectories.py`、
 
 | 项 | 预估 |
 |---|---|
-| Tier 1 rollout 录制（1,795 episodes） | ~33–40 GPU 小时（W3–W5） |
+| Tier 1 rollout 录制（995 episodes，v0.5 移除 BFCL 800 后：τ-bench 495 + STB 500） | ~20–27 GPU 小时（W3–W5） |
 | Tier 2/4 下载整理与核验 | ~2 天（CPU/IO 为主） |
 | 画像与图表 | ~0.5 天 |
 | **合计** | **W7 前完成画像汇总** |
@@ -1491,7 +1488,6 @@ E1 复用并扩展已有管线（`experiments/e1/`：`record_trajectories.py`、
 | 数据集 | N | 长度 (median / p95) | 深度 | 宽度 | 分支率 | 工具等待 ms (median / p95) |
 |---|---|---|---|---|---|---|
 | τ-bench | 495 | TBD | TBD | TBD | TBD | TBD |
-| BFCL | 800 | TBD | TBD | TBD | TBD | TBD |
 | StableToolBench | 500 | TBD | TBD | TBD | TBD | TBD |
 | SWE 轨迹 | 500 | TBD | TBD | TBD | TBD | TBD |
 | Toolathlon | 500 | TBD | TBD | TBD | TBD | TBD（真实时间戳） |
@@ -1508,7 +1504,6 @@ E1 复用并扩展已有管线（`experiments/e1/`：`record_trajectories.py`、
 | 数据集 | exact-prefix overlap | LCP tokens (median / p95) | next-use distance (median / p95 / ∞占比) | working-set 峰值 (MB) | KV/显存占比 | oracle vs LRU headroom @ 预算 25% |
 |---|---|---|---|---|---|---|
 | τ-bench | TBD | TBD | TBD | TBD | TBD | TBD |
-| BFCL | TBD | TBD | TBD | TBD | TBD | TBD |
 | StableToolBench | TBD | TBD | TBD | TBD | TBD | TBD |
 | SWE 轨迹 | TBD | TBD | TBD | TBD | TBD | TBD |
 | Toolathlon | TBD | TBD | TBD | TBD | TBD | TBD |
@@ -1565,11 +1560,12 @@ G5 已做 Go/No-Go 判定；E2 提供完整的预测质量画像、成本加权�
 | 数据集 | 角色 | 样本数 |
 |---|---|---|
 | τ-bench | train 297 / val 99 / test 99（episode 级 group split，同 task 的 3 seeds 同 split，种子冻结，与 G5 共用） | 495 |
-| BFCL v3 multi-turn | train 480 / val 160 / test 160（类别分层，同上规则） | 800 |
 | StableToolBench | family-out test 通道① | 500 |
 | SWE 轨迹 | family-out test 通道② + **结构分层敏感性分析**（接管原合成 DAG 角色：按深度/宽度/重试次数分层做剂量–反应） | 500 |
 | Toolathlon 轨迹 | 工具等待维度的补充 test 面 | 500 |
 | LMSYS-Chat-1M | 负对照（描述性） | 2,000 |
+
+> **v0.5（2026-07-26）注**：原 BFCL v3 multi-turn 行（train 480 / val 160 / test 160）已删除——BFCL 不再作为数据集。
 
 **标签**（来自 open-loop replay 的真实 exact-prefix block access，IDEA §4.3）：T_b^next、reused_b = 1(T_b^next ≤ H)、saved_tokens_b、saved_ms_b、share_count_b（定义同 g2-pilot §3.1）。
 
@@ -1600,7 +1596,7 @@ G5 已做 Go/No-Go 判定；E2 提供完整的预测质量画像、成本加权�
 
 | 项 | 值 |
 |---|---|
-| block 级标签 | train 777 episodes（τ 297 + BFCL 480）→ 预计 unique block 数 ≥ 1,500（TBD 实测）；test 259 + family-out 1,000 |
+| block 级标签 | train 297 episodes（τ-bench；v0.5 移除 BFCL 480 后样本量下降）→ 预计 unique block 数 TBD 实测；test 99 + family-out 1,000 |
 | 功效 | 按 0.8.2：test N ≥ 250 block 可检 ρ ≥ 0.20（power=0.80）；系统面判定沿用 G5 功效规则（0.8.3） |
 | 聚类处理 | block 级指标同时报告 per-workflow 聚合（0.8.1） |
 
@@ -1918,20 +1914,21 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 | 数据集 | 样本数 | 角色 |
 |---|---|---|
 | τ-bench | 495 episodes | 主 workload ① |
-| BFCL v3 multi-turn | 800 | 主 workload ② |
 | StableToolBench | 500（核验通过后） | 确认 workload（核验降级时列为泛化附表并标注） |
 | SWE 轨迹 | 500 | 真实结构确认面（附表） |
 | BurstGPT | 2,000 会话窗口 | 到达/并发结构来源（不直接作为策略评估对象，提供真实请求流） |
 
-**test 专用性**：E4 系统评估使用各数据集全量样本的 replay（系统策略无需训练）；任何**含学习组件的策略**（FlowCache-Joint、Reuse-Only 的学习档）其预测器只在 train/val 上训练（τ-bench 297/99 + BFCL 480/160），test 与 family-out 数据对这些组件而言是 held-out。
+> **v0.5（2026-07-26）注**：原 BFCL v3 multi-turn 800 行（主 workload ②）已删除——BFCL 不再作为数据集。析因设计从 18 cell 降为 9 cell（单主 workload）。
+
+**test 专用性**：E4 系统评估使用各数据集全量样本的 replay（系统策略无需训练）；任何**含学习组件的策略**（FlowCache-Joint、Reuse-Only 的学习档）其预测器只在 train/val 上训练（τ-bench 297/99），test 与 family-out 数据对这些组件而言是 held-out。
 
 ## E4.3 样本数与功效分析
 
 | 项 | 值 |
 |---|---|
-| 析因设计 | 3 KV 预算（10% / 25% / 50%）× 3 并发（4 / 8 / 16）× 2 主 workload = **18 cell**（确认面另计） |
-| 每 cell | 495 episodes（τ-bench）/ 800（BFCL）× 3 replay 种子 |
-| 总运行单元 | 18 cell × 13 对照 × 3 种子 = 702 次 replay（open-loop，主面）+ 确认面附表 + closed-loop 质量子集（E4.6） |
+| 析因设计 | 3 KV 预算（10% / 25% / 50%）× 3 并发（4 / 8 / 16）× 1 主 workload = **9 cell**（v0.5 移除 BFCL 后单主 workload；确认面另计） |
+| 每 cell | 495 episodes（τ-bench）× 3 replay 种子 |
+| 总运行单元 | 9 cell × 13 对照 × 3 种子 = 351 次 replay（open-loop，主面；v0.5 较 v0.2 的 702 减半）+ 确认面附表 + closed-loop 质量子集（E4.6） |
 | 主判定效应量 | joint vs Decoupled-Best 的 p95 TTFT / SLO goodput 差异；**净收益阈值**：条件 GO 情形下按 g2-pilot §10.3 设定更严格阈值（如 ≥ 5% p95 TTFT 改善，预注册） |
 | 功效 | 主 cell 495 paired episodes：按 0.8.3，CI 半宽 ~2× 窄于原 80 单元设计；pilot（G3/E3 数据）估计 CV 后冻结最终重复数 |
 
@@ -1997,8 +1994,8 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 
 ## E4.6 运行协议
 
-1. **open-loop 主表**：18 cell × 13 对照 × 3 种子；全部系统指标；到达结构主证据 BurstGPT（Poisson λ=4 参照并报告拟合优度），H=1000；
-2. **closed-loop 质量子表**：主 cell（预算 25%、并发 8）+ 边界 cell（预算 10%、并发 16）× 质量相关对照（No-Cache、APC-LRU、Uniform-Q8、Uniform-Q4、Decoupled-Best、FlowCache-Joint）× τ-bench 495 + BFCL 800，记录任务成功率与失败分析；**与 open-loop 分表**（Part 0.7 铁律）；
+1. **open-loop 主表**：9 cell × 13 对照 × 3 种子（v0.5 移除 BFCL 后单主 workload，原 18 cell）；全部系统指标；到达结构主证据 BurstGPT（Poisson λ=4 参照并报告拟合优度），H=1000；
+2. **closed-loop 质量子表**：主 cell（预算 25%、并发 8）+ 边界 cell（预算 10%、并发 16）× 质量相关对照（No-Cache、APC-LRU、Uniform-Q8、Uniform-Q4、Decoupled-Best、FlowCache-Joint）× τ-bench 495，记录任务成功率与失败分析；**与 open-loop 分表**（Part 0.7 铁律）；
 3. controller 配置：滚动时域 greedy/index policy（IDEA §4.5），更新频率冻结值来自 E5 扫描；
 4. 安全水位与 OOM 处理：保留水位（Part 0.2.2）；任何 OOM 事件如实记录（进 E7 数据）；
 5. 主图：相同后端的**延迟–容量 Pareto 主图**（IDEA §14 写作就绪条件 5）。
@@ -2007,7 +2004,7 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 
 - 主比较：FlowCache-Joint vs Decoupled-Best（首要）、vs 各单一对照（次要）的 per-workflow 配对差；
 - paired workflow-level bootstrap 95% CI（1000 次）；
-- 多重性：18 cell × 主要比较族，Bonferroni 校正；主 cell 单独报告未校正与校正值；
+- 多重性：9 cell × 主要比较族（v0.5 移除 BFCL 后单主 workload，原 18 cell），Bonferroni 校正；主 cell 单独报告未校正与校正值；
 - 质量：Δsuccess 95% CI 上界 vs 预注册 ε（非劣判定，同 G4.7 口径）；
 - 报告全部 cell 结果（不只报喜 cell）；负结果 cell 进 E7 分析。
 
@@ -2036,8 +2033,8 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 
 | 项 | 预估 |
 |---|---|
-| 702 次 open-loop replay（样本量上升，引擎批处理） | ~36–48 小时 GPU |
-| closed-loop 子集（2 cell × 6 对照 × (495+800)） | ~12–16 小时 GPU |
+| 351 次 open-loop replay（v0.5 移除 BFCL 后单主 workload，原 702 次；引擎批处理） | ~18–24 小时 GPU |
+| closed-loop 子集（2 cell × 6 对照 × 495） | ~6–8 小时 GPU |
 | 分析与制图 | 1 天 |
 | **合计** | **W11 一周内（需提前冻结配置，禁止边跑边改；如超时，确认面附表移至 W12）** |
 
@@ -2072,18 +2069,18 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 | 12 | FlowCache-Joint | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
 | 13 | Oracle-Cost | TBD | TBD | TBD | TBD | TBD | TBD | TBD | — |
 
-（BFCL 800 出同构第二主表；全 18 cell 同构输出，其余进附录 CSV。）
+（v0.5 移除 BFCL 800 同构第二主表；全 9 cell 同构输出，其余进附录 CSV。）
 
 **表 E4-2：质量子表（closed-loop，与 open-loop 分表）**
 
-| 对照 | cell | τ-bench 成功率 [95% CI] | BFCL 成功率 [95% CI] | vs BF16 基线 Δsuccess [95% CI] | 非劣（CI 上界 ≤ ε）? |
-|---|---|---|---|---|---|
-| No-Cache（BF16 参照） | 主 cell | TBD | TBD | — | — |
-| APC-LRU | 主 cell | TBD | TBD | TBD | TBD |
-| Uniform-Q8 | 主 cell + 边界 cell | TBD | TBD | TBD | TBD |
-| Uniform-Q4 | 主 cell + 边界 cell | TBD | TBD | TBD | TBD |
-| Decoupled-Best | 主 cell + 边界 cell | TBD | TBD | TBD | TBD |
-| FlowCache-Joint | 主 cell + 边界 cell | TBD | TBD | TBD | TBD |
+| 对照 | cell | τ-bench 成功率 [95% CI] | vs BF16 基线 Δsuccess [95% CI] | 非劣（CI 上界 ≤ ε）? |
+|---|---|---|---|---|
+| No-Cache（BF16 参照） | 主 cell | TBD | — | — |
+| APC-LRU | 主 cell | TBD | TBD | TBD |
+| Uniform-Q8 | 主 cell + 边界 cell | TBD | TBD | TBD |
+| Uniform-Q4 | 主 cell + 边界 cell | TBD | TBD | TBD |
+| Decoupled-Best | 主 cell + 边界 cell | TBD | TBD | TBD |
+| FlowCache-Joint | 主 cell + 边界 cell | TBD | TBD | TBD |
 
 **表 E4-3：成本分解（IDEA §2.4 成本项，主 cell，ms/workflow）**
 
@@ -2094,11 +2091,11 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 
 **表 E4-4：joint vs Decoupled-Best 逐 cell 配对差（主判定）**
 
-| 预算 | 并发 | Δp95 TTFT [95% CI]（τ-bench） | Δp95 TTFT [95% CI]（BFCL） | Δgoodput [95% CI] | ≥ 净收益阈值? |
-|---|---|---|---|---|---|
-| 10% | 4 / 8 / 16 | TBD | TBD | TBD | TBD |
-| 25% | 4 / 8 / 16 | TBD | TBD | TBD | TBD |
-| 50% | 4 / 8 / 16 | TBD | TBD | TBD | TBD |
+| 预算 | 并发 | Δp95 TTFT [95% CI]（τ-bench） | Δgoodput [95% CI] | ≥ 净收益阈值? |
+|---|---|---|---|---|
+| 10% | 4 / 8 / 16 | TBD | TBD | TBD |
+| 25% | 4 / 8 / 16 | TBD | TBD | TBD |
+| 50% | 4 / 8 / 16 | TBD | TBD | TBD |
 
 ## E4.12 失败/异常处理
 
@@ -2137,15 +2134,16 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 | 数据集 | 样本数 | 角色 |
 |---|---|---|
 | τ-bench | 495 episodes | 主消融面 |
-| BFCL v3 multi-turn | 800 | 第二消融面（关键消融项确认） |
-| StableToolBench | 500 | 确认面（核验降级时仅前两个） |
+| StableToolBench | 500 | 确认面（核验降级时仅 τ-bench） |
+
+> **v0.5（2026-07-26）注**：原 BFCL v3 multi-turn 800 行（第二消融面）已删除——BFCL 不再作为数据集。
 
 运行面：E4 的主 cell（预算 25%、并发 8）为消融核心；关键消融（双轴四项）扩至全 3 预算档位；3 种子。
 
 ## E5.3 样本数与功效分析
 
 - 每消融变体：主 cell 495 episodes × 3 种子（与 E4 完全配对，共用 trace）；
-- 双轴四项对比扩展至 3 预算 × 2 主 workload；
+- 双轴四项对比扩展至 3 预算 × 1 主 workload（v0.5 移除 BFCL 后单 workload）；
 - 功效：与 E4 共用配对框架；消融项间差异预期小于主对照，按 0.8.3 规则报告 CI（CI 过宽时结论限定为"无显著差异"，不硬判无效）。
 
 ## E5.4 消融变体（IDEA §8 E5 全量 10 项）
@@ -2211,7 +2209,7 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 |---|---|---|
 | 5.1 | 变体开关实现与配置冻结 | ablation configs |
 | 5.2 | 主 cell × 10 变体 × 3 种子运行 | 结果表 |
-| 5.3 | 双轴四项 × 3 预算 × 2 workload 扩展 | 扩展表 |
+| 5.3 | 双轴四项 × 3 预算 × 1 workload 扩展（v0.5 移除 BFCL 后单 workload） | 扩展表 |
 | 5.4 | closed-loop 质量子集（变体 1–4、7） | 质量表 |
 | 5.5 | 四象限错误分配解剖 | 解剖图 |
 | 5.6 | 汇总 | `experiments/e5/e5-report.md` |
@@ -2293,10 +2291,11 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 | 数据 | 样本数 | 用途 |
 |---|---|---|
 | τ-bench ↔ StableToolBench | 495 ↔ 500 | family-out 通道①（工具型互泛化，v0.4 唯一通道） |
-| BFCL | 800 | 长度维度的补充面（其 long_context 类 200 条天然提供上下文长度轴） |
 | LMSYS-Chat-1M | 2,000 | 负对照（burst 与纯追加场景） |
 | BurstGPT | 2,000 窗口 | 真实 burst arrival 证据（轴 5 主证据） |
 | Mooncake trace | 抽样（TBD） | 大规模前缀共享压力面（新增轴） |
+
+> **v0.5（2026-07-26）注**：原 BFCL 800 行（长度维度的补充面）已删除——BFCL 不再作为数据集。轴 2"不同上下文长度"改由 LongBench 长度分层单独覆盖。
 
 ## E6.3 样本数与功效分析
 
@@ -2311,7 +2310,7 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 | # | 扰动轴 | 操作化（v0.2：真实数据 / replay 时操作） |
 |---|---|---|
 | 1 | workflow-family-out | 单通道交叉（E6.2；v0.4 移除 SWE↔Toolathlon 通道②，仅 τ-bench↔STB） |
-| 2 | 不同上下文长度 | BFCL long_context 类 + LongBench 长度分层（真实长度分布） |
+| 2 | 不同上下文长度 | LongBench 长度分层（真实长度分布；v0.5 移除 BFCL long_context 类） |
 | 3 | DAG 边缺失/噪声 | **replay 时特征扰动**：对预测器输入的已声明后继随机删边 p ∈ {5%, 15%, 30%}（实验操作，非数据集；缓存兼容性判定不受影响，IDEA §1.4 铁律） |
 | 4 | branch misprediction | **replay 时特征扰动**：分支标签错标（错误率档位 TBD）；v0.4 起由 τ-bench 内部 replay 扰动覆盖（删边/错标后继），不另设数据集 |
 | 5 | burst arrival | **BurstGPT 真实突发窗口**（主证据）；MMPP 合成模型次要参照（×2/×4 强度） |
@@ -2576,18 +2575,18 @@ E7 本身无失败动作；其发现若为**致命**（如 F7 普遍 >1、F8 无
 | 章 | Gate | 周次 | 主数据 | 主判定/交付 |
 |---|---|---|---|---|
 | G0 | G0 | W1–W2 | 真实结构用例 90 组 + τ-bench 10 + 100 block | exactness/loadability 判定 |
-| G1 | G1 | W6（v0.2 顺延） | τ-bench 495 + BFCL 800（+STB 500 确认） | oracle headroom ≥10% + baseline 可比性 |
+| G1 | G1 | W6（v0.2 顺延） | τ-bench 1,320（v0.5 移除 BFCL 800；+STB 500 确认） | oracle headroom ≥10% + baseline 可比性 |
 | G2 | G2 | W9–W10 | 见 `g2-pilot-design.md`（τ-bench 80 子集，设计独立成立） | R–D 错位判定（已有独立文档） |
-| G3 | G3 | W7–W8 | τ-bench 495 + BFCL 800（9 cell） | p95 TTFT ~15%、吞吐 ≥ −5% |
+| G3 | G3 | W7–W8 | τ-bench 495（v0.5 移除 BFCL 800；9 cell） | p95 TTFT ~15%、吞吐 ≥ −5% |
 | G4 | G4 | W9–W10 | τ-bench 495 + LongBench 1,000 + GSM8K 300 + QA 600 | 非劣检验（预注册 ε/δ/N） |
-| G5 | G5 | W7–W8 | τ-bench 297/99/99 + BFCL 480/160/160 → STB 500 / SWE 500 | family-out regret −10% |
+| G5 | G5 | W7–W8 | τ-bench 297/99/99（v0.5 移除 BFCL 480/160/160）→ STB 500 / SWE 500 | family-out regret −10% |
 | E1 | G1 | W7（v0.2 顺延） | 12 个数据集全量（~8,800 样本） | workload 画像 + trace 资产 |
-| E2 | G5 | W7–W8 | τ-bench + BFCL（train/val/test）+ STB/SWE family-out + Toolathlon + LMSYS 2,000 | 预测质量 + 系统转换 |
+| E2 | G5 | W7–W8 | τ-bench（train/val/test，v0.5 移除 BFCL）+ STB/SWE family-out + Toolathlon + LMSYS 2,000 | 预测质量 + 系统转换 |
 | E3 | G4 | W9, W11 | τ-bench 495 + LongBench 1,000 + GSM8K 300 + QA 600 | 风险估计方法学对比 |
-| E4 | G2/G3/G4 | W11 | τ-bench 495 + BFCL 800（18 cell × 13 对照；BurstGPT 到达） | 主表/主图/Pareto |
-| E5 | G2 | W11 | τ-bench 495 + BFCL 800 | 机制归因 + 错误分配解剖 |
+| E4 | G2/G3/G4 | W11 | τ-bench 495（v0.5 移除 BFCL 800；9 cell × 13 对照；BurstGPT 到达） | 主表/主图/Pareto |
+| E5 | G2 | W11 | τ-bench 495（v0.5 移除 BFCL 800） | 机制归因 + 错误分配解剖 |
 | E6 | G5 | W12 | family-out 双通道 + BurstGPT/Mooncake + LMSYS 2,000 | 鲁棒性边界 |
 | E7 | — | W12 | 按模式（F1–F8，全部真实数据） | 失败空间地图 + 开销透明 |
 
 > 本册全部结果数字为 TBD；任何章节的预注册字段冻结后，回写对应章节并标注冻结日期。
-> v0.2（2026-07-25）：数据集体系重构——禁自建数据集、样本总量 ~880 → ~8,800、新增 BFCL/SWE 轨迹/Toolathlon/CATraces/LongBench/GSM8K/BurstGPT/Mooncake（详见 0.4）。
+> v0.2（2026-07-25）：数据集体系重构——禁自建数据集、样本总量 ~880 → ~8,800、新增 BFCL/SWE 轨迹/Toolathlon/CATraces/LongBench/GSM8K/BurstGPT/Mooncake（详见 0.4）。**v0.5（2026-07-26）注：BFCL 全面移除，不再作为数据集**。

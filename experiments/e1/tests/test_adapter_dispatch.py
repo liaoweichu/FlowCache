@@ -6,6 +6,10 @@ Background: G1 routes tau-bench and BFCL v3 through real adapter classes
 must return the correct adapter instance based on the dataset argument,
 and raise ValueError for unknown datasets. Tests skip gracefully when
 the upstream packages (tau-bench / bfcl-eval) are not installed.
+
+⚠️ v0.5（2026-07-26）注：BFCL 不再作为 FlowCache 数据集。BFCLAdapter 作为 disabled
+adapter 保留（详见 bfcl_adapter.py docstring），BFCL 相关测试自然 skip（bfcl-eval 未安装）。
+当前 config.yaml 已设为 tau-bench only，BFCL dispatch 测试仅作回归性保留。
 """
 
 import sys

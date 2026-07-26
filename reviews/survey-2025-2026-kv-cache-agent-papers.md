@@ -418,7 +418,7 @@ FlowCache 是推理/缓存系统，不训练模型。本调研中"数据集"均�
 | 排名 | 数据集 | 出现论文数 | 论文 |
 |---|---|---|---|
 | 1 | SWE-Bench / SWE-bench | 3 | Continuum, SAGA, CacheWise（隐含） |
-| 2 | BFCL | 2 | Continuum, （FlowCache 计划使用） |
+| 2 | BFCL | 1 | Continuum（FlowCache v0.5 已移除 BFCL，不再作为数据集） |
 | 3 | LongBench | 3 | FlowKV, Ada-KV, ARKV（隐含） |
 | 4 | GSM8K | 1 | QKVShare |
 | 5 | WebArena | 1 | SAGA |
@@ -443,26 +443,26 @@ FlowCache 是推理/缓存系统，不训练模型。本调研中"数据集"均�
 
 ### 5.1 FlowCache 数据集组合定位
 
-| 维度 | FlowCache v0.4 | 同领域论文中位数 | 倍数 |
+| 维度 | FlowCache v0.5 | 同领域论文中位数 | 倍数 |
 |---|---|---|---|
-| 核心数据集数 | 5 | 2 | 2.5× |
-| 核心样本总量 | ~3,720 | ~150-600 | 6.2-24.8× |
-| 主表样本量 | 2,120（τ-bench 1,320 + BFCL 800） | ~150-600 | 3.5-14× |
+| 核心数据集数 | 1（v0.5 移除 BFCL 后单数据集 τ-bench） | 2 | 0.5× |
+| 核心样本总量 | ~1,320 | ~150-600 | 2.2-8.8× |
+| 主表样本量 | 1,320（τ-bench 165 tasks × 8 seeds） | ~150-600 | 2.2-8.8× |
 | 数据集披露完整度 | 完整（名称+样本量） | 20% 完整披露 | — |
 
 ### 5.2 关键发现
 
-1. **FlowCache 数据集数偏高但不过量**：5 个核心数据集是同领域论文中位数（2 个）的 2.5×，但低于 EvicPress（12）和 Ada-KV（29 子任务）。考虑到 FlowCache 覆盖 3 层角色（主表 + 质量面 + 鲁棒性），每层 1-2 个数据集是合理的。
+1. **FlowCache v0.5 单数据集精简**：v0.5 移除 BFCL 后，核心数据集数从 5 降为 1（单数据集 τ-bench 1,320 episodes），低于同领域论文中位数（2 个）。这一精简聚焦于与 τ-bench 原论文（ICLR 2025）pass^k 评估的方法论完全对齐，rebuttal 时可按 IDEA.rewritten.md §6.1 migration 规则补 BFCL/STB 作跨工具家族泛化证据。
 
-2. **FlowCache 样本量显著高于同领域**：~3,720 是同领域论文中位数（~150-600）的 6-25×。但这主要来自 τ-bench 1,320（165 任务 × 8 seeds），与 τ-bench 原论文（1,320）完全对齐，是 pass^k 评估的必要样本量。
+2. **FlowCache 样本量与 τ-bench 原论文对齐**：1,320 episodes（165 任务 × 8 seeds）与 τ-bench 原论文完全对齐，是 pass^k (k≤8) 评估的必要样本量，高于同领域论文中位数（~150-600）。
 
 3. **同领域论文数据集披露不完整**：80% 的论文未完整披露样本量，仅给数据集名称或使用合成 workflow。FlowCache 在数据集披露完整度上优于多数同领域论文。
 
 4. **领域标配数据集**：
    - **SWE-Bench**：编码 agent 场景标配（Continuum, SAGA, CacheWise）
-   - **BFCL**：函数调用 agent 场景标配（Continuum, FlowCache）
+   - **BFCL**：函数调用 agent 场景标配（Continuum；FlowCache v0.5 已移除，rebuttal 可补）
    - **LongBench**：长上下文 KV 压缩标配（FlowKV, Ada-KV, ARKV）
-   - **GSM8K**：accuracy sanity 标配（QKVShare, FlowCache）
+   - **GSM8K**：accuracy sanity 标配（QKVShare；FlowCache v0.5 已移除）
 
 5. **FlowCache 独有差异化**：
    - **τ-bench 1,320（8 seeds）**：同领域论文中仅 τ-bench 原论文使用此规模，FlowCache 是唯一在 KV cache 管理工作中使用 τ-bench pass^k 评估的

@@ -1,0 +1,79 @@
+# G1: Verdict Module & Final Sync
+# ===============================
+# Purpose: Reuse E1 trace + baseline implementations to produce the G1.9
+#   grid (策略 × 预算 × 数据集 × 3 replay seeds) and the G1 verdict report.
+# Gate: G1 (Opportunity)
+# Depends on: experiments/e1/compare_oracle.py (8 baselines + build_access_trace)
+#             experiments/e1/trace_utils.py (load_all_trajectories)
+#             experiments/e1/traces/bf16/tau_bench/ (28/1320 pilot episodes)
+#
+# IDEA §8 Ch.1 line 617: G1 不独立运行，直接复用 E1 trace 与 baseline 实现。
+
+# --- Trace source (reused from E1, not re-recorded) ---
+trace_source: "experiments/e1/traces/bf16/tau_bench/"
+expected_episodes: 1320  # 165 tasks × 8 seeds (per τ-bench pass^k, k∈{1,2,4,8})
+
+# --- Grid axes ---
+datasets: ["tau_bench"]
+budgets: [0.10, 0.25, 0.50, 1.00]  # fraction of peak working set
+replay_seeds: [1, 2, 3]            # arrival-time perturbation seeds (independent of recording seeds)
+
+# --- Baselines (mirror experiments/e1/config.yaml baselines section) ---
+# The grid runner imports the actual classes from experiments/e1/compare_oracle.py.
+# This list documents which baselines participate in G1; kvflow_faithful is
+# marked pending because its τ-bench adapter is not yet implemented.
+baselines:
+  # Simple heuristics (block-level, no future information)
+  - name: lru
+    type: simple_heuristic
+    enabled: true
+  - name: gdsf
+    type: simple_heuristic
+    enabled: true
+  - name: sizecost
+    type: simple_heuristic
+    enabled: true
+  - name: apc_lru
+    type: simple_heuristic
+    enabled: true
+
+  # Oracle upper bounds (offline, future-aware)
+  - name: belady
+    type: oracle
+    enabled: true
+  - name: oracle_cost
+    type: oracle
+    enabled: true
+
+  # Closest baselines — inspired variants
+  - name: pbkv_inspired
+    type: closest_inspired
+    enabled: true
+  - name: thunderagent_inspired
+    type: closest_inspired
+    enabled: true
+
+  # Closest baseline — faithful reproduction (adapter in progress)
+  - name: kvflow_faithful
+    type: closest_faithful
+    enabled: true
+    status: pending
+    reason: adapter_not_implemented
+
+# --- Verdict thresholds (G1.8) ---
+verdict:
+  headroom_threshold: 0.10          # oracle − max(simple) ≥ 10% → pass
+  bootstrap_samples: 1000           # paired workflow-level bootstrap
+  bootstrap_seed: 42                # fixed seed for reproducibility
+  ci_level: 0.95                    # 95% CI
+  alpha: 0.05                       # family-wise α
+  multiple_testing_correction: bonferroni
+
+# --- Output ---
+output:
+  results_dir: "experiments/g1/results"
+  figures_dir: "experiments/g1/figures"
+  raw_results_csv: "experiments/g1/results/raw_results.csv"
+  verdict_md: "experiments/g1/g1-verdict.md"
+  verdict_json: "experiments/g1/g1-verdict.json"
+  headroom_png: "experiments/g1/figures/g1-headroom.png"

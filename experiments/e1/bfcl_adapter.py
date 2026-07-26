@@ -1,6 +1,11 @@
 """
 BFCL v3 multi-turn 真实 backend 适配器（G1 实验用）。
 
+⚠️ v0.5（2026-07-26）DISABLED：BFCL 不再作为 FlowCache 数据集。本 adapter 作为
+disabled 代码保留以备 rebuttal 时按 IDEA.rewritten.md §6.1 migration 规则恢复使用。
+当前实验配置（experiments/e1/config.yaml）已设为 tau-bench only（datasets: ["tau-bench"]），
+本 adapter 不会被实例化。详见 experiments/experiment-designs.md v0.5 注。
+
 对接 BFCL v3 (Berkeley Function-Calling Leaderboard v3) 的 multi-turn 子集：
   - 4 子集 × 200 = 800 episodes 全量（multi_turn_base / miss_func / miss_param / long_context）
   - 8 个真实 sim 工具类（VehicleControlAPI / TwitterAPI / GorillaFileSystem 等）

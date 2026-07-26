@@ -1,0 +1,116 @@
+{
+  "verdict": "G1 verdict report",
+  "dataset": "tau_bench",
+  "replay_seeds": [
+    1,
+    2,
+    3
+  ],
+  "budgets": [
+    0.1,
+    0.25,
+    0.5,
+    1.0
+  ],
+  "threshold": 0.1,
+  "bootstrap": {
+    "samples": 1000,
+    "seed": 42,
+    "ci_level": 0.95
+  },
+  "multiple_testing": {
+    "family_alpha": 0.05,
+    "correction": "bonferroni",
+    "n_tests": 4,
+    "per_test_alpha": 0.0125
+  },
+  "headroom_rel_per_budget": {
+    "0.10": {
+      "headroom_rel_mean": -0.254119,
+      "headroom_rel_per_seed": [
+        -0.251057,
+        -0.212012,
+        -0.299288
+      ],
+      "ci_low": -0.299288,
+      "ci_high": -0.212012,
+      "pass": false
+    },
+    "0.25": {
+      "headroom_rel_mean": -0.022085,
+      "headroom_rel_per_seed": [
+        -0.003398,
+        -0.060736,
+        -0.002122
+      ],
+      "ci_low": -0.060736,
+      "ci_high": -0.002122,
+      "pass": false
+    },
+    "0.50": {
+      "headroom_rel_mean": -0.000792,
+      "headroom_rel_per_seed": [
+        -0.001867,
+        -0.000255,
+        -0.000255
+      ],
+      "ci_low": -0.001867,
+      "ci_high": -0.000255,
+      "pass": false
+    },
+    "1.00": {
+      "headroom_rel_mean": 0.0,
+      "headroom_rel_per_seed": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "ci_low": 0.0,
+      "ci_high": 0.0,
+      "pass": false
+    }
+  },
+  "comparability": {
+    "pass": true,
+    "available": [
+      "pbkv_inspired",
+      "thunderagent_inspired"
+    ],
+    "pending": [
+      "kvflow_faithful"
+    ]
+  },
+  "go_no_go": {
+    "headroom": "fail",
+    "comparability": "pass",
+    "per_budget": {
+      "0.10": {
+        "headroom_rel_mean": -0.254119,
+        "ci_low": -0.299288,
+        "ci_high": -0.212012,
+        "pass": false
+      },
+      "0.25": {
+        "headroom_rel_mean": -0.022085,
+        "ci_low": -0.060736,
+        "ci_high": -0.002122,
+        "pass": false
+      },
+      "0.50": {
+        "headroom_rel_mean": -0.000792,
+        "ci_low": -0.001867,
+        "ci_high": -0.000255,
+        "pass": false
+      },
+      "1.00": {
+        "headroom_rel_mean": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0,
+        "pass": false
+      }
+    }
+  },
+  "overall": "fail",
+  "pilot": true,
+  "pilot_note": "pilot: 26/1320 episodes available"
+}

@@ -13,6 +13,8 @@
 > **创建日期：** 2026-07-25
 >
 > **状态：** planning
+>
+> **⚠️ v0.5（2026-07-26） supersession 注**：本计划中所有 BFCL 作为数据集的引用（Goal 中"7720 episodes"、Tech Stack 中"bfcl-eval"、§1.1 中 `bfcl_adapter.py` 列为 G1 用途、决策表中"BFCL 8 seeds / BFCL 集成方式 / seeds 语义 BFCL"等）**已全部作废**。当前设计为单数据集 τ-bench 1,320 episodes（165 tasks × 8 seeds），BFCL 不再作为数据集（详见 `experiments/experiment-designs.md` v0.5 注）。`bfcl_adapter.py` 作为 disabled adapter 保留，`experiments/e1/config.yaml` 已设为 τ-bench only。G1 verdict 模块（`experiments/g1/`）已按 τ-bench only 实现。
 
 ---
 

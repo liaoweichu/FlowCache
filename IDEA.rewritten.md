@@ -549,7 +549,7 @@ v0.3 将 workload 体系按实验章节分层，主表严格限定两个工具 w
 
 - 统计 exact-prefix overlap、next-use distance、可节省 prefill time 和 KV/总显存占比；
 - 比较 LRU、size-aware heuristic 与离线 Belady/cost-aware oracle；
-- 至少保证 PBKV 或 KVFlow 中一个 closest baseline 能在公平协议下忠实运行；若只能实现 inspired variant，必须先解决可比性；
+- 至少保证 PBKV / KVFlow / ThunderAgent 中一个 closest baseline 能在公平协议下忠实运行；若只能实现 inspired variant，必须先解决可比性（当前状态：PBKV-inspired + ThunderAgent-inspired 已实现，KVFlow faithful 待 WSL2 adapter）；
 - 内部参考：oracle 相对最佳简单策略应存在约 10% 的 miss-cost 或 p95 TTFT 改进空间。
 
 **运行方式**：数据来源改为复用 Ch.1 画像数据（τ-bench 1,320 episodes 同 trace），不再独立运行 Gate 实验；判定逻辑与阈值不变。`design_doc` 指向 `experiments/experiment-designs.md#ch1`。
@@ -612,7 +612,7 @@ v0.3 将原 E1–E7 七个独立实验章节合并为 Ch.1–Ch.5 五章，遵�
 - workflow 长度、深度、宽度、分支率和工具等待；
 - exact-prefix overlap、LCP tokens、next-use distance；
 - block working-set size、KV/总显存占比；
-- 6 个 baseline（LRU/GDSF/SizeCost/APC-LRU/Belady/Oracle-Cost）+ ≥1 个 closest baseline（PBKV 或 KVFlow）的 headroom；headroom = Oracle-Cost − max(LRU, GDSF, SizeCost, APC-LRU)。
+- 6 个 baseline（LRU/GDSF/SizeCost/APC-LRU/Belady/Oracle-Cost）+ 2 个 inspired closest baseline（PBKV-inspired + ThunderAgent-inspired）+ KVFlow faithful（待 WSL2 adapter）的 headroom；headroom = Oracle-Cost − max(LRU, GDSF, SizeCost, APC-LRU)。
 
 **Gate 复用**：G1 判定（oracle headroom ≥ 10% + closest baseline 可比性）直接复用本章画像数据，不独立运行。
 
@@ -670,7 +670,7 @@ v0.3 将原 E1–E7 七个独立实验章节合并为 Ch.1–Ch.5 五章，遵�
 | 1 | No-Cache | cold recompute 下界 |
 | 2 | APC-LRU | 同引擎实际 APC |
 | 3 | GDSF | 强启发式代表（合并 LFU、LRU-K/2Q 的角色） |
-| 4 | KVFlow† 或 PBKV† | ≥1 个可公平运行的 closest baseline；另一项若不兼容才使用明确标注的 inspired variant |
+| 4 | KVFlow† / PBKV† / ThunderAgent† | ≥1 个可公平运行的 closest baseline；不兼容项使用明确标注的 inspired variant（ThunderAgent 为 API 级代理 → inspired；PBKV 无代码 → inspired；KVFlow 待 WSL2 adapter） |
 | 5 | Uniform-Q8 | 统一 Q8（Q4 仅在 Ch.3 fidelity 侧，不进主表） |
 | 6 | Reuse-Only | 核心变体 1：复用价值驱动驻留 + 统一精度 |
 | 7 | Fidelity-Only | 核心变体 2：保真风险驱动精度 + 强启发式驻留 |
