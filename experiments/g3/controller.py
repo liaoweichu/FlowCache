@@ -74,6 +74,11 @@ class FlowCacheLosslessController:
         self.block_bytes = block_bytes
         self.migrate_threshold = migrate_threshold
 
+        # G3'' 修复：CPU 容量自动设为 GPU 有效容量的 2 倍（-1 时）
+        # 避免 CPU 无限增长导致 OOM，同时让 CPU 层触发淘汰
+        if cpu_capacity_blocks < 0:
+            cpu_capacity_blocks = effective_capacity * 2
+
         # 初始化 cache manager
         self.manager = LosslessCacheManager(
             gpu_capacity_blocks=effective_capacity,
@@ -153,13 +158,35 @@ class FlowCacheLosslessController:
 
         if location == "cpu":
             # CPU hit → restore to GPU
-            # 需要 GPU 有空间
-            self._ensure_gpu_space(1)
-            restore_ms = self.manager.restore_to_gpu(block_hash)
+            # G3'' Bug 6 修复：_ensure_gpu_space 可能淘汰 CPU 中的目标块
+            # 先从 CPU 取出 metadata，腾位后再放回 GPU
+            cpu_meta = self.manager.cpu_cache.get(block_hash)
+            if cpu_meta is None:
+                # 块在 _ensure_gpu_space 中被淘汰了，当作 miss
+                self.manager.record_miss(prefill_ms)
+                self._ensure_gpu_space(1)
+                self.manager.admit_gpu(block_hash, {
+                    "parent_hash": parent_hash,
+                    "last_access": self._clock,
+                    "prefill_ms": prefill_ms,
+                    "block_idx": block_idx,
+                    "share_count": share_count,
+                })
+                self._clock += 1
+                return False
+
+            # 确保 GPU 有空间（保护目标块不被从 CPU 淘汰）
+            self._ensure_gpu_space(1, protect_hash=block_hash)
+            # 目标块应仍在 CPU（已保护）
+            if block_hash in self.manager.cpu_cache:
+                restore_ms = self.manager.restore_to_gpu(block_hash)
+            else:
+                # 极端情况：CPU 只有这一个块且满了，无法腾位
+                # 用之前保存的 metadata 重建
+                restore_ms = 0.0
+                self.manager.gpu_cache[block_hash] = cpu_meta.copy()
+
             self.manager.record_hit(prefill_ms)
-            # 恢复后 prefill 节省 - restore 开销
-            # 注意：saved_prefill_ms 记录的是"如果没有缓存需要重新 prefill 的成本"
-            # restore 开销单独记录在 restore_ms_total 中
             self.manager.touch_gpu(block_hash)
             meta = self.manager.gpu_cache[block_hash]
             meta["block_idx"] = block_idx
@@ -185,15 +212,23 @@ class FlowCacheLosslessController:
     # Eviction / migration decision
     # ------------------------------------------------------------------
 
-    def _ensure_gpu_space(self, needed: int) -> None:
+    def _ensure_gpu_space(self, needed: int, protect_hash: Optional[str] = None) -> None:
         """
-        确保 GPU 有足够空间（O(1) LRU 淘汰 + O(n) CPU 迁移决策）。
+        确保 GPU 有足够空间（分层淘汰）。
 
-        G3′ 分层决策（速度优化版）：
-          1. GPU victim 按 LRU 选（O(1)，不用 R 扫描）
-          2. 若 victim_r > migrate_threshold → 迁移到 CPU
-             - CPU 满 → 淘汰 CPU 中 R 最低的块腾位（唯一 O(n) 但 CPU 增长慢）
-          3. 若 victim_r ≤ migrate_threshold → 直接从 GPU 淘汰
+        G3'' 修复（总是迁移到 CPU）：
+          1. GPU victim 按 LRU 选（age 最大的块）
+          2. 总是先迁移到 CPU（不检查 R 值）：
+             - CPU 有空间 → 迁移到 CPU
+             - CPU 满 → 先淘汰 CPU 中 R 最低的块腾位（跳过 protect_hash），再迁移
+          3. 仅当 CPU 也无法腾位时才直接从 GPU 淘汰（理论不发生）
+
+        G3' 的 bug：原用 R 值门槛决定是否迁移，但 LRU victim 的 age
+        经常 >= horizon(1000)，R=0 ≤ migrate_threshold=0.01，导致永远不迁移。
+
+        Args:
+            needed: 需要腾出的 block 数
+            protect_hash: CPU 淘汰时需保护的 block_hash（避免淘汰即将 restore 的块）
         """
         while self.manager.gpu_size() + needed > self.manager.gpu_capacity:
             if not self.manager.gpu_cache:
@@ -202,25 +237,15 @@ class FlowCacheLosslessController:
             victim = min(self.manager.gpu_cache,
                         key=lambda h: self.manager.gpu_cache[h].get("last_access", 0))
 
-            # Decision: migrate to CPU or evict
-            victim_meta = self.manager.gpu_cache.get(victim, {})
-            victim_age = self._clock - victim_meta.get("last_access", 0)
-            victim_share = victim_meta.get("share_count", 0)
-            victim_idx = victim_meta.get("block_idx", 0)
-            victim_r = self.estimator.estimate(
-                age=victim_age, share_count=victim_share, block_idx=victim_idx,
-            )
-
-            if victim_r > self.migrate_threshold:
-                if self.manager.cpu_full():
-                    cpu_victim = self._select_cpu_victim()
-                    if cpu_victim is not None:
-                        self.manager.evict_from_cpu(cpu_victim)
-                if not self.manager.cpu_full():
-                    self.manager.migrate_to_cpu(victim)
-                else:
-                    self.manager.evict_from_gpu(victim)
+            # G3'': 总是迁移到 CPU，不检查 R 值
+            if self.manager.cpu_full():
+                cpu_victim = self._select_cpu_victim(protect_hash=protect_hash)
+                if cpu_victim is not None:
+                    self.manager.evict_from_cpu(cpu_victim)
+            if not self.manager.cpu_full():
+                self.manager.migrate_to_cpu(victim)
             else:
+                # CPU 也满了且无法腾位（理论不发生）
                 self.manager.evict_from_gpu(victim)
 
     def _score_block(self, meta: Dict) -> float:
@@ -232,12 +257,20 @@ class FlowCacheLosslessController:
         hold_cost = self._estimate_hold_cost(meta)
         return r_value - self.score_lambda * hold_cost
 
-    def _select_cpu_victim(self) -> Optional[str]:
-        """CPU victim: lowest R-value block (inlined, uses built-in min)."""
+    def _select_cpu_victim(self, protect_hash: Optional[str] = None) -> Optional[str]:
+        """CPU victim: lowest R-value block（跳过 protect_hash）。
+
+        Args:
+            protect_hash: 需保护的 block_hash（避免淘汰即将 restore 的块）
+        """
         if not self.manager.cpu_cache:
             return None
+        candidates = {h: m for h, m in self.manager.cpu_cache.items()
+                      if h != protect_hash}
+        if not candidates:
+            return None
         return min(
-            self.manager.cpu_cache.items(),
+            candidates.items(),
             key=lambda item: self.estimator.estimate(
                 age=self._clock - item[1].get("last_access", 0),
                 share_count=item[1].get("share_count", 0),

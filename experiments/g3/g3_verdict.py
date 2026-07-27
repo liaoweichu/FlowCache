@@ -64,42 +64,60 @@ def _to_float(v) -> Optional[float]:
 
 def aggregate_by_cell_baseline(rows: List[Dict]) -> Dict:
     """
-    按 (capacity, concurrency, baseline) 聚合，跨 seed 取均值。
+    G3'' 修复：按 (capacity, concurrency, baseline) 聚合 per-task 行。
+
+    G3' csv 每行是一个 task_id，global_* 字段在同一 cell×baseline 下相同，
+    per-task 字段（task_saved_prefill_ms, task_miss_cost_ms, task_hits,
+    task_misses）需要 sum 聚合。
 
     Returns:
-        {(cap, conc): {baseline: {metric: mean_value}}}
+        {(cap, conc): {baseline: {metric: value}}}
     """
-    # 先按 (cap, conc, baseline, seed) 聚合
-    cell_baseline_seed = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
+    result = defaultdict(lambda: defaultdict(dict))
+    # per-task 字段的 sum 聚合
+    per_task_sums = defaultdict(lambda: defaultdict(float))  # key -> {metric: sum}
+    seen = set()
+
     for r in rows:
         cap = _to_float(r.get("capacity_gib"))
         conc = int(r.get("concurrency", 0))
         bl = r.get("baseline", "")
-        seed = int(r.get("seed", 0))
         if cap is None:
             continue
-        cell_baseline_seed[(cap, conc)][bl][seed] = {
-            "p95_ttft_ms": _to_float(r.get("global_p95_ttft_ms") or r.get("p95_ttft_ms")) or 0.0,
-            "p50_ttft_ms": _to_float(r.get("global_p50_ttft_ms") or r.get("p50_ttft_ms")) or 0.0,
-            "miss_cost_ms": _to_float(r.get("task_miss_cost_ms") or r.get("miss_cost_ms")) or 0.0,
-            "saved_prefill_ms": _to_float(r.get("task_saved_prefill_ms") or r.get("saved_prefill_ms")) or 0.0,
-            "block_hit_rate": _to_float(r.get("global_block_hit_rate") or r.get("block_hit_rate")) or 0.0,
-            "throughput_req_per_s": _to_float(r.get("global_throughput") or r.get("throughput_req_per_s")) or 0.0,
+        key = (cap, conc, bl)
+        # 累加 per-task 字段
+        per_task_sums[key]["saved_prefill_ms"] += _to_float(r.get("task_saved_prefill_ms")) or 0.0
+        per_task_sums[key]["miss_cost_ms"] += _to_float(r.get("task_miss_cost_ms")) or 0.0
+        per_task_sums[key]["hits"] += int(r.get("task_hits") or 0)
+        per_task_sums[key]["misses"] += int(r.get("task_misses") or 0)
+        # global_* 字段只取第一行
+        if key in seen:
+            continue
+        seen.add(key)
+        result[(cap, conc)][bl] = {
+            "p95_ttft_ms": _to_float(r.get("global_p95_ttft_ms")) or 0.0,
+            "p50_ttft_ms": _to_float(r.get("global_p50_ttft_ms")) or 0.0,
+            "miss_cost_ms": 0.0,  # 后面用 per_task_sums 填充
+            "saved_prefill_ms": 0.0,  # 后面用 per_task_sums 填充
+            "block_hit_rate": _to_float(r.get("global_block_hit_rate")) or 0.0,
+            "throughput_req_per_s": _to_float(r.get("global_throughput")) or 0.0,
             "migrate_ms_total": _to_float(r.get("migrate_ms_total")) or 0.0,
             "restore_ms_total": _to_float(r.get("restore_ms_total")) or 0.0,
-            "hits": int(r.get("task_hits") or r.get("hits") or 0),
-            "misses": int(r.get("task_misses") or r.get("misses") or 0),
+            "migrate_count": int(r.get("migrate_count") or 0),
+            "restore_count": int(r.get("restore_count") or 0),
+            "hits": 0,  # 后面用 per_task_sums 填充
+            "misses": 0,  # 后面用 per_task_sums 填充
         }
 
-    # 再跨 seed 取均值
-    result = defaultdict(lambda: defaultdict(dict))
-    for cell, bl_dict in cell_baseline_seed.items():
-        for bl, seed_dict in bl_dict.items():
-            metrics = {}
-            for key in seed_dict[list(seed_dict.keys())[0]].keys():
-                values = [s[key] for s in seed_dict.values() if key in s]
-                metrics[key] = sum(values) / len(values) if values else 0.0
-            result[cell][bl] = metrics
+    # 填充聚合后的 per-task 字段
+    for (cap, conc), bl_dict in result.items():
+        for bl, metrics in bl_dict.items():
+            sums = per_task_sums.get((cap, conc, bl), {})
+            metrics["saved_prefill_ms"] = sums.get("saved_prefill_ms", 0.0)
+            metrics["miss_cost_ms"] = sums.get("miss_cost_ms", 0.0)
+            metrics["hits"] = int(sums.get("hits", 0))
+            metrics["misses"] = int(sums.get("misses", 0))
+
     return dict(result)
 
 
@@ -176,32 +194,40 @@ def bootstrap_ci(values: List[float],
     return mean, boot_means[lo_idx], boot_means[hi_idx]
 
 
-def collect_per_seed_improvement(rows: List[Dict],
+def collect_per_task_improvement(rows: List[Dict],
                                  cell: Tuple,
                                  baseline: str,
-                                 metric: str = "p95_ttft_ms") -> List[float]:
-    """收集某个 cell 下 FlowCache vs baseline 的 per-seed 改善值。"""
+                                 metric: str = "task_p95_ttft_ms") -> List[float]:
+    """
+    G3'' 修复：收集某个 cell 下 FlowCache vs baseline 的 per-task 改善值。
+
+    以 165 个 task_id 为配对单元，每个 task 贡献一个改善值：
+        improvement = (baseline_task_metric - fc_task_metric) / baseline_task_metric
+    正值 = FlowCache 更好。
+
+    Args:
+        metric: per-task 指标字段名（默认 task_p95_ttft_ms）
+    """
     cap, conc = cell
-    per_seed = []
-    # 按 seed 分组
-    seed_data = defaultdict(lambda: defaultdict(dict))
+    task_data = defaultdict(lambda: defaultdict(dict))
     for r in rows:
         r_cap = _to_float(r.get("capacity_gib"))
         r_conc = int(r.get("concurrency", 0))
         if r_cap != cap or r_conc != conc:
             continue
         bl = r.get("baseline", "")
-        seed = int(r.get("seed", 0))
+        task_id = r.get("task_id", "")
         val = _to_float(r.get(metric))
         if val is not None:
-            seed_data[seed][bl] = val
+            task_data[task_id][bl] = val
 
-    for seed, bl_vals in seed_data.items():
+    per_task = []
+    for task_id, bl_vals in task_data.items():
         fc_val = bl_vals.get(FLOWCACHE)
         bl_val = bl_vals.get(baseline)
         if fc_val is not None and bl_val is not None and bl_val > 0:
-            per_seed.append((bl_val - fc_val) / bl_val)
-    return per_seed
+            per_task.append((bl_val - fc_val) / bl_val)
+    return per_task
 
 
 # ---------------------------------------------------------------------------
@@ -263,8 +289,8 @@ def evaluate_go_no_go(rows: List[Dict], config: Dict) -> Dict:
             continue
         bl_metrics = aggregated[main_cell_key][bl]
         _, rel_imp = compute_improvement(fc_metrics, bl_metrics, "p95_ttft_ms")
-        per_seed = collect_per_seed_improvement(rows, main_cell_key, bl, "p95_ttft_ms")
-        mean_imp, ci_low, ci_high = bootstrap_ci(per_seed, n_bootstrap)
+        per_task = collect_per_task_improvement(rows, main_cell_key, bl, "task_p95_ttft_ms")
+        mean_imp, ci_low, ci_high = bootstrap_ci(per_task, n_bootstrap)
         passed = (rel_imp >= threshold_p95) and (ci_low > 0)
         if not passed:
             p95_pass = False
@@ -306,8 +332,8 @@ def evaluate_go_no_go(rows: List[Dict], config: Dict) -> Dict:
     ci_pass = True
     ci_details = {}
     for bl in SIMPLE_BASELINES:
-        per_seed = collect_per_seed_improvement(rows, main_cell_key, bl, "p95_ttft_ms")
-        mean_imp, ci_low, ci_high = bootstrap_ci(per_seed, n_bootstrap)
+        per_task = collect_per_task_improvement(rows, main_cell_key, bl, "task_p95_ttft_ms")
+        mean_imp, ci_low, ci_high = bootstrap_ci(per_task, n_bootstrap)
         passed = ci_low > 0
         if not passed:
             ci_pass = False

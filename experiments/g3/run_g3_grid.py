@@ -215,15 +215,19 @@ def replay_accesses(cache, accesses: List[Dict]) -> Tuple[Dict, Dict[str, Dict]]
     G3′：不再按 seed 分组，而是按 task_id 收集 per-task 指标，
     用于 165 个 task 聚类 bootstrap。
 
+    G3'' 修复：
+    - Bug 3: throughput 用总 request 数（含全命中），不是有 miss 的 request 数
+    - Bug 4: p95 TTFT 包含全命中 request（TTFT=0），不是只算有 miss 的 request
+
     Returns:
         (global_metrics, per_task_metrics)
         - global_metrics: 全局聚合指标
         - per_task_metrics: {task_id: {metric: value}}
     """
-    # per-request miss cost 收集
-    request_miss_cost = defaultdict(float)
+    # per-request TTFT（miss cost）收集——所有 request 都计入
+    request_ttft = defaultdict(float)  # request_id -> 总 miss cost（TTFT 近似）
     request_to_task = {}  # request_id -> task_id
-    task_request_miss_costs = defaultdict(list)  # task_id -> [miss_cost_per_request]
+    task_request_ttfts = defaultdict(list)  # task_id -> [ttft_per_request]
     task_hits = defaultdict(int)
     task_misses = defaultdict(int)
     task_saved = defaultdict(float)
@@ -236,6 +240,9 @@ def replay_accesses(cache, accesses: List[Dict]) -> Tuple[Dict, Dict[str, Dict]]
         prefill_ms = record.get("prefill_ms", 0.0)
 
         request_to_task[req_id] = task_id
+        # G3'': 所有 request 都初始化 TTFT=0（命中则保持 0，miss 则累加）
+        if req_id not in request_ttft:
+            request_ttft[req_id] = 0.0
 
         if is_hit:
             task_hits[task_id] += 1
@@ -243,29 +250,29 @@ def replay_accesses(cache, accesses: List[Dict]) -> Tuple[Dict, Dict[str, Dict]]
         else:
             task_misses[task_id] += 1
             task_miss_cost[task_id] += prefill_ms
-            request_miss_cost[req_id] += prefill_ms
+            request_ttft[req_id] += prefill_ms  # TTFT = 该 request 的总 miss cost
 
-    # 构建 per-task 的 request miss cost 列表（用于 task 级 p95）
-    for req_id, cost in request_miss_cost.items():
+    # 构建 per-task 的 request TTFT 列表（含全命中 request，TTFT=0）
+    for req_id, ttft in request_ttft.items():
         task_id = request_to_task.get(req_id, "")
-        task_request_miss_costs[task_id].append(cost)
+        task_request_ttfts[task_id].append(ttft)
 
     # 计算 per-task 指标
     per_task: Dict[str, Dict] = {}
     all_task_ids = set(task_hits.keys()) | set(task_misses.keys())
     for task_id in all_task_ids:
-        req_costs = task_request_miss_costs.get(task_id, [])
+        req_ttfts = task_request_ttfts.get(task_id, [])
         hits = task_hits.get(task_id, 0)
         misses = task_misses.get(task_id, 0)
         total_blocks = hits + misses
         hit_rate = hits / total_blocks if total_blocks > 0 else 0.0
 
-        # task 级 p95 TTFT（request miss cost 的 P95）
-        if req_costs:
-            req_costs_sorted = sorted(req_costs)
-            p95_idx = int(len(req_costs_sorted) * 0.95)
-            task_p95 = req_costs_sorted[min(p95_idx, len(req_costs_sorted) - 1)]
-            task_p50 = req_costs_sorted[len(req_costs_sorted) // 2]
+        # task 级 p95 TTFT（所有 request 的 TTFT 的 P95，含全命中 TTFT=0）
+        if req_ttfts:
+            req_ttfts_sorted = sorted(req_ttfts)
+            p95_idx = int(len(req_ttfts_sorted) * 0.95)
+            task_p95 = req_ttfts_sorted[min(p95_idx, len(req_ttfts_sorted) - 1)]
+            task_p50 = req_ttfts_sorted[len(req_ttfts_sorted) // 2]
         else:
             task_p95 = 0.0
             task_p50 = 0.0
@@ -278,21 +285,22 @@ def replay_accesses(cache, accesses: List[Dict]) -> Tuple[Dict, Dict[str, Dict]]
             "task_hits": hits,
             "task_misses": misses,
             "task_block_hit_rate": hit_rate,
-            "task_n_requests": len(req_costs),
+            "task_n_requests": len(req_ttfts),
         }
 
-    # 全局指标
-    all_miss_costs = list(request_miss_cost.values())
-    if all_miss_costs:
-        all_miss_costs_sorted = sorted(all_miss_costs)
-        p95_idx = int(len(all_miss_costs_sorted) * 0.95)
-        p95_ttft_ms = all_miss_costs_sorted[min(p95_idx, len(all_miss_costs_sorted) - 1)]
-        p50_ttft_ms = all_miss_costs_sorted[len(all_miss_costs_sorted) // 2]
+    # 全局指标——G3'': 所有 request 的 TTFT 的 P95
+    all_ttfts = list(request_ttft.values())
+    if all_ttfts:
+        all_ttfts_sorted = sorted(all_ttfts)
+        p95_idx = int(len(all_ttfts_sorted) * 0.95)
+        p95_ttft_ms = all_ttfts_sorted[min(p95_idx, len(all_ttfts_sorted) - 1)]
+        p50_ttft_ms = all_ttfts_sorted[len(all_ttfts_sorted) // 2]
     else:
         p95_ttft_ms = 0.0
         p50_ttft_ms = 0.0
 
-    n_requests = len(request_miss_cost)
+    # G3'' Bug 3 修复：throughput 用总 request 数（含全命中）
+    n_requests = len(request_ttft)
     total_arrival_ms = max(
         (a.get("arrival_time_ms", 0) for a in accesses),
         default=0
