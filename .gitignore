@@ -55,6 +55,9 @@ datasets/
 *.bin
 *.safetensors
 
+# Large physical trace files (>100MB)
+experiments/*/physical_traces/request_prefixes.jsonl
+
 # OS
 Thumbs.db
 desktop.ini

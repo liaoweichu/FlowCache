@@ -1,0 +1,326 @@
+{
+  "verdict": "no_go",
+  "threshold_rel": 0.1,
+  "ci_level": 0.95,
+  "bootstrap_samples": 1000,
+  "bootstrap_unit": "task_group",
+  "random_seed": 42,
+  "oracle_baseline": "oracle_cost",
+  "simple_baselines": [
+    "lru",
+    "gdsf",
+    "sizecost",
+    "apc_lru"
+  ],
+  "metric": "miss_prefill_ms",
+  "overview": {
+    "n_rows": 216,
+    "n_episodes_per_cell": 3,
+    "n_task_groups": 1,
+    "n_seeds": 3,
+    "capacities_gib": [
+      1,
+      2,
+      4,
+      6
+    ],
+    "concurrency_levels": [
+      1,
+      4,
+      8
+    ],
+    "baselines": [
+      "apc_lru",
+      "belady",
+      "gdsf",
+      "lru",
+      "oracle_cost",
+      "sizecost"
+    ],
+    "accesses_per_cell": 17258,
+    "bootstrap_samples": 1000,
+    "ci_level": 0.95
+  },
+  "headroom_table": [
+    {
+      "capacity_gib": 1.0,
+      "concurrency": 1,
+      "oracle_miss_cost": 124.25056666666666,
+      "best_simple_miss_cost": 124.25056666666666,
+      "best_simple_baseline": "lru",
+      "per_simple": {
+        "lru": 124.25056666666666,
+        "gdsf": 124.25056666666666,
+        "sizecost": 124.25056666666666,
+        "apc_lru": 124.25056666666666
+      },
+      "headroom_abs": 0.0,
+      "headroom_rel": 0.0
+    },
+    {
+      "capacity_gib": 1.0,
+      "concurrency": 4,
+      "oracle_miss_cost": 101.16056666666667,
+      "best_simple_miss_cost": 101.16056666666667,
+      "best_simple_baseline": "lru",
+      "per_simple": {
+        "lru": 101.16056666666667,
+        "gdsf": 101.16056666666667,
+        "sizecost": 101.16056666666667,
+        "apc_lru": 101.16056666666667
+      },
+      "headroom_abs": 0.0,
+      "headroom_rel": 0.0
+    },
+    {
+      "capacity_gib": 1.0,
+      "concurrency": 8,
+      "oracle_miss_cost": 101.16056666666667,
+      "best_simple_miss_cost": 101.16056666666667,
+      "best_simple_baseline": "lru",
+      "per_simple": {
+        "lru": 101.16056666666667,
+        "gdsf": 101.16056666666667,
+        "sizecost": 101.16056666666667,
+        "apc_lru": 101.16056666666667
+      },
+      "headroom_abs": 0.0,
+      "headroom_rel": 0.0
+    },
+    {
+      "capacity_gib": 2.0,
+      "concurrency": 1,
+      "oracle_miss_cost": 124.25056666666666,
+      "best_simple_miss_cost": 124.25056666666666,
+      "best_simple_baseline": "lru",
+      "per_simple": {
+        "lru": 124.25056666666666,
+        "gdsf": 124.25056666666666,
+        "sizecost": 124.25056666666666,
+        "apc_lru": 124.25056666666666
+      },
+      "headroom_abs": 0.0,
+      "headroom_rel": 0.0
+    },
+    {
+      "capacity_gib": 2.0,
+      "concurrency": 4,
+      "oracle_miss_cost": 101.16056666666667,
+      "best_simple_miss_cost": 101.16056666666667,
+      "best_simple_baseline": "lru",
+      "per_simple": {
+        "lru": 101.16056666666667,
+        "gdsf": 101.16056666666667,
+        "sizecost": 101.16056666666667,
+        "apc_lru": 101.16056666666667
+      },
+      "headroom_abs": 0.0,
+      "headroom_rel": 0.0
+    },
+    {
+      "capacity_gib": 2.0,
+      "concurrency": 8,
+      "oracle_miss_cost": 101.16056666666667,
+      "best_simple_miss_cost": 101.16056666666667,
+      "best_simple_baseline": "lru",
+      "per_simple": {
+        "lru": 101.16056666666667,
+        "gdsf": 101.16056666666667,
+        "sizecost": 101.16056666666667,
+        "apc_lru": 101.16056666666667
+      },
+      "headroom_abs": 0.0,
+      "headroom_rel": 0.0
+    },
+    {
+      "capacity_gib": 4.0,
+      "concurrency": 1,
+      "oracle_miss_cost": 124.25056666666666,
+      "best_simple_miss_cost": 124.25056666666666,
+      "best_simple_baseline": "lru",
+      "per_simple": {
+        "lru": 124.25056666666666,
+        "gdsf": 124.25056666666666,
+        "sizecost": 124.25056666666666,
+        "apc_lru": 124.25056666666666
+      },
+      "headroom_abs": 0.0,
+      "headroom_rel": 0.0
+    },
+    {
+      "capacity_gib": 4.0,
+      "concurrency": 4,
+      "oracle_miss_cost": 101.16056666666667,
+      "best_simple_miss_cost": 101.16056666666667,
+      "best_simple_baseline": "lru",
+      "per_simple": {
+        "lru": 101.16056666666667,
+        "gdsf": 101.16056666666667,
+        "sizecost": 101.16056666666667,
+        "apc_lru": 101.16056666666667
+      },
+      "headroom_abs": 0.0,
+      "headroom_rel": 0.0
+    },
+    {
+      "capacity_gib": 4.0,
+      "concurrency": 8,
+      "oracle_miss_cost": 101.16056666666667,
+      "best_simple_miss_cost": 101.16056666666667,
+      "best_simple_baseline": "lru",
+      "per_simple": {
+        "lru": 101.16056666666667,
+        "gdsf": 101.16056666666667,
+        "sizecost": 101.16056666666667,
+        "apc_lru": 101.16056666666667
+      },
+      "headroom_abs": 0.0,
+      "headroom_rel": 0.0
+    },
+    {
+      "capacity_gib": 6.0,
+      "concurrency": 1,
+      "oracle_miss_cost": 124.25056666666666,
+      "best_simple_miss_cost": 124.25056666666666,
+      "best_simple_baseline": "lru",
+      "per_simple": {
+        "lru": 124.25056666666666,
+        "gdsf": 124.25056666666666,
+        "sizecost": 124.25056666666666,
+        "apc_lru": 124.25056666666666
+      },
+      "headroom_abs": 0.0,
+      "headroom_rel": 0.0
+    },
+    {
+      "capacity_gib": 6.0,
+      "concurrency": 4,
+      "oracle_miss_cost": 101.16056666666667,
+      "best_simple_miss_cost": 101.16056666666667,
+      "best_simple_baseline": "lru",
+      "per_simple": {
+        "lru": 101.16056666666667,
+        "gdsf": 101.16056666666667,
+        "sizecost": 101.16056666666667,
+        "apc_lru": 101.16056666666667
+      },
+      "headroom_abs": 0.0,
+      "headroom_rel": 0.0
+    },
+    {
+      "capacity_gib": 6.0,
+      "concurrency": 8,
+      "oracle_miss_cost": 101.16056666666667,
+      "best_simple_miss_cost": 101.16056666666667,
+      "best_simple_baseline": "lru",
+      "per_simple": {
+        "lru": 101.16056666666667,
+        "gdsf": 101.16056666666667,
+        "sizecost": 101.16056666666667,
+        "apc_lru": 101.16056666666667
+      },
+      "headroom_abs": 0.0,
+      "headroom_rel": 0.0
+    }
+  ],
+  "bootstrap_table": [
+    {
+      "capacity_gib": 1.0,
+      "concurrency": 1,
+      "n_tasks": 1,
+      "mean_headroom_rel": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    },
+    {
+      "capacity_gib": 1.0,
+      "concurrency": 4,
+      "n_tasks": 1,
+      "mean_headroom_rel": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    },
+    {
+      "capacity_gib": 1.0,
+      "concurrency": 8,
+      "n_tasks": 1,
+      "mean_headroom_rel": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    },
+    {
+      "capacity_gib": 2.0,
+      "concurrency": 1,
+      "n_tasks": 1,
+      "mean_headroom_rel": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    },
+    {
+      "capacity_gib": 2.0,
+      "concurrency": 4,
+      "n_tasks": 1,
+      "mean_headroom_rel": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    },
+    {
+      "capacity_gib": 2.0,
+      "concurrency": 8,
+      "n_tasks": 1,
+      "mean_headroom_rel": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    },
+    {
+      "capacity_gib": 4.0,
+      "concurrency": 1,
+      "n_tasks": 1,
+      "mean_headroom_rel": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    },
+    {
+      "capacity_gib": 4.0,
+      "concurrency": 4,
+      "n_tasks": 1,
+      "mean_headroom_rel": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    },
+    {
+      "capacity_gib": 4.0,
+      "concurrency": 8,
+      "n_tasks": 1,
+      "mean_headroom_rel": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    },
+    {
+      "capacity_gib": 6.0,
+      "concurrency": 1,
+      "n_tasks": 1,
+      "mean_headroom_rel": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    },
+    {
+      "capacity_gib": 6.0,
+      "concurrency": 4,
+      "n_tasks": 1,
+      "mean_headroom_rel": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    },
+    {
+      "capacity_gib": 6.0,
+      "concurrency": 8,
+      "n_tasks": 1,
+      "mean_headroom_rel": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    }
+  ],
+  "passing_cells": [],
+  "recommendation": "No statistically significant oracle headroom was detected on any (capacity, concurrency) cell under the current physical-prefix replay protocol. Recommended next step is **Route B**: re-examine the workload (e.g. extend to additional τ-bench domains or seeds), revisit the capacity tiers (smaller budgets amplify headroom), or relax the concurrency model before re-running G1′."
+}

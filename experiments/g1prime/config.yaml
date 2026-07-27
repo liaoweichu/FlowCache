@@ -1,0 +1,79 @@
+# G1′: 物理前缀重编译与正确回放
+# ============================================================
+# 修正 G1 的协议问题：物理前缀、绝对容量、并发、统计。
+#
+# - 物理前缀：跨 message 连续分块，重建每次 assistant 调用的完整 prompt 前缀
+# - 绝对容量：1 / 2 / 4 / 6 GiB（24 GB GPU 的合理 KV 预算），替代百分比
+# - 并发模拟：c ∈ {1, 4, 8}（c=1 等价于顺序基线）
+# - 统计判定：165 task group × 8 seeds 聚类 bootstrap，headroom_rel ≥ 10%
+#
+# 复用 experiments/e1/ 下的轨迹与 baseline 类（只读）。
+
+# G0 冻结配置（从 experiments/e1/config.yaml 继承）
+g0:
+  model_id: "/root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master"
+  revision: ""
+  template_hash: "ca26deeb41864f91"
+  config_hash: "6dee333c7bcea6b5"
+  adapter_id: "tau_bench_v1"
+  block_size: 16
+  num_hidden_layers: 28
+  num_kv_heads: 4
+  head_dim: 128
+  dtype: "bfloat16"
+  dtype_bytes: 2
+
+# 物理前缀重编译
+recompile:
+  trace_source: "../e1/traces/bf16/tau_bench/"
+  output_dir: "physical_traces/"
+  block_size: 16
+
+# 绝对 KV 容量（替代百分比 budget）
+capacity:
+  # 24GB GPU 的合理 KV 预算（weights ≈ 14 GiB 后剩余的可用 KV 区间）
+  budgets_gib: [1, 2, 4, 6]
+  # 100% 仅作 sanity check，不参与 Go/No-Go 判定
+  sanity_check_unlimited: true
+
+# 并发模拟
+concurrency:
+  levels: [1, 4, 8]
+  # c=1 等价于顺序基线（与当前 G1 行为一致）
+
+# Baselines（复用 experiments/e1/compare_oracle.py 的类）
+baselines:
+  simple_heuristic:
+    - name: lru
+      enabled: true
+    - name: gdsf
+      enabled: true
+    - name: sizecost
+      enabled: true
+    - name: apc_lru
+      enabled: true
+  oracle:
+    - name: belady
+      enabled: true
+    - name: oracle_cost
+      enabled: true
+  closest_inspired:
+    - name: pbkv_inspired
+      enabled: false  # G1′ 通过后再补充
+    - name: thunderagent_inspired
+      enabled: false
+
+# 统计判定
+verdict:
+  headroom_threshold_rel: 0.10  # 10%
+  bootstrap_samples: 1000
+  bootstrap_unit: "task_group"  # 165 个聚类
+  ci_level: 0.95
+  random_seed: 42
+
+# 数据集
+datasets:
+  - tau_bench  # 1320 episodes, 165 tasks × 8 seeds
+
+# Trace 来源
+trace_source: "../e1/traces/bf16/tau_bench/"
