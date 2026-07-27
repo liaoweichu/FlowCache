@@ -212,8 +212,8 @@ def evaluate_go_no_go(rows: List[Dict], config: Dict) -> Dict:
     """评估 G3 Go/No-Go 判定。"""
     aggregated = aggregate_by_cell_baseline(rows)
     verdict_cfg = config.get("verdict", {})
-    main_cell = tuple(config.get("capacity", {}).get("main_cell", {}).get("capacity_gib", 1),
-                      config.get("capacity", {}).get("main_cell", {}).get("concurrency", 4))
+    main_cell = (config.get("capacity", {}).get("main_cell", {}).get("capacity_gib", 1),
+                 config.get("capacity", {}).get("main_cell", {}).get("concurrency", 4))
     # 转为 tuple key
     main_cell_key = None
     for cell in aggregated:
