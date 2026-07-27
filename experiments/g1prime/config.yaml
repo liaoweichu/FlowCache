@@ -77,3 +77,7 @@ datasets:
 
 # Trace 来源
 trace_source: "../e1/traces/bf16/tau_bench/"
+
+# 本地模型路径（供 tokenizer 加载）
+model:
+  name: "/root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master"

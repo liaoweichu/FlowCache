@@ -2,14 +2,14 @@
 
 ## 1. Experiment Overview
 
-- **CSV rows**: 216
-- **Episodes per cell**: 3
-- **Unique task groups**: 1
-- **Unique seeds**: 3
+- **CSV rows**: 95,040
+- **Episodes per cell**: 1,320
+- **Unique task groups**: 165
+- **Unique seeds**: 8
 - **Capacity tiers (GiB)**: [1, 2, 4, 6]
 - **Concurrency levels**: [1, 4, 8]
 - **Baselines**: ['apc_lru', 'belady', 'gdsf', 'lru', 'oracle_cost', 'sizecost']
-- **Block-level accesses per cell**: 17,258
+- **Block-level accesses per cell**: 8,262,330
 
 ## 2. Methodology
 
@@ -29,45 +29,51 @@ Statistical significance is assessed via a cluster bootstrap resampling task gro
 
 | Capacity (GiB) | Concurrency | Oracle miss (ms) | Best simple (ms) | Best simple baseline | headroom_abs (ms) | headroom_rel |
 |---------------:|------------:|------------------:|-----------------:|:---------------------|------------------:|-------------:|
-| 1.0 | 1 | 124.25 | 124.25 | lru | 0.00 | 0.00% |
-| 1.0 | 4 | 101.16 | 101.16 | lru | 0.00 | 0.00% |
-| 1.0 | 8 | 101.16 | 101.16 | lru | 0.00 | 0.00% |
-| 2.0 | 1 | 124.25 | 124.25 | lru | 0.00 | 0.00% |
-| 2.0 | 4 | 101.16 | 101.16 | lru | 0.00 | 0.00% |
-| 2.0 | 8 | 101.16 | 101.16 | lru | 0.00 | 0.00% |
-| 4.0 | 1 | 124.25 | 124.25 | lru | 0.00 | 0.00% |
-| 4.0 | 4 | 101.16 | 101.16 | lru | 0.00 | 0.00% |
-| 4.0 | 8 | 101.16 | 101.16 | lru | 0.00 | 0.00% |
-| 6.0 | 1 | 124.25 | 124.25 | lru | 0.00 | 0.00% |
-| 6.0 | 4 | 101.16 | 101.16 | lru | 0.00 | 0.00% |
-| 6.0 | 8 | 101.16 | 101.16 | lru | 0.00 | 0.00% |
+| 1.0 | 1 | 127.08 | 173.39 | gdsf | 46.31 | 36.44% |
+| 1.0 | 4 | 467.29 | 681.31 | lru | 214.03 | 45.80% |
+| 1.0 | 8 | 1188.87 | 1023.68 | gdsf | -165.20 | -13.90% |
+| 2.0 | 1 | 118.69 | 118.76 | lru | 0.07 | 0.06% |
+| 2.0 | 4 | 140.99 | 190.20 | lru | 49.21 | 34.90% |
+| 2.0 | 8 | 362.79 | 517.57 | lru | 154.77 | 42.66% |
+| 4.0 | 1 | 118.69 | 118.72 | lru | 0.03 | 0.03% |
+| 4.0 | 4 | 118.64 | 118.67 | lru | 0.03 | 0.03% |
+| 4.0 | 8 | 128.28 | 149.62 | lru | 21.33 | 16.63% |
+| 6.0 | 1 | 118.69 | 118.71 | lru | 0.03 | 0.02% |
+| 6.0 | 4 | 118.64 | 118.66 | lru | 0.03 | 0.02% |
+| 6.0 | 8 | 118.63 | 120.24 | lru | 1.60 | 1.35% |
 
 ## 4. Cluster Bootstrap CI (per-task resampling)
 
 | Capacity (GiB) | Concurrency | n_tasks | Mean headroom_rel | CI lower | CI upper | CI lower > 0? |
 |---------------:|------------:|--------:|------------------:|---------:|---------:|:--------------|
-| 1.0 | 1 | 1 | 0.00% | 0.00% | 0.00% | no |
-| 1.0 | 4 | 1 | 0.00% | 0.00% | 0.00% | no |
-| 1.0 | 8 | 1 | 0.00% | 0.00% | 0.00% | no |
-| 2.0 | 1 | 1 | 0.00% | 0.00% | 0.00% | no |
-| 2.0 | 4 | 1 | 0.00% | 0.00% | 0.00% | no |
-| 2.0 | 8 | 1 | 0.00% | 0.00% | 0.00% | no |
-| 4.0 | 1 | 1 | 0.00% | 0.00% | 0.00% | no |
-| 4.0 | 4 | 1 | 0.00% | 0.00% | 0.00% | no |
-| 4.0 | 8 | 1 | 0.00% | 0.00% | 0.00% | no |
-| 6.0 | 1 | 1 | 0.00% | 0.00% | 0.00% | no |
-| 6.0 | 4 | 1 | 0.00% | 0.00% | 0.00% | no |
-| 6.0 | 8 | 1 | 0.00% | 0.00% | 0.00% | no |
+| 1.0 | 1 | 165 | 7.29% | 3.21% | 12.25% | YES |
+| 1.0 | 4 | 165 | 24.77% | 18.11% | 31.23% | YES |
+| 1.0 | 8 | 165 | -21.99% | -26.92% | -16.99% | no |
+| 2.0 | 1 | 165 | 0.04% | 0.03% | 0.05% | YES |
+| 2.0 | 4 | 165 | 5.44% | 2.67% | 8.69% | YES |
+| 2.0 | 8 | 165 | 17.79% | 11.63% | 24.52% | YES |
+| 4.0 | 1 | 165 | 0.01% | 0.01% | 0.02% | YES |
+| 4.0 | 4 | 165 | 0.03% | 0.02% | 0.04% | YES |
+| 4.0 | 8 | 165 | 1.61% | 0.09% | 3.86% | YES |
+| 6.0 | 1 | 165 | 0.01% | 0.01% | 0.02% | YES |
+| 6.0 | 4 | 165 | 0.01% | 0.01% | 0.02% | YES |
+| 6.0 | 8 | 165 | 0.31% | 0.01% | 0.90% | YES |
 
 ## 5. Go/No-Go Verdict
 
-**VERDICT: NO-GO** ❌  — no (capacity, concurrency) cell simultaneously satisfies headroom_rel ≥ 10% AND CI lower > 0.
+**VERDICT: GO** ✅  — at least one (capacity, concurrency) cell achieves headroom_rel ≥ 10% with bootstrap CI lower > 0.
 
-No passing cells.
+Passing cells:
+
+- capacity = 1.0 GiB, concurrency = 1: headroom_rel = 36.44%, CI lower = 3.21%
+- capacity = 1.0 GiB, concurrency = 4: headroom_rel = 45.80%, CI lower = 18.11%
+- capacity = 2.0 GiB, concurrency = 4: headroom_rel = 34.90%, CI lower = 2.67%
+- capacity = 2.0 GiB, concurrency = 8: headroom_rel = 42.66%, CI lower = 11.63%
+- capacity = 4.0 GiB, concurrency = 8: headroom_rel = 16.63%, CI lower = 0.09%
 
 ## 6. Recommendation
 
-No statistically significant oracle headroom was detected on any (capacity, concurrency) cell under the current physical-prefix replay protocol. Recommended next step is **Route B**: re-examine the workload (e.g. extend to additional τ-bench domains or seeds), revisit the capacity tiers (smaller budgets amplify headroom), or relax the concurrency model before re-running G1′.
+The Oracle-Cost upper bound demonstrates a statistically significant headroom over the best simple heuristic on at least one (capacity, concurrency) cell. Proceed to **P1-A**: train a learned prefix-reuse predictor targeting the identified operating point(s), and measure how much of the oracle headroom it can capture.
 
 ---
 Generated by `experiments/g1prime/verdict.py` from `experiments/g1prime/results/raw_results.csv`.

@@ -57,6 +57,7 @@ datasets/
 
 # Large physical trace files (>100MB)
 experiments/*/physical_traces/request_prefixes.jsonl
+experiments/*/physical_traces/access_trace*.jsonl
 
 # OS
 Thumbs.db
