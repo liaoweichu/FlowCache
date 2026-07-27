@@ -45,13 +45,13 @@ baselines:
     type: oracle
     enabled: true
 
-  # Closest baselines — inspired variants
+  # Closest baselines — inspired variants (disabled: O(n) eviction too slow for 651K trace)
   - name: pbkv_inspired
     type: closest_inspired
-    enabled: true
+    enabled: false
   - name: thunderagent_inspired
     type: closest_inspired
-    enabled: true
+    enabled: false
 
   # Closest baseline — faithful reproduction (adapter in progress)
   - name: kvflow_faithful

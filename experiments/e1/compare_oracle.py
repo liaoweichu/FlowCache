@@ -169,12 +169,18 @@ class BeladyOracle:
 
     Requires pre-computed future access information (block_hash -> sorted
     list of access indices in the trace).
+
+    Uses a max-heap with lazy deletion for O(log n) per eviction instead of
+    O(n) scanning. Each heap entry is (neg_next_access, block_hash, _version);
+    _version guards against stale entries from hits that updated next_access.
     """
 
     def __init__(self, capacity: int, future_accesses: Dict[str, List[int]]):
         self.capacity = max(1, capacity)
         self.future_accesses = future_accesses
         self.cache: Set[str] = set()
+        self._heap: List[Tuple[int, str, int]] = []   # max-heap via negation
+        self._versions: Dict[str, int] = {}            # block_hash -> current version
         self.hits: int = 0
         self.misses: int = 0
         self.evictions: int = 0
@@ -194,6 +200,29 @@ class BeladyOracle:
             return accesses[pos]
         return sys.maxsize
 
+    def _push(self, block_hash: str, current_idx: int) -> None:
+        """Push a heap entry for block_hash with its next_access from current_idx."""
+        na = self._next_access(block_hash, current_idx)
+        # Negate for max-heap: farthest next_access = smallest negated value.
+        heapq.heappush(self._heap, (-na, block_hash, self._versions.get(block_hash, 0)))
+
+    def _evict_one(self) -> None:
+        """Evict the cached block with the farthest next access using heap."""
+        while self._heap and self.cache:
+            neg_na, block_hash, version = heapq.heappop(self._heap)
+            if block_hash not in self.cache:
+                continue
+            # Check if this heap entry is stale (version mismatch after hit).
+            if self._versions.get(block_hash, 0) != version:
+                continue
+            self.cache.discard(block_hash)
+            self.evictions += 1
+            return
+        # Fallback: heap empty but cache non-empty (should not happen).
+        if self.cache:
+            victim = self.cache.pop()
+            self.evictions += 1
+
     def access(self, block_hash: str, access_idx: int,
                prefill_ms: float = 0.0) -> bool:
         """
@@ -202,17 +231,19 @@ class BeladyOracle:
         if block_hash in self.cache:
             self.hits += 1
             self.saved_prefill_ms += prefill_ms
+            # Hit: next_access changes → bump version and push updated entry.
+            self._versions[block_hash] = self._versions.get(block_hash, 0) + 1
+            self._push(block_hash, access_idx)
             return True
         else:
             self.misses += 1
             self.miss_cost_ms += prefill_ms
             while len(self.cache) >= self.capacity and self.cache:
-                victim = max(self.cache,
-                             key=lambda h: self._next_access(h, access_idx))
-                self.cache.remove(victim)
-                self.evictions += 1
+                self._evict_one()
             if len(self.cache) < self.capacity:
                 self.cache.add(block_hash)
+                self._versions[block_hash] = 0
+                self._push(block_hash, access_idx)
             return False
 
 
@@ -466,11 +497,28 @@ class OracleCostCache:
         self.future_accesses = future_accesses
         self.cache: Set[str] = set()
         self.block_cost: Dict[str, float] = {}
+        self._heap: List[Tuple[float, str, int]] = []  # (key, block_hash, version)
+        self._versions: Dict[str, int] = {}
         self.hits: int = 0
         self.misses: int = 0
         self.evictions: int = 0
         self.saved_prefill_ms: float = 0.0
         self.miss_cost_ms: float = 0.0
+
+    def _compute_key(self, block_hash: str, current_idx: int) -> float:
+        """Compute heap key: ratio - distance*1e-15 (tie-break by larger distance)."""
+        distance = self._next_access(block_hash, current_idx)
+        cost = self.block_cost.get(block_hash, 0.0)
+        if distance == sys.maxsize:
+            ratio = 0.0
+        else:
+            ratio = cost / max(1, distance)
+        return ratio - distance * 1e-15
+
+    def _push(self, block_hash: str, current_idx: int) -> None:
+        """Push a heap entry with the current score for block_hash."""
+        key = self._compute_key(block_hash, current_idx)
+        heapq.heappush(self._heap, (key, block_hash, self._versions.get(block_hash, 0)))
 
     def _next_access(self, block_hash: str, current_idx: int) -> int:
         """
@@ -485,40 +533,19 @@ class OracleCostCache:
             return accesses[pos]
         return sys.maxsize
 
-    def _evict(self, current_idx: int) -> None:
-        """
-        Evict the block with the minimum cost-per-distance ratio.
-        Ties (within 1e-9) are broken by maximum next-use distance.
-        """
-        if not self.cache:
-            return
-        best_hash = None
-        best_ratio = None
-        best_distance = None
-        for h in self.cache:
-            distance = self._next_access(h, current_idx)
-            cost = self.block_cost.get(h, 0.0)
-            if distance == sys.maxsize:
-                ratio = 0.0
-            else:
-                ratio = cost / max(1, distance)
-            if best_hash is None:
-                best_hash = h
-                best_ratio = ratio
-                best_distance = distance
+    def _evict_one(self, current_idx: int) -> None:
+        """Evict the block with the minimum cost-per-distance ratio using heap."""
+        while self._heap and self.cache:
+            key, block_hash, version = heapq.heappop(self._heap)
+            if block_hash not in self.cache:
                 continue
-            if ratio < best_ratio - 1e-9:
-                best_hash = h
-                best_ratio = ratio
-                best_distance = distance
-            elif abs(ratio - best_ratio) <= 1e-9:
-                # Tie-break: prefer evicting the one with larger distance.
-                if distance > best_distance:
-                    best_hash = h
-                    best_ratio = ratio
-                    best_distance = distance
-        if best_hash is not None:
-            self.cache.remove(best_hash)
+            if self._versions.get(block_hash, 0) != version:
+                continue
+            self.cache.discard(block_hash)
+            self.evictions += 1
+            return
+        if self.cache:
+            victim = self.cache.pop()
             self.evictions += 1
 
     def access(self, block_hash: str, access_idx: int,
@@ -535,14 +562,19 @@ class OracleCostCache:
         if block_hash in self.cache:
             self.hits += 1
             self.saved_prefill_ms += prefill_ms
+            # Hit: next_access changes → bump version and push updated entry.
+            self._versions[block_hash] = self._versions.get(block_hash, 0) + 1
+            self._push(block_hash, access_idx)
             return True
 
         self.misses += 1
         self.miss_cost_ms += prefill_ms
         while len(self.cache) >= self.capacity and self.cache:
-            self._evict(access_idx)
+            self._evict_one(access_idx)
         if len(self.cache) < self.capacity:
             self.cache.add(block_hash)
+            self._versions[block_hash] = 0
+            self._push(block_hash, access_idx)
         return False
 
 

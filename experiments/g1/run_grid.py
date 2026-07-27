@@ -27,6 +27,7 @@ import csv
 import os
 import random
 import sys
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -383,7 +384,6 @@ def run_grid(config_path: Optional[str] = None,
     if not trajectories:
         print("ERROR: no trajectories found at "
               f"{_resolve_trace_source(cfg)}")
-        # Still emit headers + kvflow pending rows so downstream tools work.
         rows = make_kvflow_pending_rows(cfg)
         write_csv(rows, csv_path, pilot_note=pilot_note)
         return csv_path
@@ -412,10 +412,25 @@ def run_grid(config_path: Optional[str] = None,
           f"{len(cfg['datasets'])} datasets × "
           f"{len(cfg['replay_seeds'])} seeds)")
 
+    # Pre-compute per-seed perturbed traces + future_accesses once.
+    seeds = cfg["replay_seeds"]
+    seed_data: Dict[int, Tuple[List[Dict], Dict[str, List[int]]]] = {}
+    print(f"Pre-computing per-seed data ({len(seeds)} seeds)...")
+    t0 = time.time()
+    for seed in seeds:
+        pt = perturb_trace(full_trace, seed)
+        pfa = co.compute_future_accesses(pt)
+        seed_data[seed] = (pt, pfa)
+    print(f"  done in {time.time() - t0:.1f}s")
+
+    # Replay each combo.
     rows: List[Dict] = []
-    for (bl, budget, ds, seed) in grid:
+    total_combos = len(grid)
+    print(f"Replaying {total_combos} combos...")
+    t0 = time.time()
+
+    for i, (bl, budget, ds, seed) in enumerate(grid):
         if bl == "kvflow_faithful":
-            # Skip replay; emit pending row.
             rows.append({
                 "baseline": bl, "budget": budget, "dataset": ds, "seed": seed,
                 "hits": "", "misses": "", "hit_rate": "",
@@ -427,24 +442,18 @@ def run_grid(config_path: Optional[str] = None,
             })
             continue
 
-        # Capacity = int(budget * peak_ws), clamped to ≥ 1.
         capacity = max(1, int(budget * peak_ws))
+        pt, pfa = seed_data[seed]
 
-        # Perturb trace order by replay seed, then re-compute future_accesses
-        # for the perturbed trace. Both are O(n) and return fresh objects per
-        # grid combo, avoiding any cross-baseline state sharing (caching
-        # future_accesses across baselines caused intermittent
-        # ACCESS_VIOLATION crashes on Windows due to shared mutable dict).
-        perturbed = perturb_trace(full_trace, seed)
-        perturbed_future = co.compute_future_accesses(perturbed)
-
+        t1 = time.time()
         metrics = _replay_baseline(
             baseline_name=bl,
             capacity=capacity,
-            access_trace=perturbed,
-            future_accesses=perturbed_future,
+            access_trace=pt,
+            future_accesses=pfa,
             block_size=block_size,
         )
+        elapsed = time.time() - t1
         rows.append({
             "baseline": bl,
             "budget": budget,
@@ -459,6 +468,11 @@ def run_grid(config_path: Optional[str] = None,
             "p95_ttft_ms": metrics["p95_ttft_ms"],
             "status": metrics["status"],
         })
+        print(f"  [{i+1}/{total_combos}] {bl} budget={budget} seed={seed} "
+              f"→ {elapsed:.1f}s hit_rate={metrics['hit_rate']:.4f}")
+
+    total_elapsed = time.time() - t0
+    print(f"  all replays done in {total_elapsed:.1f}s")
 
     write_csv(rows, csv_path, pilot_note=pilot_note)
     print(f"Wrote {len(rows)} rows → {csv_path}")
