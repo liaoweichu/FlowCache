@@ -556,6 +556,25 @@ v0.3 将 workload 体系按实验章节分层，主表严格限定两个工具 w
 
 **失败动作**：转向“何时工作流结构产生物理 KV 复用”的 benchmark/characterization 论文。
 
+### 7.X G1′: 物理前缀重编译与正确回放（2026-07-26 修正）
+
+**状态**：代码已实现，等待云服务器全量运行
+
+G1 判定为 fail（headroom ≈ 0%），但该判定 **protocol-invalid / inconclusive**：
+- 轨迹按单条 message 独立分词，未使用完整 chat template；
+- 把“块创建”当成“块访问”——每次 assistant 恢复生成时实际访问完整历史前缀，但轨迹只记录每块一次；
+- 容量定义脱离 24GB GPU 现实（10% budget ≈ 41.4 GiB）；
+- 并发、TTFT、bootstrap 统计单位均不正确。
+
+G1′ 用已有 1,320 条 τ-bench 轨迹重做，不重新运行 τ-bench 对话：
+- 重编译为物理精确前缀访问流（完整 chat template + 跨 message 连续分块）
+- 绝对 KV 容量（1/2/4/6 GiB，替代百分比 budget）
+- 并发模拟（c=1/4/8，测试缓存竞争）
+- 165 task group 聚类 bootstrap（替代 3 replay seed）
+- 通过条件：headroom_rel ≥ 10% AND CI lower > 0
+
+**G1′ 通过 → P1-A（联合 R-D 控制器）；不通过 → Route B（Cacheability Gap Benchmark）**
+
 ### G2：Two-Axis Necessity
 
 - 测量 future-use/recompute value 与 $D_{b,q}$ 的 rank correlation，但不把低相关本身当作充分证据；

@@ -809,6 +809,59 @@ trace 来源：E1 录制的可重放 trace（τ-bench 为 rollout 录制；到�
 
 ---
 
+## G1′: 物理前缀重编译与正确回放
+
+### G1′.1 动机
+
+G1 判定为 fail（headroom ≈ 0%），但该判定 protocol-invalid：回放协议与 FlowCache 的真实研究对象不一致。G1′ 用已有 1,320 条 τ-bench 轨迹重做，修正协议问题。
+
+### G1′.2 数据集
+
+| 数据集 | 样本数 | 说明 |
+|---|---|---|
+| τ-bench | 1,320 episodes（165 任务 × 8 seeds） | 复用 G1 录制的轨迹，不重新运行对话 |
+
+### G1′.3 容量与并发
+
+| 维度 | 档位 | 说明 |
+|---|---|---|
+| KV 容量 | 1 / 2 / 4 / 6 GiB | 绝对容量，替代 G1 的百分比 budget |
+| 并发度 | 1 / 4 / 8 | c=1 顺序基线，c=4/8 测试缓存竞争 |
+| 100% | sanity check only | 不参与 Go/No-Go 判定 |
+
+bytes_per_block = 917,504 B (896 KiB)，基于 Qwen2.5-7B（28 层 × 4 KV heads × 128 dim × 2 dtype × 16 tokens × 2 K+V）。
+
+### G1′.4 Baselines
+
+| 类型 | Baseline | 状态 |
+|---|---|---|
+| Simple heuristic | LRU, GDSF, SizeCost, APC-LRU | enabled |
+| Oracle | Belady, Oracle-Cost | enabled |
+| Closest inspired | PBKV-Inspired, ThunderAgent-Inspired | G1′ 通过后补充 |
+
+### G1′.5 统计判定
+
+- headroom_abs = Oracle-Cost miss_cost − max(LRU, GDSF, SizeCost, APC-LRU) miss_cost
+- headroom_rel = headroom_abs / Oracle-Cost miss_cost
+- bootstrap：165 task group 聚类，1000 次
+- 通过条件：∃ (capacity, concurrency) 使 headroom_rel ≥ 10% AND CI lower > 0
+
+### G1′.6 代码位置
+
+| 文件 | 职责 |
+|---|---|
+| experiments/g1prime/recompile_prefixes.py | 物理前缀重编译器 |
+| experiments/g1prime/build_physical_access_trace.py | 访问流构建 |
+| experiments/g1prime/simulate_concurrency.py | 并发模拟 |
+| experiments/g1prime/cost_model.py | 成本模型 |
+| experiments/g1prime/capacity.py | 容量定义 |
+| experiments/g1prime/run_grid.py | 全网格运行器 |
+| experiments/g1prime/verdict.py | 判定报告 |
+| experiments/g1prime/plot_headroom.py | 绘图 |
+| experiments/g1prime/config.yaml | 配置 |
+
+---
+
 # G3：Lossless Residency（无损驻留）
 
 > **周次**：W7–W8 | **依赖**：G0、G1 | **关键路径**：是

@@ -168,3 +168,13 @@ revision_ledger:
 submission_checks:
   path: "submission/checks.md"
   status: "not_started"
+g1:
+  status: frozen_protocol_invalid
+  verdict: fail
+  successor: g1prime
+
+g1prime:
+  status: code_ready_pending_cloud_run
+  code_complete: true
+  small_sample_verified: true
+  full_run_pending: true
