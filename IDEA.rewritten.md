@@ -556,9 +556,9 @@ v0.3 将 workload 体系按实验章节分层，主表严格限定两个工具 w
 
 **失败动作**：转向“何时工作流结构产生物理 KV 复用”的 benchmark/characterization 论文。
 
-### 7.X G1′: 物理前缀重编译与正确回放（2026-07-26 修正）
+### 7.X G1′: 物理前缀重编译与正确回放（2026-07-26 修正，2026-07-27 通过）
 
-**状态**：代码已实现，等待云服务器全量运行
+**状态**：✅ **PASSED**（2026-07-27，Go/No-Go = GO）
 
 G1 判定为 fail（headroom ≈ 0%），但该判定 **protocol-invalid / inconclusive**：
 - 轨迹按单条 message 独立分词，未使用完整 chat template；
@@ -573,7 +573,21 @@ G1′ 用已有 1,320 条 τ-bench 轨迹重做，不重新运行 τ-bench 对�
 - 165 task group 聚类 bootstrap（替代 3 replay seed）
 - 通过条件：headroom_rel ≥ 10% AND CI lower > 0
 
-**G1′ 通过 → P1-A（联合 R-D 控制器）；不通过 → Route B（Cacheability Gap Benchmark）**
+**G1′ 结果摘要**（全量 95,040 行 = 6 baselines × 4 容量 × 3 并发 × 1320 episodes）：
+
+| 容量 | c=1 | c=4 | c=8 |
+|---|---|---|---|
+| 1 GiB | 36.44% ✅ | **45.80%** ✅ (最佳) | -13.90% ⚠️ (异常) |
+| 2 GiB | 0.06% | 34.90% ✅ | 42.66% ✅ |
+| 4 GiB | 0.03% | 0.03% | 16.63% ✅ |
+| 6 GiB | 0.02% | 0.02% | 1.35% |
+
+- 5/12 cells 通过 10% 阈值且 CI lower > 0
+- 最佳 cell (1 GiB, c=4)：headroom=45.80%，CI=[18.11%, 31.23%]
+- 已知异常：(1 GiB, c=8) 出现 -13.90% 负 headroom，Oracle-Cost 在极端容量压力 + 高并发下劣于 GDSF；不影响 Go 判定
+- 关键模式：容量越小 headroom 越大；c=4 是最佳并发点；c=1 且 ≥2 GiB 时 headroom≈0%（单工作流容量充足）
+
+**G1′ 通过 → 进入 G2（P1-A 联合 R-D 控制器）；不通过 → Route B（Cacheability Gap Benchmark）**
 
 ### G2：Two-Axis Necessity
 

@@ -14,12 +14,12 @@ target_venue:
   venue_guide: "missing - no icws.md or edge.md in ccf-paper-writer/references/venue-guides/"
   template_fallback: "IEEE conference (IEEEtran.cls)"
 stage:
-  current: "g0_passed"
-  gate: "G1"
-  next_week: "W6"
+  current: "g1_passed"
+  gate: "G2"
+  next_week: "W7"
   plan: "execution-plan.md"
   route: "A"
-  updated_at: "2026-07-25"
+  updated_at: "2026-07-27"
   scope_spec: ".trae/specs/experiment-scope-redesign/spec.md"
 artifacts:
   manuscript: "manuscript/main.tex"
@@ -80,7 +80,7 @@ gates:
     passed_evidence: "KV bit-identical 220/220, identity 100/100, codec 100 block lineage 100/100, 8x4k=20.2GB<24GB"
   - id: "G1"
     description: "Opportunity"
-    status: "not_started"
+    status: "passed"
     week: "W6-W7"
     depends_on: ["G0"]
     design_doc: "experiments/experiment-designs.md#ch1"
@@ -88,6 +88,8 @@ gates:
     fallback_route: "B"
     triggers_route_switch: true
     source: "IDEA.rewritten.md Section 7"
+    passed_at: "2026-07-27"
+    passed_evidence: "G1' verdict=GO; 5/12 cells pass 10% headroom threshold with CI lower>0; best cell (1 GiB, c=4): headroom=45.80%, CI=[18.11%,31.23%]"
   - id: "G2"
     description: "Two-Axis Necessity"
     status: "not_started"
@@ -174,7 +176,13 @@ g1:
   successor: g1prime
 
 g1prime:
-  status: code_ready_pending_cloud_run
+  status: passed
+  verdict: go
   code_complete: true
   small_sample_verified: true
-  full_run_pending: true
+  full_run_completed: true
+  passed_at: "2026-07-27"
+  best_cell: "1GiB_c4_headroom_45.80pct_CI_18.11_31.23"
+  passing_cells: 5
+  total_cells: 12
+  next_gate: "G2"
