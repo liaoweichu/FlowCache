@@ -1,10 +1,20 @@
 {
   "experiment": "E1",
-  "skip_count": 164,
+  "multi_gpu": 6,
+  "total_episodes_written": 9,
+  "skip_count": 6343,
+  "oom_count": 0,
   "oom_log": [],
-  "total_episodes_written": 1,
-  "dataset_filter": "tau-bench",
-  "seed_filter": 42,
   "max_episodes": null,
-  "resume": true
+  "resume": true,
+  "all_seeds": [
+    42,
+    123,
+    456,
+    789,
+    101112,
+    131415,
+    161718,
+    192021
+  ]
 }

@@ -1,8 +1,8 @@
 {
   "stop_time": "2026-07-27 00:13:41",
   "total_traces": 714,
-  "total_expected": 2640,
-  "coverage_pct": 27.0,
+  "total_expected": 1320,
+  "coverage_pct": 54.1,
   "by_domain": {
     "airline": 186,
     "retail": 528
@@ -196,5 +196,6 @@
     "retail-99"
   ],
   "last_trace": "retail-43_seed101112.json",
-  "last_trace_mtime": "2026-07-27 00:13:41"
+  "last_trace_mtime": "2026-07-27 00:13:41",
+  "_note": "total_expected corrected from 2640 to 1320 (165 tasks × 8 seeds, not ×2)"
 }
