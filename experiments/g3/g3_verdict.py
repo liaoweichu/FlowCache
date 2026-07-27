@@ -64,20 +64,16 @@ def _to_float(v) -> Optional[float]:
 
 def aggregate_by_cell_baseline(rows: List[Dict]) -> Dict:
     """
-    G3'' 修复：按 (capacity, concurrency, baseline) 聚合 per-task 行。
+    按 (capacity, concurrency, baseline) 聚合全局指标。
 
-    G3' csv 每行是一个 task_id，global_* 字段在同一 cell×baseline 下相同，
-    per-task 字段（task_saved_prefill_ms, task_miss_cost_ms, task_hits,
-    task_misses）需要 sum 聚合。
+    G3'' 修复：新 CSV 每行是 per-task，global 指标在所有 task 行中相同。
+    取每个 (cell, baseline) 第一行的 global 值即可。
 
     Returns:
         {(cap, conc): {baseline: {metric: value}}}
     """
     result = defaultdict(lambda: defaultdict(dict))
-    # per-task 字段的 sum 聚合
-    per_task_sums = defaultdict(lambda: defaultdict(float))  # key -> {metric: sum}
     seen = set()
-
     for r in rows:
         cap = _to_float(r.get("capacity_gib"))
         conc = int(r.get("concurrency", 0))
@@ -85,39 +81,20 @@ def aggregate_by_cell_baseline(rows: List[Dict]) -> Dict:
         if cap is None:
             continue
         key = (cap, conc, bl)
-        # 累加 per-task 字段
-        per_task_sums[key]["saved_prefill_ms"] += _to_float(r.get("task_saved_prefill_ms")) or 0.0
-        per_task_sums[key]["miss_cost_ms"] += _to_float(r.get("task_miss_cost_ms")) or 0.0
-        per_task_sums[key]["hits"] += int(r.get("task_hits") or 0)
-        per_task_sums[key]["misses"] += int(r.get("task_misses") or 0)
-        # global_* 字段只取第一行
-        if key in seen:
-            continue
-        seen.add(key)
-        result[(cap, conc)][bl] = {
-            "p95_ttft_ms": _to_float(r.get("global_p95_ttft_ms")) or 0.0,
-            "p50_ttft_ms": _to_float(r.get("global_p50_ttft_ms")) or 0.0,
-            "miss_cost_ms": 0.0,  # 后面用 per_task_sums 填充
-            "saved_prefill_ms": 0.0,  # 后面用 per_task_sums 填充
-            "block_hit_rate": _to_float(r.get("global_block_hit_rate")) or 0.0,
-            "throughput_req_per_s": _to_float(r.get("global_throughput")) or 0.0,
-            "migrate_ms_total": _to_float(r.get("migrate_ms_total")) or 0.0,
-            "restore_ms_total": _to_float(r.get("restore_ms_total")) or 0.0,
-            "migrate_count": int(r.get("migrate_count") or 0),
-            "restore_count": int(r.get("restore_count") or 0),
-            "hits": 0,  # 后面用 per_task_sums 填充
-            "misses": 0,  # 后面用 per_task_sums 填充
-        }
-
-    # 填充聚合后的 per-task 字段
-    for (cap, conc), bl_dict in result.items():
-        for bl, metrics in bl_dict.items():
-            sums = per_task_sums.get((cap, conc, bl), {})
-            metrics["saved_prefill_ms"] = sums.get("saved_prefill_ms", 0.0)
-            metrics["miss_cost_ms"] = sums.get("miss_cost_ms", 0.0)
-            metrics["hits"] = int(sums.get("hits", 0))
-            metrics["misses"] = int(sums.get("misses", 0))
-
+        if key not in seen:
+            seen.add(key)
+            result[(cap, conc)][bl] = {
+                "p95_ttft_ms": _to_float(r.get("global_p95_ttft_ms")) or 0.0,
+                "p50_ttft_ms": _to_float(r.get("global_p50_ttft_ms") or r.get("global_p95_ttft_ms")) or 0.0,
+                "miss_cost_ms": _to_float(r.get("task_miss_cost_ms")) or 0.0,
+                "saved_prefill_ms": _to_float(r.get("task_saved_prefill_ms")) or 0.0,
+                "block_hit_rate": _to_float(r.get("global_block_hit_rate")) or 0.0,
+                "throughput_req_per_s": _to_float(r.get("global_throughput")) or 0.0,
+                "migrate_ms_total": _to_float(r.get("migrate_ms_total")) or 0.0,
+                "restore_ms_total": _to_float(r.get("restore_ms_total")) or 0.0,
+                "hits": int(r.get("task_hits") or 0),
+                "misses": int(r.get("task_misses") or 0),
+            }
     return dict(result)
 
 
@@ -196,20 +173,15 @@ def bootstrap_ci(values: List[float],
 
 def collect_per_task_improvement(rows: List[Dict],
                                  cell: Tuple,
-                                 baseline: str,
-                                 metric: str = "task_p95_ttft_ms") -> List[float]:
-    """
-    G3'' 修复：收集某个 cell 下 FlowCache vs baseline 的 per-task 改善值。
+                                 baseline: str) -> List[float]:
+    """收集 per-task 的 FlowCache vs baseline 改善值。
 
-    以 165 个 task_id 为配对单元，每个 task 贡献一个改善值：
-        improvement = (baseline_task_metric - fc_task_metric) / baseline_task_metric
-    正值 = FlowCache 更好。
-
-    Args:
-        metric: per-task 指标字段名（默认 task_p95_ttft_ms）
+    G3'' 修复：新 CSV 按 task_id 分组，用 task_p95_ttft_ms 做 paired 比较，
+    165 个 task 支持 bootstrap CI。
     """
     cap, conc = cell
-    task_data = defaultdict(lambda: defaultdict(dict))
+    # task_id -> {baseline_name -> task_p95_ttft_ms}
+    task_data = defaultdict(dict)
     for r in rows:
         r_cap = _to_float(r.get("capacity_gib"))
         r_conc = int(r.get("concurrency", 0))
@@ -217,17 +189,17 @@ def collect_per_task_improvement(rows: List[Dict],
             continue
         bl = r.get("baseline", "")
         task_id = r.get("task_id", "")
-        val = _to_float(r.get(metric))
+        val = _to_float(r.get("task_p95_ttft_ms"))
         if val is not None:
             task_data[task_id][bl] = val
 
-    per_task = []
+    improvements = []
     for task_id, bl_vals in task_data.items():
         fc_val = bl_vals.get(FLOWCACHE)
         bl_val = bl_vals.get(baseline)
         if fc_val is not None and bl_val is not None and bl_val > 0:
-            per_task.append((bl_val - fc_val) / bl_val)
-    return per_task
+            improvements.append((bl_val - fc_val) / bl_val)
+    return improvements
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +261,7 @@ def evaluate_go_no_go(rows: List[Dict], config: Dict) -> Dict:
             continue
         bl_metrics = aggregated[main_cell_key][bl]
         _, rel_imp = compute_improvement(fc_metrics, bl_metrics, "p95_ttft_ms")
-        per_task = collect_per_task_improvement(rows, main_cell_key, bl, "task_p95_ttft_ms")
+        per_task = collect_per_task_improvement(rows, main_cell_key, bl)
         mean_imp, ci_low, ci_high = bootstrap_ci(per_task, n_bootstrap)
         passed = (rel_imp >= threshold_p95) and (ci_low > 0)
         if not passed:
@@ -332,7 +304,7 @@ def evaluate_go_no_go(rows: List[Dict], config: Dict) -> Dict:
     ci_pass = True
     ci_details = {}
     for bl in SIMPLE_BASELINES:
-        per_task = collect_per_task_improvement(rows, main_cell_key, bl, "task_p95_ttft_ms")
+        per_task = collect_per_task_improvement(rows, main_cell_key, bl)
         mean_imp, ci_low, ci_high = bootstrap_ci(per_task, n_bootstrap)
         passed = ci_low > 0
         if not passed:

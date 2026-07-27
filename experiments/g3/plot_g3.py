@@ -72,32 +72,29 @@ def load_results(csv_path: Path) -> List[Dict]:
 
 def aggregate(rows: List[Dict]) -> Dict:
     """
-    按 (capacity, concurrency, baseline) 聚合，跨 seed 取均值。
+    按 (capacity, concurrency, baseline) 聚合全局指标。
 
-    Returns:
-        {(cap, conc): {baseline: {metric: mean}}}
+    G3'' 修复：新 CSV 每行是 per-task，global 指标在同行 baseline 中相同。
+    取每个 (cell, baseline) 第一行的值即可。
     """
-    cell_bl_seed = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    result = defaultdict(lambda: defaultdict(dict))
+    seen = set()
     for r in rows:
         cap = _to_float(r.get("capacity_gib"))
         conc = int(r.get("concurrency", 0))
         bl = r.get("baseline", "")
         if cap is None:
             continue
-        for metric, csv_field in [("p95_ttft_ms", "global_p95_ttft_ms"),
-                                   ("p50_ttft_ms", "global_p50_ttft_ms"),
-                                   ("throughput_req_per_s", "global_throughput"),
-                                   ("block_hit_rate", "global_block_hit_rate"),
-                                   ("miss_cost_ms", "task_miss_cost_ms")]:
-            val = _to_float(r.get(csv_field) or r.get(metric))
-            if val is not None:
-                cell_bl_seed[(cap, conc)][bl][metric].append(val)
-
-    result = defaultdict(lambda: defaultdict(dict))
-    for cell, bl_dict in cell_bl_seed.items():
-        for bl, metrics in bl_dict.items():
-            for metric, values in metrics.items():
-                result[cell][bl][metric] = sum(values) / len(values) if values else 0.0
+        key = (cap, conc, bl)
+        if key not in seen:
+            seen.add(key)
+            result[(cap, conc)][bl] = {
+                "p95_ttft_ms": _to_float(r.get("global_p95_ttft_ms")) or 0.0,
+                "p50_ttft_ms": _to_float(r.get("global_p50_ttft_ms") or r.get("global_p95_ttft_ms")) or 0.0,
+                "throughput_req_per_s": _to_float(r.get("global_throughput")) or 0.0,
+                "block_hit_rate": _to_float(r.get("global_block_hit_rate")) or 0.0,
+                "miss_cost_ms": _to_float(r.get("task_miss_cost_ms")) or 0.0,
+            }
     return dict(result)
 
 

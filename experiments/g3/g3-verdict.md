@@ -8,19 +8,19 @@
 
 ### 1. Overhead Feasibility: ✅ PASS
 - Overhead (migrate + restore): 0.00 ms
-- Saved prefill: 4243172.64 ms
+- Saved prefill: 6009884.08 ms
 
 ### 2. p95 TTFT Improvement ≥ 15%: ❌ FAIL
-- ❌ vs gdsf: -31.52% (CI=[0.00%, 0.00%])
-- ❌ vs sizecost: -40.73% (CI=[0.00%, 0.00%])
+- ❌ vs gdsf: -31.52% (CI=[-29.11%, -8.43%])
+- ❌ vs sizecost: -40.73% (CI=[-31.01%, -12.72%])
 
 ### 3. Throughput Non-inferior (drop ≤ 5%): ✅ PASS
 - ✅ vs gdsf: -0.09%
 - ✅ vs sizecost: -0.07%
 
 ### 4. Better Than Heuristic (CI > 0): ❌ FAIL
-- ❌ vs gdsf: mean=0.00% (CI=[0.00%, 0.00%])
-- ❌ vs sizecost: mean=0.00% (CI=[0.00%, 0.00%])
+- ❌ vs gdsf: mean=-18.27% (CI=[-29.11%, -8.43%])
+- ❌ vs sizecost: mean=-21.76% (CI=[-31.01%, -12.72%])
 
 ## All Cells Summary
 

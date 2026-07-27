@@ -94,7 +94,7 @@
   "conditions": {
     "overhead_feasible": {
       "overhead_ms": 0.0,
-      "saved_ms": 4243172.64,
+      "saved_ms": 6009884.08,
       "pass": true
     },
     "p95_ttft_improvement": {
@@ -102,14 +102,14 @@
       "details": {
         "gdsf": {
           "rel_improvement": -0.315175,
-          "ci_low": 0.0,
-          "ci_high": 0.0,
+          "ci_low": -0.291142,
+          "ci_high": -0.084267,
           "pass": false
         },
         "sizecost": {
           "rel_improvement": -0.407283,
-          "ci_low": 0.0,
-          "ci_high": 0.0,
+          "ci_low": -0.310075,
+          "ci_high": -0.127233,
           "pass": false
         }
       },
@@ -132,15 +132,15 @@
     "better_than_heuristic": {
       "details": {
         "gdsf": {
-          "mean": 0.0,
-          "ci_low": 0.0,
-          "ci_high": 0.0,
+          "mean": -0.182738,
+          "ci_low": -0.291142,
+          "ci_high": -0.084267,
           "pass": false
         },
         "sizecost": {
-          "mean": 0.0,
-          "ci_low": 0.0,
-          "ci_high": 0.0,
+          "mean": -0.217564,
+          "ci_low": -0.310075,
+          "ci_high": -0.127233,
           "pass": false
         }
       },
