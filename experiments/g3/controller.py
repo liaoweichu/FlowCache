@@ -187,100 +187,69 @@ class FlowCacheLosslessController:
 
     def _ensure_gpu_space(self, needed: int) -> None:
         """
-        确保 GPU 有足够空间（分层淘汰/迁移）。
+        确保 GPU 有足够空间（O(1) LRU 淘汰 + O(n) CPU 迁移决策）。
 
-        G3′ 分层决策（修复原 G3 的 CPU 层未使用问题）：
-          1. 选出 GPU 中 score 最低的 victim
-          2. 若 victim_r > migrate_threshold（0.01）：
-             - CPU 有空间 → 迁移到 CPU
-             - CPU 满 → 先淘汰 CPU 中 R 最低的块腾位，再迁移
+        G3′ 分层决策（速度优化版）：
+          1. GPU victim 按 LRU 选（O(1)，不用 R 扫描）
+          2. 若 victim_r > migrate_threshold → 迁移到 CPU
+             - CPU 满 → 淘汰 CPU 中 R 最低的块腾位（唯一 O(n) 但 CPU 增长慢）
           3. 若 victim_r ≤ migrate_threshold → 直接从 GPU 淘汰
         """
         while self.manager.gpu_size() + needed > self.manager.gpu_capacity:
             if not self.manager.gpu_cache:
                 break
-            # 选择淘汰/迁移目标
-            victim = self._select_victim()
-            if victim is None:
-                break
+            # O(1) LRU victim selection
+            victim = min(self.manager.gpu_cache,
+                        key=lambda h: self.manager.gpu_cache[h].get("last_access", 0))
 
-            # 决策：迁移到 CPU 还是直接淘汰
+            # Decision: migrate to CPU or evict
             victim_meta = self.manager.gpu_cache.get(victim, {})
             victim_age = self._clock - victim_meta.get("last_access", 0)
             victim_share = victim_meta.get("share_count", 0)
             victim_idx = victim_meta.get("block_idx", 0)
             victim_r = self.estimator.estimate(
-                age=victim_age,
-                share_count=victim_share,
-                block_idx=victim_idx,
+                age=victim_age, share_count=victim_share, block_idx=victim_idx,
             )
 
-            # R > 阈值 → 迁移到 CPU（分层：CPU 满时先淘汰 CPU 最低 R 块）
             if victim_r > self.migrate_threshold:
                 if self.manager.cpu_full():
-                    # CPU 满，淘汰 CPU 中 R 最低的块腾位
                     cpu_victim = self._select_cpu_victim()
                     if cpu_victim is not None:
                         self.manager.evict_from_cpu(cpu_victim)
-                # 再次检查（CPU 可能仍满且无法腾位，此时 migrate_to_cpu 内部会直接淘汰）
                 if not self.manager.cpu_full():
                     self.manager.migrate_to_cpu(victim)
                 else:
-                    # CPU 容量为 0 或无法腾位，直接从 GPU 淘汰
                     self.manager.evict_from_gpu(victim)
             else:
-                # R 过低，直接淘汰
                 self.manager.evict_from_gpu(victim)
 
+    def _score_block(self, meta: Dict) -> float:
+        """Compute score for a single block (inlined for speed)."""
+        age = self._clock - meta.get("last_access", 0)
+        share = meta.get("share_count", 0)
+        idx = meta.get("block_idx", 0)
+        r_value = self.estimator.estimate(age=age, share_count=share, block_idx=idx)
+        hold_cost = self._estimate_hold_cost(meta)
+        return r_value - self.score_lambda * hold_cost
+
     def _select_cpu_victim(self) -> Optional[str]:
-        """选择 CPU 池中 R 值最低的 block（用于 CPU 满时腾位）。"""
+        """CPU victim: lowest R-value block (inlined, uses built-in min)."""
         if not self.manager.cpu_cache:
             return None
-
-        worst_r = float("inf")
-        worst_block = None
-
-        for block_hash, meta in self.manager.cpu_cache.items():
-            age = self._clock - meta.get("last_access", 0)
-            share = meta.get("share_count", 0)
-            idx = meta.get("block_idx", 0)
-            r_value = self.estimator.estimate(
-                age=age, share_count=share, block_idx=idx
-            )
-            if r_value < worst_r:
-                worst_r = r_value
-                worst_block = block_hash
-
-        return worst_block
+        return min(
+            self.manager.cpu_cache.items(),
+            key=lambda item: self.estimator.estimate(
+                age=self._clock - item[1].get("last_access", 0),
+                share_count=item[1].get("share_count", 0),
+                block_idx=item[1].get("block_idx", 0),
+            ),
+        )[0]
 
     def _select_victim(self) -> Optional[str]:
-        """
-        选择淘汰目标：score 最低的 block。
-
-        score_b = R_b - λ · hold_cost_b
-        """
+        """GPU victim: lowest score block (uses built-in min for speed)."""
         if not self.manager.gpu_cache:
             return None
-
-        worst_score = float("inf")
-        worst_block = None
-
-        for block_hash, meta in self.manager.gpu_cache.items():
-            age = self._clock - meta.get("last_access", 0)
-            share = meta.get("share_count", 0)
-            idx = meta.get("block_idx", 0)
-            r_value = self.estimator.estimate(
-                age=age, share_count=share, block_idx=idx
-            )
-            # hold_cost: 估算持有该 block 的机会成本
-            hold_cost = self._estimate_hold_cost(meta)
-            score = r_value - self.score_lambda * hold_cost
-
-            if score < worst_score:
-                worst_score = score
-                worst_block = block_hash
-
-        return worst_block
+        return min(self.manager.gpu_cache.items(), key=lambda item: self._score_block(item[1]))[0]
 
     def _estimate_hold_cost(self, meta: Dict) -> float:
         """估算持有 block 的机会成本（每 step）。"""

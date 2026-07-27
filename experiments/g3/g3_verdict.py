@@ -1,12 +1,7 @@
 """
-G3′ Verdict Report Generator
-=============================
-读取 raw_results.csv（per-task 行），计算 Go/No-Go 判定，输出报告。
-
-G3′ 修复（相对原 G3）：
-  1. 按 task_id（165 组）聚类 bootstrap，替换原 per-seed 逻辑
-  2. 全局指标从 per-task 行的 global_* 字段提取（同一 cell×baseline 下相同）
-  3. 主判定指标使用 task_p95_ttft_ms 的 per-task 改善值做 bootstrap
+G3 Verdict Report Generator
+============================
+读取 raw_results.csv，计算 Go/No-Go 判定，输出报告。
 
 判定条件（G3.8）：
   1. 开销可行性：恢复 + 迁移开销 < 所节省 prefill
@@ -43,7 +38,7 @@ NO_CACHE = "no_cache"
 # ---------------------------------------------------------------------------
 
 def load_results(csv_path: Path) -> List[Dict]:
-    """读取 raw_results.csv（per-task 行格式）。"""
+    """读取 raw_results.csv。"""
     rows = []
     if not csv_path.exists():
         return rows
@@ -67,61 +62,49 @@ def _to_float(v) -> Optional[float]:
 # Aggregation
 # ---------------------------------------------------------------------------
 
-def aggregate_global_metrics(rows: List[Dict]) -> Dict:
+def aggregate_by_cell_baseline(rows: List[Dict]) -> Dict:
     """
-    聚合全局指标（从 per-task 行提取 global_* 字段）。
-
-    G3′：raw_results.csv 每行是一个 task_id，但 global_* 字段在同一 cell×baseline
-    下相同，因此只需取第一行。
+    按 (capacity, concurrency, baseline) 聚合，跨 seed 取均值。
 
     Returns:
-        {(cap, conc): {baseline: {metric: value}}}
+        {(cap, conc): {baseline: {metric: mean_value}}}
     """
-    result = defaultdict(lambda: defaultdict(dict))
-    seen = set()
+    # 先按 (cap, conc, baseline, seed) 聚合
+    cell_baseline_seed = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
     for r in rows:
         cap = _to_float(r.get("capacity_gib"))
         conc = int(r.get("concurrency", 0))
         bl = r.get("baseline", "")
+        seed = int(r.get("seed", 0))
         if cap is None:
             continue
-        key = (cap, conc, bl)
-        if key in seen:
-            continue
-        seen.add(key)
-        result[(cap, conc)][bl] = {
-            "p95_ttft_ms": _to_float(r.get("global_p95_ttft_ms")) or 0.0,
-            "p50_ttft_ms": _to_float(r.get("global_p95_ttft_ms")) or 0.0,  # 近似
-            "miss_cost_ms": _to_float(r.get("task_miss_cost_ms")) or 0.0,  # 注：per-task，非全局
-            "block_hit_rate": _to_float(r.get("global_block_hit_rate")) or 0.0,
-            "throughput_req_per_s": _to_float(r.get("global_throughput")) or 0.0,
+        cell_baseline_seed[(cap, conc)][bl][seed] = {
+            "p95_ttft_ms": _to_float(r.get("global_p95_ttft_ms") or r.get("p95_ttft_ms")) or 0.0,
+            "p50_ttft_ms": _to_float(r.get("global_p50_ttft_ms") or r.get("p50_ttft_ms")) or 0.0,
+            "miss_cost_ms": _to_float(r.get("task_miss_cost_ms") or r.get("miss_cost_ms")) or 0.0,
+            "saved_prefill_ms": _to_float(r.get("task_saved_prefill_ms") or r.get("saved_prefill_ms")) or 0.0,
+            "block_hit_rate": _to_float(r.get("global_block_hit_rate") or r.get("block_hit_rate")) or 0.0,
+            "throughput_req_per_s": _to_float(r.get("global_throughput") or r.get("throughput_req_per_s")) or 0.0,
             "migrate_ms_total": _to_float(r.get("migrate_ms_total")) or 0.0,
             "restore_ms_total": _to_float(r.get("restore_ms_total")) or 0.0,
-            "migrate_count": int(r.get("migrate_count", 0)),
-            "restore_count": int(r.get("restore_count", 0)),
-            "saved_prefill_ms": 0.0,  # 从 per-task 聚合
+            "hits": int(r.get("task_hits") or r.get("hits") or 0),
+            "misses": int(r.get("task_misses") or r.get("misses") or 0),
         }
 
-    # 聚合 saved_prefill_ms（需要从 per-task 行求和）
-    saved_sums = defaultdict(float)  # (cap, conc, bl) -> sum
-    for r in rows:
-        cap = _to_float(r.get("capacity_gib"))
-        conc = int(r.get("concurrency", 0))
-        bl = r.get("baseline", "")
-        if cap is None:
-            continue
-        saved = _to_float(r.get("task_saved_prefill_ms")) or 0.0
-        saved_sums[(cap, conc, bl)] += saved
-
-    for (cap, conc), bl_dict in result.items():
-        for bl, metrics in bl_dict.items():
-            metrics["saved_prefill_ms"] = saved_sums.get((cap, conc, bl), 0.0)
-
+    # 再跨 seed 取均值
+    result = defaultdict(lambda: defaultdict(dict))
+    for cell, bl_dict in cell_baseline_seed.items():
+        for bl, seed_dict in bl_dict.items():
+            metrics = {}
+            for key in seed_dict[list(seed_dict.keys())[0]].keys():
+                values = [s[key] for s in seed_dict.values() if key in s]
+                metrics[key] = sum(values) / len(values) if values else 0.0
+            result[cell][bl] = metrics
     return dict(result)
 
 
 # ---------------------------------------------------------------------------
-# Improvement computation
+# Headroom / improvement computation
 # ---------------------------------------------------------------------------
 
 def compute_improvement(fc_metrics: Dict, baseline_metrics: Dict,
@@ -161,7 +144,7 @@ def compute_throughput_change(fc_metrics: Dict,
 
 
 # ---------------------------------------------------------------------------
-# Bootstrap CI (task-level clustering)
+# Bootstrap CI
 # ---------------------------------------------------------------------------
 
 def bootstrap_ci(values: List[float],
@@ -170,8 +153,6 @@ def bootstrap_ci(values: List[float],
                  ci_level: float = 0.95) -> Tuple[float, float, float]:
     """
     Bootstrap CI on the mean of values.
-
-    G3′：以 165 个 task 为重采样单位。
 
     Returns:
         (mean, ci_low, ci_high)
@@ -195,37 +176,32 @@ def bootstrap_ci(values: List[float],
     return mean, boot_means[lo_idx], boot_means[hi_idx]
 
 
-def collect_per_task_improvement(rows: List[Dict],
-                                  cell: Tuple,
-                                  baseline: str,
-                                  metric: str = "task_p95_ttft_ms") -> List[float]:
-    """
-    收集某个 cell 下 FlowCache vs baseline 的 per-task 改善值。
-
-    G3′：以 task_id 为配对单元，对 165 个 task 做聚类 bootstrap。
-    每个 task 贡献一个改善值 = (baseline_task_metric - fc_task_metric) / baseline_task_metric
-    """
+def collect_per_seed_improvement(rows: List[Dict],
+                                 cell: Tuple,
+                                 baseline: str,
+                                 metric: str = "p95_ttft_ms") -> List[float]:
+    """收集某个 cell 下 FlowCache vs baseline 的 per-seed 改善值。"""
     cap, conc = cell
-    # 按 task_id 分组
-    task_data = defaultdict(lambda: defaultdict(dict))
+    per_seed = []
+    # 按 seed 分组
+    seed_data = defaultdict(lambda: defaultdict(dict))
     for r in rows:
         r_cap = _to_float(r.get("capacity_gib"))
         r_conc = int(r.get("concurrency", 0))
         if r_cap != cap or r_conc != conc:
             continue
         bl = r.get("baseline", "")
-        task_id = r.get("task_id", "")
+        seed = int(r.get("seed", 0))
         val = _to_float(r.get(metric))
         if val is not None:
-            task_data[task_id][bl] = val
+            seed_data[seed][bl] = val
 
-    per_task = []
-    for task_id, bl_vals in task_data.items():
+    for seed, bl_vals in seed_data.items():
         fc_val = bl_vals.get(FLOWCACHE)
         bl_val = bl_vals.get(baseline)
         if fc_val is not None and bl_val is not None and bl_val > 0:
-            per_task.append((bl_val - fc_val) / bl_val)
-    return per_task
+            per_seed.append((bl_val - fc_val) / bl_val)
+    return per_seed
 
 
 # ---------------------------------------------------------------------------
@@ -233,8 +209,8 @@ def collect_per_task_improvement(rows: List[Dict],
 # ---------------------------------------------------------------------------
 
 def evaluate_go_no_go(rows: List[Dict], config: Dict) -> Dict:
-    """评估 G3′ Go/No-Go 判定。"""
-    aggregated = aggregate_global_metrics(rows)
+    """评估 G3 Go/No-Go 判定。"""
+    aggregated = aggregate_by_cell_baseline(rows)
     verdict_cfg = config.get("verdict", {})
     main_cell = (config.get("capacity", {}).get("main_cell", {}).get("capacity_gib", 1),
                  config.get("capacity", {}).get("main_cell", {}).get("concurrency", 4))
@@ -258,7 +234,6 @@ def evaluate_go_no_go(rows: List[Dict], config: Dict) -> Dict:
         "per_cell": {},
         "go_no_go": "PENDING",
         "conditions": {},
-        "bootstrap_unit": "task_id (165 groups)",
     }
 
     # 条件 1: 开销可行性
@@ -280,27 +255,23 @@ def evaluate_go_no_go(rows: List[Dict], config: Dict) -> Dict:
 
     fc_metrics = aggregated[main_cell_key][FLOWCACHE]
 
-    # 条件 2: p95 TTFT 改善 ≥ 15%（基于 per-task bootstrap）
+    # 条件 2: p95 TTFT 改善 ≥ 15%
     p95_pass = True
     p95_details = {}
     for bl in SIMPLE_BASELINES:
         if bl not in aggregated.get(main_cell_key, {}):
             continue
         bl_metrics = aggregated[main_cell_key][bl]
-        # 全局改善率
         _, rel_imp = compute_improvement(fc_metrics, bl_metrics, "p95_ttft_ms")
-        # per-task bootstrap CI
-        per_task = collect_per_task_improvement(rows, main_cell_key, bl, "task_p95_ttft_ms")
-        mean_imp, ci_low, ci_high = bootstrap_ci(per_task, n_bootstrap)
+        per_seed = collect_per_seed_improvement(rows, main_cell_key, bl, "p95_ttft_ms")
+        mean_imp, ci_low, ci_high = bootstrap_ci(per_seed, n_bootstrap)
         passed = (rel_imp >= threshold_p95) and (ci_low > 0)
         if not passed:
             p95_pass = False
         p95_details[bl] = {
-            "global_rel_improvement": round(rel_imp, 6),
-            "per_task_mean_improvement": round(mean_imp, 6),
+            "rel_improvement": round(rel_imp, 6),
             "ci_low": round(ci_low, 6),
             "ci_high": round(ci_high, 6),
-            "n_tasks": len(per_task),
             "pass": passed,
         }
     result["conditions"]["p95_ttft_improvement"] = {
@@ -331,12 +302,12 @@ def evaluate_go_no_go(rows: List[Dict], config: Dict) -> Dict:
         "pass": throughput_pass,
     }
 
-    # 条件 4: 优于强启发式（per-task bootstrap CI 不含 0）
+    # 条件 4: 优于强启发式（bootstrap CI 不含 0）
     ci_pass = True
     ci_details = {}
     for bl in SIMPLE_BASELINES:
-        per_task = collect_per_task_improvement(rows, main_cell_key, bl, "task_p95_ttft_ms")
-        mean_imp, ci_low, ci_high = bootstrap_ci(per_task, n_bootstrap)
+        per_seed = collect_per_seed_improvement(rows, main_cell_key, bl, "p95_ttft_ms")
+        mean_imp, ci_low, ci_high = bootstrap_ci(per_seed, n_bootstrap)
         passed = ci_low > 0
         if not passed:
             ci_pass = False
@@ -344,7 +315,6 @@ def evaluate_go_no_go(rows: List[Dict], config: Dict) -> Dict:
             "mean": round(mean_imp, 6),
             "ci_low": round(ci_low, 6),
             "ci_high": round(ci_high, 6),
-            "n_tasks": len(per_task),
             "pass": passed,
         }
     result["conditions"]["better_than_heuristic"] = {
@@ -370,24 +340,14 @@ def evaluate_go_no_go(rows: List[Dict], config: Dict) -> Dict:
         else:
             rel = 0.0
             thr_change = 0.0
-        # per-task bootstrap for this cell
-        per_task_ci = {}
-        if best_simple:
-            per_task = collect_per_task_improvement(rows, cell, best_simple, "task_p95_ttft_ms")
-            if per_task:
-                m, lo, hi = bootstrap_ci(per_task, n_bootstrap)
-                per_task_ci = {"mean": round(m, 6), "ci_low": round(lo, 6), "ci_high": round(hi, 6)}
         result["per_cell"][f"{cap}_{conc}"] = {
             "capacity_gib": cap,
             "concurrency": conc,
             "fc_p95_ttft": round(fc.get("p95_ttft_ms", 0), 2),
-            "fc_migrate_count": fc.get("migrate_count", 0),
-            "fc_restore_count": fc.get("restore_count", 0),
             "best_simple": best_simple,
             "best_simple_p95_ttft": round(best_simple_p95, 2),
             "p95_improvement": round(rel, 6),
             "throughput_change": round(thr_change, 6),
-            "per_task_bootstrap": per_task_ci,
         }
 
     # 最终判定
@@ -404,12 +364,11 @@ def evaluate_go_no_go(rows: List[Dict], config: Dict) -> Dict:
 def build_markdown_report(verdict: Dict) -> str:
     """生成 Markdown 判定报告。"""
     lines = []
-    lines.append("# G3′ Verdict Report: Lossless Residency\n")
+    lines.append("# G3 Verdict Report: Lossless Residency\n")
     lines.append(f"**Verdict**: {'✅ GO' if verdict['go_no_go'] == 'GO' else '❌ NO-GO'}\n")
 
     mc = verdict["main_cell"]
-    lines.append(f"**Main cell**: {mc['capacity_gib']} GiB, concurrency={mc['concurrency']}")
-    lines.append(f"**Bootstrap unit**: {verdict.get('bootstrap_unit', 'task_id')}\n")
+    lines.append(f"**Main cell**: {mc['capacity_gib']} GiB, concurrency={mc['concurrency']}\n")
 
     lines.append("## Conditions\n")
 
@@ -426,11 +385,8 @@ def build_markdown_report(verdict: Dict) -> str:
     lines.append(f"### 2. p95 TTFT Improvement ≥ {cond.get('threshold', 0.15)*100:.0f}%: {status}")
     for bl, d in cond.get("details", {}).items():
         bl_status = "✅" if d["pass"] else "❌"
-        lines.append(
-            f"- {bl_status} vs {bl}: global={d['global_rel_improvement']*100:.2f}%, "
-            f"per_task_mean={d['per_task_mean_improvement']*100:.2f}% "
-            f"(CI=[{d['ci_low']*100:.2f}%, {d['ci_high']*100:.2f}%], n={d['n_tasks']})"
-        )
+        lines.append(f"- {bl_status} vs {bl}: {d['rel_improvement']*100:.2f}% "
+                     f"(CI=[{d['ci_low']*100:.2f}%, {d['ci_high']*100:.2f}%])")
     lines.append("")
 
     # 条件 3
@@ -446,32 +402,25 @@ def build_markdown_report(verdict: Dict) -> str:
     # 条件 4
     cond = verdict["conditions"].get("better_than_heuristic", {})
     status = "✅ PASS" if cond.get("pass") else "❌ FAIL"
-    lines.append(f"### 4. Better Than Heuristic (per-task bootstrap CI > 0): {status}")
+    lines.append(f"### 4. Better Than Heuristic (CI > 0): {status}")
     for bl, d in cond.get("details", {}).items():
         bl_status = "✅" if d["pass"] else "❌"
         lines.append(f"- {bl_status} vs {bl}: mean={d['mean']*100:.2f}% "
-                     f"(CI=[{d['ci_low']*100:.2f}%, {d['ci_high']*100:.2f}%], n={d['n_tasks']})")
+                     f"(CI=[{d['ci_low']*100:.2f}%, {d['ci_high']*100:.2f}%])")
     lines.append("")
 
     # 全 9 cell 摘要
     lines.append("## All Cells Summary\n")
-    lines.append("| Capacity (GiB) | Conc | FlowCache p95 | FC migrate/restore | Best Simple | Best Simple p95 | Improvement | Throughput Δ | Per-task CI |")
-    lines.append("|---:|---:|---:|---:|---|---:|---:|---:|---|")
+    lines.append("| Capacity (GiB) | Concurrency | FlowCache p95 TTFT | Best Simple | Best Simple p95 | Improvement | Throughput Δ |")
+    lines.append("|---:|---:|---:|---|---:|---:|---:|")
     for key, cell_data in sorted(verdict["per_cell"].items(),
                                   key=lambda x: (x[1]["capacity_gib"], x[1]["concurrency"])):
-        ci_str = "N/A"
-        if cell_data.get("per_task_bootstrap"):
-            ci = cell_data["per_task_bootstrap"]
-            ci_str = f"[{ci['ci_low']*100:.1f}%, {ci['ci_high']*100:.1f}%]"
         lines.append(
             f"| {cell_data['capacity_gib']} | {cell_data['concurrency']} | "
-            f"{cell_data['fc_p95_ttft']:.1f} | "
-            f"{cell_data.get('fc_migrate_count', 0)}/{cell_data.get('fc_restore_count', 0)} | "
-            f"{cell_data['best_simple'] or 'N/A'} | "
+            f"{cell_data['fc_p95_ttft']:.1f} | {cell_data['best_simple'] or 'N/A'} | "
             f"{cell_data['best_simple_p95_ttft']:.1f} | "
             f"{cell_data['p95_improvement']*100:.2f}% | "
-            f"{cell_data['throughput_change']*100:+.2f}% | "
-            f"{ci_str} |"
+            f"{cell_data['throughput_change']*100:+.2f}% |"
         )
     lines.append("")
 
@@ -482,14 +431,14 @@ def build_markdown_report(verdict: Dict) -> str:
         lines.append("实现保留为工程基线，但不以无损 residency 单独投稿该主张。")
     else:
         lines.append("## Next Step\n")
-        lines.append("G3′ PASSED → 进入 G4（量化）→ G2（联合 R-D 控制器）。")
+        lines.append("G3 PASSED → 进入 G4（量化）→ G2（联合 R-D 控制器）。")
 
     return "\n".join(lines)
 
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="G3′ verdict report generator")
+    parser = argparse.ArgumentParser(description="G3 verdict report generator")
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--results", default=None,
                         help="Path to raw_results.csv")
@@ -515,7 +464,7 @@ def main():
         print(f"No results found in {results_path}")
         return
 
-    print(f"Loaded {len(rows)} per-task rows from {results_path}")
+    print(f"Loaded {len(rows)} rows from {results_path}")
     verdict = evaluate_go_no_go(rows, config)
 
     # 保存 JSON
@@ -543,7 +492,7 @@ def main():
         f.write(md_report)
     print(f"Verdict report saved to: {md_path}")
     print(f"\n{'='*60}")
-    print(f"G3′ Verdict: {verdict['go_no_go']}")
+    print(f"G3 Verdict: {verdict['go_no_go']}")
     print(f"{'='*60}")
 
 

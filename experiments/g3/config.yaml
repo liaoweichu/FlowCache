@@ -124,7 +124,7 @@ grid:
     - {capacity_gib: 4, concurrency: 1}
     - {capacity_gib: 4, concurrency: 4}
     - {capacity_gib: 4, concurrency: 8}
-  episodes_per_cell: 1320  # G3′: 全量（原 495 = 165×3 seed 子集）
+  episodes_per_cell: 100000  # G3′: 全量（足够大以覆盖全部 ~21k request_ids）
 
 # W8 冒烟配置
 smoke_test:

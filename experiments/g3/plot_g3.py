@@ -84,9 +84,12 @@ def aggregate(rows: List[Dict]) -> Dict:
         bl = r.get("baseline", "")
         if cap is None:
             continue
-        for metric in ["p95_ttft_ms", "p50_ttft_ms", "throughput_req_per_s",
-                        "block_hit_rate", "miss_cost_ms"]:
-            val = _to_float(r.get(metric))
+        for metric, csv_field in [("p95_ttft_ms", "global_p95_ttft_ms"),
+                                   ("p50_ttft_ms", "global_p50_ttft_ms"),
+                                   ("throughput_req_per_s", "global_throughput"),
+                                   ("block_hit_rate", "global_block_hit_rate"),
+                                   ("miss_cost_ms", "task_miss_cost_ms")]:
+            val = _to_float(r.get(csv_field) or r.get(metric))
             if val is not None:
                 cell_bl_seed[(cap, conc)][bl][metric].append(val)
 
