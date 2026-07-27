@@ -612,6 +612,22 @@ G1′ 用已有 1,320 条 τ-bench 轨迹重做，不重新运行 τ-bench 对�
 
 **失败动作**：路线 A No-Go；可保留实现作为工程基线，但不以无损 residency 单独投稿该主张。
 
+#### G3′ 修正（2026-07-27，protocol-invalid 重跑）
+
+G3 原始云端运行返回 NO-GO，但诊断显示**协议无效**，verdict 作废，不触发路线切换：
+
+1. **Seed 映射失败**：`run_g3_grid.py` 原 `replay_seeds=[0,1,2]` 与 τ-bench trace 中原始 seed 值（如 `101112`）不匹配，`filter_by_seed` 返回空集，导致 3 个 seed 行完全相同，bootstrap CI 退化为单点 `[mean, mean]`。
+2. **CPU 层从未使用**：`controller.py` 原迁移阈值 `migrate_threshold=0.1` 过高，所有 `flowcache_lossless` 行 `migrate_count=0`、`restore_count=0`，FlowCache 退化为纯 GPU 策略，叠加 `safety_margin=0.10` 缩容 10%，性能反而不如 sizecost/gdsf（主 cell 1 GiB c=4 下 p95 差 69%）。
+3. **统计单位错误**：per-seed (n=3) bootstrap 无效，应改为 per-task_id (n=165) paired bootstrap。
+
+G3′ 修复（代码已就地更新于 `experiments/g3/`，待云端重跑）：
+- 移除 seed 过滤，单次跑全部 1320 episodes；
+- `migrate_threshold` 0.1→0.01，新增 `_select_cpu_victim` 实现 CPU 层按 R 值淘汰腾位；
+- `safety_margin` 0.10→0.05；
+- 按 165 个 `task_id` 聚类 bootstrap，输出 per-task 行（8,910 行 = 9×6×165）。
+
+详见 `experiments/g3/FROZEN.md`。G3′ verdict 未生成前，G3 gate 状态为 `in_progress` 而非 `failed`。
+
 ### G4：Quantization
 
 - 真实后端支持目标模型的 KV quantization 与恢复；

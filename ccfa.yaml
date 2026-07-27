@@ -102,7 +102,7 @@ gates:
     source: "IDEA.rewritten.md Section 7"
   - id: "G3"
     description: "Lossless Residency"
-    status: "not_started"
+    status: "in_progress"  # G3′ 修复版待云端重跑（G3 原始 protocol-invalid）
     week: "W8, W10-W11"
     depends_on: ["G0", "G1"]
     design_doc: "experiments/experiment-designs.md#ch4"
@@ -111,6 +111,7 @@ gates:
     fallback_route: "B"
     triggers_route_switch: true
     source: "IDEA.rewritten.md Section 7"
+    note: "G3 原始运行 protocol-invalid（seed 映射失败 + CPU 层从未使用 + per-seed bootstrap 退化），verdict NO-GO 作废，不触发路线切换。G3′ 修复版（migrate_threshold 0.1→0.01、分层 CPU 淘汰、task_id 聚类 bootstrap、safety_margin 0.10→0.05、1320 episodes 单次跑）代码已就地更新于 experiments/g3/，待云端重跑。见 experiments/g3/FROZEN.md。"
   - id: "G4"
     description: "Quantization"
     status: "not_started"

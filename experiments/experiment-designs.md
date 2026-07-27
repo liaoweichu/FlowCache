@@ -905,6 +905,8 @@ bytes_per_block = 917,504 B (896 KiB)，基于 Qwen2.5-7B（28 层 × 4 KV heads
 > **周次**：W7–W8 | **依赖**：G0、G1 | **关键路径**：是
 > **失败动作**：路线 A No-Go；可保留实现作为工程基线，但不以无损 residency 单独投稿该主张
 
+> **G3′ 修正（2026-07-27）**：G3 原始云端运行返回 NO-GO，但诊断显示**协议无效**，verdict 作废，不触发路线切换。三大协议问题：(1) seed 映射失败（`replay_seeds=[0,1,2]` 与 τ-bench 原始 seed 不匹配，3 个 seed 行完全相同，bootstrap CI 退化为单点）；(2) CPU 层从未使用（`migrate_threshold=0.1` 过高，`migrate_count=0`，FlowCache 退化为纯 GPU 策略 + `safety_margin=0.10` 缩容，性能反不如 sizecost/gdsf）；(3) per-seed (n=3) bootstrap 无效。G3′ 修复版代码已就地更新于 `experiments/g3/`，待云端重跑：移除 seed 过滤跑全量 1320 episodes、`migrate_threshold` 0.1→0.01 + 分层 CPU 淘汰、`safety_margin` 0.10→0.05、按 165 个 `task_id` 聚类 bootstrap 输出 per-task 行（8,910 行 = 9×6×165）。详见 `experiments/g3/FROZEN.md`。下方 G3.2/G3.3 的"495 episodes × 3 replay 种子"为原始设计，G3′ 实际运行为"1320 episodes 单次 × 165 task 聚类"。
+
 ## G3.1 实验目标与 Gate 关系
 
 G3 验证：在**只用无损动作**（GPU BF16 ↔ CPU BF16 ↔ Evict，IDEA §2.3 动作空间 A₀）时，一个简单的价值感知 controller 是否已经优于最强简单驱逐策略。这是联合 controller 的"地基"——如果连无损驻留都没有净收益，加入精度维度（G4/G2）也没有意义。

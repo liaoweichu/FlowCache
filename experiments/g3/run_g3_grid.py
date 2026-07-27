@@ -1,18 +1,22 @@
 """
-G3 Grid Runner
-==============
-全网格运行器：9 cell × 6 baselines × 495 episodes × 3 replay seeds。
+G3′ Grid Runner
+===============
+全网格运行器：9 cell × 6 baselines × 1320 episodes（单次运行，无 replay seed）。
+
+G3′ 修复（相对原 G3）：
+  1. 移除 replay_seeds 概念：trace 中所有 1320 episodes 一次跑完
+  2. 输出 task_id 级别的 per-task 指标，用于 165 个 task 聚类 bootstrap
+  3. FlowCache 使用修复后的 controller（migrate_threshold=0.01, safety_margin=0.05）
 
 读取 G1′ 的物理前缀访问流（access_trace_c{1,4,8}.jsonl），
-对每个 (capacity, concurrency, baseline, seed) 组合重放访问流，
-收集 request 级指标，输出 raw_results.csv。
+对每个 (capacity, concurrency, baseline) 组合重放访问流，
+收集 per-task 指标，输出 raw_results.csv（每行 = cell × baseline × task_id）。
 
 指标：
-  - miss_prefill_ms: request 级 miss cost
-  - p95_ttft_ms: 95% 分位 request miss cost
-  - block_hit_rate: block 级命中率
-  - saved_prefill_ms: 节省的 prefill 时间
-  - throughput_req_per_s: 吞吐（requests/s）
+  - task_miss_cost_ms: task 级 miss cost 总和
+  - task_p95_ttft_ms: task 内 request miss cost 的 P95
+  - task_hit_rate: task 级 block 命中率
+  - block_hit_rate: 全局 block 命中率（聚合行）
   - migrate_ms_total / restore_ms_total: 迁移/恢复开销（仅 FlowCache）
 
 用法：
@@ -28,7 +32,7 @@ import sys
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import yaml
 
@@ -92,11 +96,6 @@ def load_access_trace(trace_path: Path, max_episodes: Optional[int] = None) -> L
     return accesses
 
 
-def filter_by_seed(accesses: List[Dict], seed: int) -> List[Dict]:
-    """按 replay seed 过滤 access records。"""
-    return [a for a in accesses if a.get("seed", 0) == seed]
-
-
 def compute_share_counts(accesses: List[Dict], horizon: int = 1000) -> Dict[str, int]:
     """
     预计算每个 block_hash 的 share_count（H 窗口内访问该 block 的不同 workflow 数）。
@@ -156,9 +155,10 @@ def instantiate_baseline(name: str,
             block_bytes=block_bytes,
             cost_model=cost_model or {},
             reuse_estimator_config=heuristic_cfg,
-            safety_margin=fc_cfg.get("safety_margin", 0.10),
+            safety_margin=fc_cfg.get("safety_margin", 0.05),
             score_lambda=fc_cfg.get("score_lambda", 0.1),
             fallback=fc_cfg.get("fallback", "sizecost"),
+            migrate_threshold=fc_cfg.get("migrate_threshold", 0.01),
         )
     raise ValueError(f"Unknown baseline: {name}")
 
@@ -208,57 +208,97 @@ def compute_future_accesses(accesses: List[Dict]) -> Dict[str, List[int]]:
     return dict(future)
 
 
-def replay_accesses(cache, accesses: List[Dict]) -> Dict:
+def replay_accesses(cache, accesses: List[Dict]) -> Tuple[Dict, Dict[str, Dict]]:
     """
-    重放访问流，收集指标。
+    重放访问流，收集全局指标和 per-task 指标。
+
+    G3′：不再按 seed 分组，而是按 task_id 收集 per-task 指标，
+    用于 165 个 task 聚类 bootstrap。
 
     Returns:
-        包含各种指标的字典
+        (global_metrics, per_task_metrics)
+        - global_metrics: 全局聚合指标
+        - per_task_metrics: {task_id: {metric: value}}
     """
-    # request 级 miss cost 收集
+    # per-request miss cost 收集
     request_miss_cost = defaultdict(float)
-    request_total_cost = defaultdict(float)
-    request_blocks = defaultdict(int)
-    request_hits = defaultdict(int)
+    request_to_task = {}  # request_id -> task_id
+    task_request_miss_costs = defaultdict(list)  # task_id -> [miss_cost_per_request]
+    task_hits = defaultdict(int)
+    task_misses = defaultdict(int)
+    task_saved = defaultdict(float)
+    task_miss_cost = defaultdict(float)
 
     for idx, record in enumerate(accesses):
         is_hit = access_baseline(cache, record, idx)
         req_id = record.get("request_id", "")
+        task_id = record.get("task_id", "")
         prefill_ms = record.get("prefill_ms", 0.0)
 
-        request_blocks[req_id] += 1
+        request_to_task[req_id] = task_id
+
         if is_hit:
-            request_hits[req_id] += 1
+            task_hits[task_id] += 1
+            task_saved[task_id] += prefill_ms
         else:
+            task_misses[task_id] += 1
+            task_miss_cost[task_id] += prefill_ms
             request_miss_cost[req_id] += prefill_ms
-        request_total_cost[req_id] += prefill_ms
 
-    # 计算 request 级指标
-    miss_costs = list(request_miss_cost.values())
-    total_costs = list(request_total_cost.values())
+    # 构建 per-task 的 request miss cost 列表（用于 task 级 p95）
+    for req_id, cost in request_miss_cost.items():
+        task_id = request_to_task.get(req_id, "")
+        task_request_miss_costs[task_id].append(cost)
 
-    # p95 TTFT = request 级 miss cost 的 P95
-    if miss_costs:
-        miss_costs_sorted = sorted(miss_costs)
-        p95_idx = int(len(miss_costs_sorted) * 0.95)
-        p95_ttft_ms = miss_costs_sorted[min(p95_idx, len(miss_costs_sorted) - 1)]
-        p50_ttft_ms = miss_costs_sorted[len(miss_costs_sorted) // 2]
+    # 计算 per-task 指标
+    per_task: Dict[str, Dict] = {}
+    all_task_ids = set(task_hits.keys()) | set(task_misses.keys())
+    for task_id in all_task_ids:
+        req_costs = task_request_miss_costs.get(task_id, [])
+        hits = task_hits.get(task_id, 0)
+        misses = task_misses.get(task_id, 0)
+        total_blocks = hits + misses
+        hit_rate = hits / total_blocks if total_blocks > 0 else 0.0
+
+        # task 级 p95 TTFT（request miss cost 的 P95）
+        if req_costs:
+            req_costs_sorted = sorted(req_costs)
+            p95_idx = int(len(req_costs_sorted) * 0.95)
+            task_p95 = req_costs_sorted[min(p95_idx, len(req_costs_sorted) - 1)]
+            task_p50 = req_costs_sorted[len(req_costs_sorted) // 2]
+        else:
+            task_p95 = 0.0
+            task_p50 = 0.0
+
+        per_task[task_id] = {
+            "task_miss_cost_ms": task_miss_cost.get(task_id, 0.0),
+            "task_saved_prefill_ms": task_saved.get(task_id, 0.0),
+            "task_p95_ttft_ms": task_p95,
+            "task_p50_ttft_ms": task_p50,
+            "task_hits": hits,
+            "task_misses": misses,
+            "task_block_hit_rate": hit_rate,
+            "task_n_requests": len(req_costs),
+        }
+
+    # 全局指标
+    all_miss_costs = list(request_miss_cost.values())
+    if all_miss_costs:
+        all_miss_costs_sorted = sorted(all_miss_costs)
+        p95_idx = int(len(all_miss_costs_sorted) * 0.95)
+        p95_ttft_ms = all_miss_costs_sorted[min(p95_idx, len(all_miss_costs_sorted) - 1)]
+        p50_ttft_ms = all_miss_costs_sorted[len(all_miss_costs_sorted) // 2]
     else:
         p95_ttft_ms = 0.0
         p50_ttft_ms = 0.0
 
-    # 吞吐：requests / total_time
     n_requests = len(request_miss_cost)
     total_arrival_ms = max(
         (a.get("arrival_time_ms", 0) for a in accesses),
         default=0
     )
-    if total_arrival_ms > 0:
-        throughput = n_requests / (total_arrival_ms / 1000.0)
-    else:
-        throughput = 0.0
+    throughput = n_requests / (total_arrival_ms / 1000.0) if total_arrival_ms > 0 else 0.0
 
-    # block 级指标
     stats = cache.get_stats() if hasattr(cache, "get_stats") else {
         "hits": getattr(cache, "hits", 0),
         "misses": getattr(cache, "misses", 0),
@@ -270,7 +310,7 @@ def replay_accesses(cache, accesses: List[Dict]) -> Dict:
     total_blocks = stats["hits"] + stats["misses"]
     block_hit_rate = stats["hits"] / total_blocks if total_blocks > 0 else 0.0
 
-    return {
+    global_metrics = {
         "hits": stats["hits"],
         "misses": stats["misses"],
         "evictions": stats["evictions"],
@@ -286,7 +326,10 @@ def replay_accesses(cache, accesses: List[Dict]) -> Dict:
         "migrate_count": stats.get("migrate_to_cpu_count", 0),
         "restore_count": stats.get("restore_to_gpu_count", 0),
         "fallback_count": stats.get("fallback_count", 0),
+        "n_tasks": len(per_task),
     }
+
+    return global_metrics, per_task
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +338,12 @@ def replay_accesses(cache, accesses: List[Dict]) -> Dict:
 
 def run_grid(config: Dict, smoke_test: bool = False,
              max_episodes: Optional[int] = None) -> List[Dict]:
-    """运行全网格，返回结果行列表。"""
+    """
+    运行全网格，返回 per-task 结果行列表。
+
+    G3′：不再有 replay seed 循环，每个 cell × baseline 跑一次全部 trace，
+    输出每个 task_id 一行（用于聚类 bootstrap）。
+    """
     g0 = config["g0"]
     block_bytes = compute_block_bytes(g0)
 
@@ -313,7 +361,6 @@ def run_grid(config: Dict, smoke_test: bool = False,
     if smoke_test:
         cells = [config["smoke_test"]["cell"]]
         baselines_to_run = config["smoke_test"]["baselines"]
-        seeds = [0]
         episodes = config["smoke_test"].get("episodes", 100)
         print(f"[SMOKE TEST] cell={cells[0]}, baselines={baselines_to_run}, "
               f"episodes={episodes}")
@@ -324,8 +371,7 @@ def run_grid(config: Dict, smoke_test: bool = False,
             for bl in config["baselines"].get(group, []):
                 if bl.get("enabled", True):
                     baselines_to_run.append(bl["name"])
-        seeds = config["grid"]["replay_seeds"]
-        episodes = config["grid"].get("episodes_per_cell", 495)
+        episodes = config["grid"].get("episodes_per_cell", 1320)
         if max_episodes:
             episodes = max_episodes
 
@@ -347,55 +393,59 @@ def run_grid(config: Dict, smoke_test: bool = False,
         print(f"\nCell: {cap_gib} GiB (capacity={capacity_blocks} blocks), "
               f"concurrency={conc}")
 
-        # 加载 trace
+        # 加载 trace（G3′: 一次性加载全部，不再按 seed 过滤）
         all_accesses = load_access_trace(trace_path, max_episodes=episodes)
-        print(f"  Loaded {len(all_accesses)} accesses")
+        print(f"  Loaded {len(all_accesses)} accesses, "
+              f"{len(set(a.get('request_id','') for a in all_accesses))} requests, "
+              f"{len(set(a.get('task_id','') for a in all_accesses))} tasks")
 
         # 预计算 share_count
         share_counts = compute_share_counts(all_accesses)
         for acc in all_accesses:
             acc["_share_count"] = share_counts.get(acc.get("block_hash", ""), 0)
 
-        # 预计算 future_accesses（所有 seed 共用）
+        # 预计算 future_accesses（Belady/OracleCost 用）
         future_accesses = compute_future_accesses(all_accesses)
 
-        for seed in seeds:
-            seed_accesses = filter_by_seed(all_accesses, seed) if seeds != [0] else all_accesses
-            if not seed_accesses:
-                # 如果 seed 过滤后为空，用全部
-                seed_accesses = all_accesses
+        for baseline_name in baselines_to_run:
+            t0 = time.perf_counter()
+            cache = instantiate_baseline(
+                baseline_name, capacity_blocks, cost_model,
+                flowcache_config, block_bytes, future_accesses
+            )
+            global_metrics, per_task = replay_accesses(cache, all_accesses)
+            elapsed = time.perf_counter() - t0
 
-            # 重新计算 future_accesses for this seed's subset
-            if seeds != [0]:
-                future_accesses = compute_future_accesses(seed_accesses)
-
-            print(f"  Seed {seed}: {len(seed_accesses)} accesses, "
-                  f"{len(set(a.get('request_id','') for a in seed_accesses))} requests")
-
-            for baseline_name in baselines_to_run:
-                t0 = time.perf_counter()
-                cache = instantiate_baseline(
-                    baseline_name, capacity_blocks, cost_model,
-                    flowcache_config, block_bytes, future_accesses
-                )
-                metrics = replay_accesses(cache, seed_accesses)
-                elapsed = time.perf_counter() - t0
-
+            # 输出每个 task_id 一行（用于 bootstrap）
+            for task_id, task_metrics in per_task.items():
                 row = {
                     "capacity_gib": cap_gib,
                     "concurrency": conc,
                     "baseline": baseline_name,
-                    "seed": seed,
+                    "task_id": task_id,
                     "capacity_blocks": capacity_blocks,
-                    "n_accesses": len(seed_accesses),
+                    "n_accesses": len(all_accesses),
                     "elapsed_s": round(elapsed, 2),
-                    **metrics,
+                    # 全局指标（同一 baseline 在同一 cell 下相同，便于聚合）
+                    "global_block_hit_rate": global_metrics["block_hit_rate"],
+                    "global_p95_ttft_ms": global_metrics["p95_ttft_ms"],
+                    "global_throughput": global_metrics["throughput_req_per_s"],
+                    "migrate_ms_total": global_metrics["migrate_ms_total"],
+                    "restore_ms_total": global_metrics["restore_ms_total"],
+                    "migrate_count": global_metrics["migrate_count"],
+                    "restore_count": global_metrics["restore_count"],
+                    "fallback_count": global_metrics["fallback_count"],
+                    "n_tasks": global_metrics["n_tasks"],
+                    # per-task 指标（bootstrap 单元）
+                    **task_metrics,
                 }
                 results.append(row)
-                print(f"    {baseline_name}: p95_ttft={metrics['p95_ttft_ms']:.1f} ms, "
-                      f"hit_rate={metrics['block_hit_rate']:.3f}, "
-                      f"miss_cost={metrics['miss_cost_ms']:.1f} ms "
-                      f"({elapsed:.1f}s)")
+
+            print(f"    {baseline_name}: global_p95={global_metrics['p95_ttft_ms']:.1f} ms, "
+                  f"hit_rate={global_metrics['block_hit_rate']:.3f}, "
+                  f"migrate={global_metrics['migrate_count']}, "
+                  f"restore={global_metrics['restore_count']} "
+                  f"({elapsed:.1f}s, {len(per_task)} tasks)")
 
     return results
 
@@ -414,7 +464,7 @@ def save_results(results: List[Dict], output_path: Path) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="G3 grid runner")
+    parser = argparse.ArgumentParser(description="G3′ grid runner")
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--smoke-test", action="store_true",
                         help="Run W8 smoke test (main cell × 4 baselines × 100 episodes)")

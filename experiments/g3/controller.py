@@ -34,11 +34,12 @@ class FlowCacheLosslessController:
       2. CPU hit → restore to GPU (H2D), then GPU hit
       3. Miss → admit to GPU, possibly evicting/migrating others
 
-    Eviction policy: value-aware
+    Eviction policy: value-aware (G3′ tiered)
       - Compute R_b for all GPU blocks
-      - Migrate high-R blocks to CPU (if space)
-      - Evict low-R blocks
-      - Safety margin: keep 10% GPU capacity free
+      - Migrate blocks with R > migrate_threshold (0.01) to CPU
+      - When CPU is full, evict the lowest-R CPU block to make room
+      - Evict blocks with R <= migrate_threshold directly from GPU
+      - Safety margin: keep 5% GPU capacity free (G3′: reduced from 10%)
     """
 
     def __init__(self,
@@ -47,9 +48,10 @@ class FlowCacheLosslessController:
                  block_bytes: int = 917504,
                  cost_model: Optional[Dict] = None,
                  reuse_estimator_config: Optional[Dict] = None,
-                 safety_margin: float = 0.10,
+                 safety_margin: float = 0.05,
                  score_lambda: float = 0.1,
-                 fallback: str = "sizecost"):
+                 fallback: str = "sizecost",
+                 migrate_threshold: float = 0.01):
         """
         Args:
             gpu_capacity_blocks: GPU 可容纳的 block 数
@@ -57,9 +59,10 @@ class FlowCacheLosslessController:
             block_bytes: 每个 block 的字节数
             cost_model: 冻结的成本模型（来自 cost-model.json）
             reuse_estimator_config: heuristic 估计器配置
-            safety_margin: GPU 安全水位（0.10 = 保留 10% 容量）
+            safety_margin: GPU 安全水位（0.05 = 保留 5% 容量）
             score_lambda: hold_cost 权重
             fallback: 回退策略名称（"sizecost" | "lru"）
+            migrate_threshold: GPU→CPU 迁移的 R 阈值（G3′: 0.01，原 G3 误设为 0.1）
         """
         # 有效 GPU 容量 = 总容量 × (1 - safety_margin)
         effective_capacity = max(1, int(gpu_capacity_blocks * (1 - safety_margin)))
@@ -69,6 +72,7 @@ class FlowCacheLosslessController:
         self.score_lambda = score_lambda
         self.fallback = fallback
         self.block_bytes = block_bytes
+        self.migrate_threshold = migrate_threshold
 
         # 初始化 cache manager
         self.manager = LosslessCacheManager(
@@ -182,7 +186,16 @@ class FlowCacheLosslessController:
     # ------------------------------------------------------------------
 
     def _ensure_gpu_space(self, needed: int) -> None:
-        """确保 GPU 有足够空间（淘汰或迁移低价值 block）。"""
+        """
+        确保 GPU 有足够空间（分层淘汰/迁移）。
+
+        G3′ 分层决策（修复原 G3 的 CPU 层未使用问题）：
+          1. 选出 GPU 中 score 最低的 victim
+          2. 若 victim_r > migrate_threshold（0.01）：
+             - CPU 有空间 → 迁移到 CPU
+             - CPU 满 → 先淘汰 CPU 中 R 最低的块腾位，再迁移
+          3. 若 victim_r ≤ migrate_threshold → 直接从 GPU 淘汰
+        """
         while self.manager.gpu_size() + needed > self.manager.gpu_capacity:
             if not self.manager.gpu_cache:
                 break
@@ -202,11 +215,43 @@ class FlowCacheLosslessController:
                 block_idx=victim_idx,
             )
 
-            # R > 阈值且 CPU 有空间 → 迁移；否则淘汰
-            if victim_r > 0.1 and not self.manager.cpu_full():
-                self.manager.migrate_to_cpu(victim)
+            # R > 阈值 → 迁移到 CPU（分层：CPU 满时先淘汰 CPU 最低 R 块）
+            if victim_r > self.migrate_threshold:
+                if self.manager.cpu_full():
+                    # CPU 满，淘汰 CPU 中 R 最低的块腾位
+                    cpu_victim = self._select_cpu_victim()
+                    if cpu_victim is not None:
+                        self.manager.evict_from_cpu(cpu_victim)
+                # 再次检查（CPU 可能仍满且无法腾位，此时 migrate_to_cpu 内部会直接淘汰）
+                if not self.manager.cpu_full():
+                    self.manager.migrate_to_cpu(victim)
+                else:
+                    # CPU 容量为 0 或无法腾位，直接从 GPU 淘汰
+                    self.manager.evict_from_gpu(victim)
             else:
+                # R 过低，直接淘汰
                 self.manager.evict_from_gpu(victim)
+
+    def _select_cpu_victim(self) -> Optional[str]:
+        """选择 CPU 池中 R 值最低的 block（用于 CPU 满时腾位）。"""
+        if not self.manager.cpu_cache:
+            return None
+
+        worst_r = float("inf")
+        worst_block = None
+
+        for block_hash, meta in self.manager.cpu_cache.items():
+            age = self._clock - meta.get("last_access", 0)
+            share = meta.get("share_count", 0)
+            idx = meta.get("block_idx", 0)
+            r_value = self.estimator.estimate(
+                age=age, share_count=share, block_idx=idx
+            )
+            if r_value < worst_r:
+                worst_r = r_value
+                worst_block = block_hash
+
+        return worst_block
 
     def _select_victim(self) -> Optional[str]:
         """
@@ -302,6 +347,7 @@ class FlowCacheLosslessController:
         stats["effective_gpu_capacity"] = self.effective_gpu_capacity
         stats["total_gpu_capacity"] = self.total_gpu_capacity
         stats["safety_margin"] = self.safety_margin
+        stats["migrate_threshold"] = self.migrate_threshold
         return stats
 
 

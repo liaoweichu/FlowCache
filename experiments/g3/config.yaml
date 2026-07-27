@@ -1,7 +1,14 @@
-# G3: Lossless Residency（无损驻留）
+# G3′: Lossless Residency（无损驻留）— 修复版
 # ============================================================
 # 验证：在只用无损动作（GPU BF16 ↔ CPU BF16 ↔ Evict，动作空间 A₀）时，
 # 一个简单的价值感知 controller 是否已经优于最强简单淘汰策略。
+#
+# G3′ 修复（相对原 G3 的 protocol-invalid 结果）：
+#   1. 移除 replay_seeds 概念（原 seed 过滤失败导致 3 个 seed 结果完全相同）
+#   2. 按 task_id（165 组）聚类 bootstrap（原按 seed 退化）
+#   3. 降低 migrate_threshold 0.1→0.01（原阈值过高导致 CPU 层从未使用）
+#   4. 分层淘汰：CPU 满时按 R 值淘汰 CPU 块（原直接从 GPU 淘汰）
+#   5. safety_margin 0.10→0.05（CPU 层修复后可减少缩容）
 #
 # 前置：G1′ PASSED（headroom=45.80% @ 1 GiB c=4）
 # 复用 G1′ 的物理前缀访问流，不重新运行 τ-bench 对话。
@@ -23,15 +30,15 @@ g0:
 
 # 数据集（复用 G1′ 物理前缀访问流）
 datasets:
-  - tau_bench  # 495 episodes × 3 replay 种子 = 1,485 runs
+  - tau_bench  # 1320 episodes（165 tasks × 8 τ-bench seeds），单次运行
 
 # 物理前缀访问流来源（G1′ 产物）
 trace_source:
   access_trace_dir: "../g1prime/physical_traces/"
   # access_trace_c{1,4,8}.jsonl
-  episodes_total: 1320  # G1′ 全量；G3 取 495 × 3 种子子集
-  episodes_per_seed: 165
-  seeds: [0, 1, 2]  # 3 replay 种子
+  episodes_total: 1320  # G1′ 全量；G3′ 一次跑完
+  tasks_total: 165      # bootstrap 聚类单元
+  seeds_tau_bench: 8    # 每个 task 有 8 个 τ-bench seed
 
 # 绝对 KV 容量（沿用 G1′ 的 GiB 档位，聚焦通过 cell）
 capacity:
@@ -71,7 +78,7 @@ baselines:
       enabled: true
       # 无损三层动作 A₀：GPU BF16 ↔ CPU BF16 ↔ Evict
 
-# FlowCache-Lossless controller 配置
+# FlowCache-Lossless controller 配置（G3′ 修复后）
 flowcache:
   action_space: "A0"  # 无损：GPU BF16 ↔ CPU BF16 ↔ Evict
   reuse_estimator: "heuristic"  # heuristic | survival（不用 GNN）
@@ -84,26 +91,28 @@ flowcache:
       mid: {block_idx_lt: 50, weight: 1.0}
       late: {weight: 0.7}
     horizon: 1000  # H 窗口（step）
-  # 安全水位：保留 10% 容量作 buffer
-  safety_margin: 0.10
+  # G3′: safety_margin 从 0.10 降到 0.05（CPU 层修复后可减少缩容）
+  safety_margin: 0.05
+  # G3′: migrate_threshold 从 0.1 降到 0.01（原阈值过高导致 CPU 层从未使用）
+  migrate_threshold: 0.01
   # 回退策略：controller 异常时回退 SizeCost-LRU
   fallback: "sizecost"
   # CPU pinned buffer 容量（block 数；-1 = 无限制）
   cpu_capacity_blocks: -1
   # 决策评分权重
-  score_lambda: 0.1  # hold_cost 权重（W8 冒烟后调优）
+  score_lambda: 0.1  # hold_cost 权重
 
-# 统计判定（G3.7）
+# 统计判定（G3′: task_id 聚类 bootstrap）
 verdict:
   p95_ttft_threshold: 0.15  # 15% 改善
   throughput_drop_threshold: 0.05  # 5% 非劣
   bootstrap_samples: 1000
-  bootstrap_unit: "task_group"  # 165 个聚类
+  bootstrap_unit: "task_id"  # G3′: 165 个 task 聚类（原为 seed，已修复）
   ci_level: 0.95
   bonferroni_tests: 18  # 9 cell × 2 主比较
   random_seed: 42
 
-# 网格运行配置
+# 网格运行配置（G3′: 移除 replay_seeds，单次跑全部 1320 episodes）
 grid:
   cells:  # 9 cell
     - {capacity_gib: 1, concurrency: 1}
@@ -115,8 +124,7 @@ grid:
     - {capacity_gib: 4, concurrency: 1}
     - {capacity_gib: 4, concurrency: 4}
     - {capacity_gib: 4, concurrency: 8}
-  episodes_per_cell: 495
-  replay_seeds: [0, 1, 2]
+  episodes_per_cell: 1320  # G3′: 全量（原 495 = 165×3 seed 子集）
 
 # W8 冒烟配置
 smoke_test:
