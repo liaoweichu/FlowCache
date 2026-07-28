@@ -272,7 +272,10 @@ class TwoTierGDSFCache:
 class TwoTierSizeCostCache:
     """Two-tier SizeCost-LRU：GPU SizeCost + CPU SizeCost。
 
-    priority = clock + size（min-heap，最小 priority 先淘汰 = 大 size 先淘汰）
+    与单层 SizeCostCache 语义一致：
+      priority = clock + accumulated_cost / size
+      accumulated_cost = cost * freq（总 saved cost）
+      min-heap，最小 priority 先淘汰 = 低 cost/size 比先淘汰 = 高价值 block 保留
     """
 
     def __init__(self,
@@ -285,7 +288,7 @@ class TwoTierSizeCostCache:
         self.d2h_ms = d2h_ms
         self.h2d_ms = h2d_ms
 
-        # block_hash -> {size, priority}
+        # block_hash -> {freq, priority, cost, size}
         self.gpu_cache: Dict[str, Dict] = {}
         self.cpu_cache: Dict[str, Dict] = {}
         self._gpu_heap: List[Tuple[float, str]] = []
@@ -309,23 +312,22 @@ class TwoTierSizeCostCache:
         self.last_restore_ms: float = 0.0
         self.last_policy_model_ms: float = 0.0
 
-    def _priority(self, size: int, clock: float) -> float:
-        """SizeCost priority：小 priority 先淘汰 → 大 size 先淘汰。
+    def _priority(self, cost: float, freq: int, size: int, clock: float) -> float:
+        """SizeCost priority = clock + cost*freq/size（与单层一致）。
 
-        priority = clock + size → 大 size → 大 priority → min-heap 中后弹出
-        但我们想淘汰大 size，所以存 -priority 用 min-heap（弹出最小 -priority
-        = 最大 priority = 最大 size）。这与单层 SizeCostCache 方向一致。
+        小 priority 先淘汰 → 低 cost*freq/size 比先淘汰 → 高价值 block 保留。
         """
-        return clock + float(size)
+        safe_size = max(1, size)
+        return clock + (cost * freq) / safe_size
 
     def _evict_gpu(self) -> Optional[Tuple[str, Dict]]:
         while self._gpu_heap:
-            neg_pri, block_hash = heapq.heappop(self._gpu_heap)
+            priority, block_hash = heapq.heappop(self._gpu_heap)
             if block_hash not in self.gpu_cache:
                 continue
             current = self.gpu_cache[block_hash]["priority"]
-            if abs(current + neg_pri) < 1e-9:
-                self.gpu_clock = -neg_pri
+            if abs(current - priority) < 1e-9:
+                self.gpu_clock = priority
                 entry = self.gpu_cache.pop(block_hash)
                 return block_hash, entry
         if self.gpu_cache:
@@ -337,12 +339,12 @@ class TwoTierSizeCostCache:
 
     def _evict_cpu(self) -> Optional[Tuple[str, Dict]]:
         while self._cpu_heap:
-            neg_pri, block_hash = heapq.heappop(self._cpu_heap)
+            priority, block_hash = heapq.heappop(self._cpu_heap)
             if block_hash not in self.cpu_cache:
                 continue
             current = self.cpu_cache[block_hash]["priority"]
-            if abs(current + neg_pri) < 1e-9:
-                self.cpu_clock = -neg_pri
+            if abs(current - priority) < 1e-9:
+                self.cpu_clock = priority
                 entry = self.cpu_cache.pop(block_hash)
                 return block_hash, entry
         if self.cpu_cache:
@@ -363,8 +365,11 @@ class TwoTierSizeCostCache:
             self.hits += 1
             self.saved_prefill_ms += prefill_ms
             entry = self.gpu_cache[block_hash]
-            entry["priority"] = self._priority(entry["size"], self.gpu_clock)
-            heapq.heappush(self._gpu_heap, (-entry["priority"], block_hash))
+            entry["freq"] += 1
+            entry["priority"] = self._priority(
+                entry["cost"], entry["freq"], entry["size"], self.gpu_clock
+            )
+            heapq.heappush(self._gpu_heap, (entry["priority"], block_hash))
             return True
 
         # CPU hit → restore to GPU
@@ -373,9 +378,11 @@ class TwoTierSizeCostCache:
             self.saved_prefill_ms += prefill_ms
             entry = self.cpu_cache.pop(block_hash)
             self._ensure_gpu_space()
-            entry["priority"] = self._priority(entry["size"], self.gpu_clock)
+            entry["priority"] = self._priority(
+                entry["cost"], entry["freq"], entry["size"], self.gpu_clock
+            )
             self.gpu_cache[block_hash] = entry
-            heapq.heappush(self._gpu_heap, (-entry["priority"], block_hash))
+            heapq.heappush(self._gpu_heap, (entry["priority"], block_hash))
             self.restore_to_gpu_count += 1
             self.restore_ms_total += self.h2d_ms
             self.last_restore_ms = self.h2d_ms
@@ -385,9 +392,13 @@ class TwoTierSizeCostCache:
         self.misses += 1
         self.miss_cost_ms += prefill_ms
         self._ensure_gpu_space()
-        priority = self._priority(size, self.gpu_clock)
-        self.gpu_cache[block_hash] = {"size": size, "priority": priority}
-        heapq.heappush(self._gpu_heap, (-priority, block_hash))
+        cost = prefill_ms
+        freq = 1
+        priority = self._priority(cost, freq, size, self.gpu_clock)
+        self.gpu_cache[block_hash] = {
+            "freq": freq, "priority": priority, "cost": cost, "size": size,
+        }
+        heapq.heappush(self._gpu_heap, (priority, block_hash))
         return False
 
     def _ensure_gpu_space(self) -> None:
@@ -403,11 +414,15 @@ class TwoTierSizeCostCache:
                 if cpu_result is not None:
                     self.cpu_evictions += 1
                     self.evictions += 1
-            # 插入 CPU，size 保持
-            size = entry.get("size", 16)
-            priority = self._priority(size, self.cpu_clock)
-            self.cpu_cache[victim] = {"size": size, "priority": priority}
-            heapq.heappush(self._cpu_heap, (-priority, victim))
+            # 插入 CPU，cost/freq/size 保持，重算 priority
+            priority = self._priority(
+                entry["cost"], entry["freq"], entry["size"], self.cpu_clock
+            )
+            self.cpu_cache[victim] = {
+                "freq": entry["freq"], "priority": priority,
+                "cost": entry["cost"], "size": entry["size"],
+            }
+            heapq.heappush(self._cpu_heap, (priority, victim))
             self.migrate_to_cpu_count += 1
             self.migrate_ms_total += self.d2h_ms
             self.last_migrate_ms = self.d2h_ms
