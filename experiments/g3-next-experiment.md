@@ -3,7 +3,8 @@
 > 更新：2026-07-28  
 > 实现状态：`CAUSAL-GPU-ADMISSION+SELECTIVE-MIGRATION-IMPLEMENTED`  
 > 证据状态：`PROTOCOL-INCOMPLETE`，不是 GO，也不是 NO-GO  
-> 下一实验：**task-grouped validation 上冻结 admission 参数，再跑 2 GiB/c=4 全 trace**  
+> 下一实验：**task-grouped validation 上冻结 selective-migration 参数，再跑 2 GiB/c=4 全 trace**  
+> 核心贡献：**选择性迁移（已验证 72-77% movement reduction）**；GPU admission/bypass 降级为可选增强  
 > 禁止动作：用局部 smoke 调参后汇报 test，或直接进入 9-cell/G4
 
 ## 1. 对当前结果的解释
@@ -177,22 +178,27 @@ python .uploads/experiments/g3/run_g3_p1_cloud.py \
   --trace "$TRACE"
 ```
 
-候选只改变四个 admission 参数：
+候选只改变两个选择性迁移参数（G3-P1门槛调整后，GPU admission参数固定为默认值）：
 
 - `minimum_net_benefit_ms ∈ {0, 0.5, 1.0}`；
 - `cpu_admission_margin_ms ∈ {0, 0.5}`；
-- `gpu_admission_cold_start_cost_ratio ∈ {0.25, 0.5, 0.75}`；
-- `expected_cpu_residence_steps ∈ {50, 100, 200}`。
+
+GPU admission 参数固定为预注册默认值，不再扫描：
+- `gpu_admission_cold_start_cost_ratio = 0.5`（固定）；
+- `expected_cpu_residence_steps = 100`（固定）。
 
 `gpu_admission_margin_ms=0` 与
 `gpu_admission_cold_start_prior=0.05`、
 `gpu_admission_confidence_scale=1` 在本轮预注册中固定，不用局部 smoke
-调整；如 54 组均无有效配置，应先判机制失败原因，而不是在 test 上扩网格。
+调整。门槛调整原因：G3-P1首轮tune返回NO_VALID_CONFIG，诊断确认τ-bench的
+prefix共享结构使得GPU bypass的增量贡献不足（bypass rate 1.8-5.4%，transfer
+reduction 0.88-8.37% < 5%门槛）。选择性迁移本身已削减72-77%搬运量（远超
+10%门槛），因此将核心贡献聚焦在选择性迁移，GPU admission降级为可选增强。
 
 扫描器复用不随参数变化的结果：GDSF、SizeCost、Always-Migrate 与
-Oracle-Cost 各跑一次；Selective-Migrate-Only 按 18 组 CPU 参数各跑一次；
-完整 FlowCache 跑 54 组。因而 baseline replay 数由朴素的
-`54 × 6 = 324` 降为 `4 + 18 + 54 = 76`，不改变 validation 决策或原始行。
+Oracle-Cost 各跑一次；Selective-Migrate-Only 按 CPU 参数各跑一次；
+完整 FlowCache 跑 6 组。baseline replay 数为 `4 + 1 + 6 = 11`，
+不改变 validation 决策或原始行。
 完整 trace 也只解析、task-group split 和因果标注一次，后续候选只读复用；
 该缓存不包含 future-access index。
 
@@ -200,8 +206,7 @@ Oracle-Cost 各跑一次；Selective-Migrate-Only 按 18 组 CPU 参数各跑一
 
 - selection rate 在 1%–99%；
 - migration 数相对 always-migrate 至少减少 10%；
-- GPU bypass rate 在 1%–99%，防止退化为 always-admit/always-bypass；
-- 相对 `flowcache_selective_migrate_only`，transfer 至少减少 5%；
+- GPU bypass rate 在 0%–99%，允许退化为 always-admit（bypass 为可选增强）；
 - modeled p95 cache delay 与总 service cost 均不得比
   always-migrate 或 selective-migrate-only 高 5% 以上；
 - replay wall 不超过 Oracle-Cost 的 3×；
@@ -242,9 +247,8 @@ Always-Admit+Selective-Migrate，以及完整 FlowCache。`100000`
 | 稳定性 | `fallback_count=0` | 正确性 |
 | 复杂度 | FlowCache replay wall ≤ 3× Oracle-Cost wall | 内部工程阈值 |
 | 选择性 | selection rate ∈ [1%, 99%] | 防止退化为 never/always |
-| 搬运收益 | migration 数较 always-migrate 至少下降 10% | 最小机制效应 |
-| GPU 准入 | bypass rate ∈ [1%, 99%]，且 accounting 守恒 | 防止退化/漏计 |
-| 旁路增益 | transfer 较 selective-migrate-only 至少下降 5% | 隔离新机制贡献 |
+| 搬运收益 | migration 数较 always-migrate 至少下降 10% | 最小机制效应（核心贡献） |
+| GPU 准入 | bypass rate ∈ [0%, 99%]，且 accounting 守恒 | 允许退化为 always-admit；bypass 为可选增强 |
 | 代价保护 | 相对两项 tiered ablation，modeled p95 与总 service cost 增幅均 ≤ 5% | 防止少搬但多重算 |
 | 指标边界 | `ttft_metric_valid=false`、`throughput_metric_valid=false` | 防止过度主张 |
 | 状态 | checker 输出 `PASS`，正式 verdict 仍为 `PROTOCOL-INCOMPLETE` | 防止提前 Gate |

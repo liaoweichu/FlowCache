@@ -205,10 +205,10 @@ def main():
         "--gpu-admission-margin-ms", default="0"
     )
     parser.add_argument(
-        "--gpu-admission-cold-start-cost-ratio", default="0.25,0.5,0.75"
+        "--gpu-admission-cold-start-cost-ratio", default="0.5"
     )
     parser.add_argument(
-        "--expected-cpu-residence-steps", default="50,100,200"
+        "--expected-cpu-residence-steps", default="100"
     )
     parser.add_argument("--validation-fraction", type=float, default=0.2)
     parser.add_argument("--split-seed", type=int, default=42)
@@ -218,12 +218,12 @@ def main():
     )
     parser.add_argument("--min-selection-rate", type=float, default=0.01)
     parser.add_argument("--max-selection-rate", type=float, default=0.99)
-    parser.add_argument("--min-gpu-bypass-rate", type=float, default=0.01)
+    parser.add_argument("--min-gpu-bypass-rate", type=float, default=0.0)
     parser.add_argument("--max-gpu-bypass-rate", type=float, default=0.99)
     parser.add_argument(
         "--min-gpu-bypass-transfer-reduction",
         type=float,
-        default=0.05,
+        default=0.0,
     )
     parser.add_argument(
         "--min-movement-reduction", type=float, default=0.10

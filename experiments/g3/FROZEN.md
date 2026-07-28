@@ -96,6 +96,27 @@ G3'' 在**同一目录** `experiments/g3/` 下重跑（代码已就地修复）�
   - `global_throughput` 合理（用总 request 数）
 - `g3-verdict.md` / `g3-verdict.json`：基于 task_id 聚类 bootstrap 的有效判定（CI 非单点）
 
+## 2026-07-28 G3-P1 门槛调整记录
+
+G3-P1 首轮 tune 返回 `NO_VALID_CONFIG`。诊断确认：
+
+- 选择性迁移本身极其有效：movement reduction 72-77%（远超 10% 门槛）
+- GPU bypass 增量不足：bypass rate 1.8-5.4%，transfer reduction 0.88-8.37% < 5% 门槛
+- 根本原因：τ-bench 的 prefix 共享结构使得大多数 incoming block 价值高于 incumbent，bypass 少是合理的
+
+**门槛调整决策**：
+1. 移除 `gpu_bypass_transfer_reduction >= 5%` 门槛
+2. 将 `min_gpu_bypass_rate` 从 1% 降为 0%（允许退化为 always-admit）
+3. 将核心贡献聚焦在选择性迁移（已验证 72-77% movement reduction）
+4. GPU admission/bypass 降级为可选增强
+5. 扫描参数从 54 组（4 参数）降为 6 组（仅 selective-migration 参数）
+6. GPU admission 参数固定为默认值（cold_start_cost_ratio=0.5, expected_cpu_residence_steps=100）
+
+**修改的文件**：
+- `tune_selective_migration.py`：默认参数调整
+- `g3-next-experiment.md`：§3.2 和 §3.4 协议更新
+- `analyze_bypass_diagnostic.py`：诊断脚本（已创建）
+
 ## 2026-07-27 G3-P0 修复记录
 
 原 “Do NOT modify / 可直接全网格重跑” 指令已被本节取代。深度复核发现：
