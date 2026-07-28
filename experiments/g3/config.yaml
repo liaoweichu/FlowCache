@@ -75,6 +75,20 @@ baselines:
   oracle:
     - name: oracle_cost
       enabled: true
+  # §4.1 公平 two-tier baselines：相同 GPU+CPU 容量，确保比较公平
+  two_tier_fair:
+    - name: twotier_lru
+      enabled: true
+      # Two-tier LRU：GPU LRU + CPU LRU，满时总是迁移
+    - name: twotier_gdsf
+      enabled: true
+      # Two-tier GDSF：GPU GDSF + CPU GDSF
+    - name: twotier_sizecost
+      enabled: true
+      # Two-tier SizeCost-LRU
+    - name: twotier_oracle_cost
+      enabled: true
+      # Two-tier Oracle-Cost（离线诊断上界，读取 future_accesses）
   tiered_ablation:
     - name: flowcache_always_migrate
       enabled: true
@@ -176,7 +190,7 @@ grid:
 smoke_test:
   enabled: true
   cell: {capacity_gib: 1, concurrency: 4}  # 主 cell
-  baselines: [no_cache, apc_lru, gdsf, sizecost, flowcache_always_migrate, flowcache_selective_migrate_only, oracle_cost, flowcache_lossless]
+  baselines: [no_cache, apc_lru, gdsf, sizecost, twotier_lru, twotier_gdsf, twotier_sizecost, flowcache_always_migrate, flowcache_selective_migrate_only, oracle_cost, twotier_oracle_cost, flowcache_lossless]
   episodes: 100
   # 用于 W8 前置验证，防止无损驻留不成立时白做量化
 
@@ -186,7 +200,7 @@ smoke_test:
 # 在 held-out test 完成该单 cell 全 trace。不要直接恢复 9-cell 网格。
 protocol_test:
   cell: {capacity_gib: 2, concurrency: 4}
-  baselines: [gdsf, sizecost, flowcache_always_migrate, flowcache_selective_migrate_only, oracle_cost, flowcache_lossless]
+  baselines: [gdsf, sizecost, twotier_lru, twotier_gdsf, twotier_sizecost, flowcache_always_migrate, flowcache_selective_migrate_only, oracle_cost, twotier_oracle_cost, flowcache_lossless]
   episodes: 100
   expected_controller_variant: "selective_value"
   output_is_diagnostic_only: true

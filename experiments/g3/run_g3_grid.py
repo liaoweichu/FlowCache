@@ -51,8 +51,17 @@ from compare_oracle import (
     LRUCache, GDSFCache, SizeCostCache, APCLRUCache, BeladyOracle, OracleCostCache
 )
 from controller import FlowCacheLosslessController, NoCacheBaseline
+from two_tier_baselines import (
+    TwoTierLRUCache, TwoTierGDSFCache, TwoTierSizeCostCache,
+    TwoTierOracleCostCache,
+)
 
-OFFLINE_FUTURE_BASELINES = frozenset({"belady", "oracle_cost"})
+OFFLINE_FUTURE_BASELINES = frozenset({
+    "belady", "oracle_cost", "twotier_oracle_cost",
+})
+TWO_TIER_BASELINES = frozenset({
+    "twotier_lru", "twotier_gdsf", "twotier_sizecost", "twotier_oracle_cost",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +240,39 @@ def instantiate_baseline(name: str,
         return BeladyOracle(capacity_blocks, future_accesses or {})
     if name == "oracle_cost":
         return OracleCostCache(capacity_blocks, future_accesses or {})
+    # ---- Two-tier fair baselines (§4.1) ----
+    # 使用与 FlowCache 相同的 GPU 有效容量 + CPU 容量，确保公平比较
+    if name in TWO_TIER_BASELINES:
+        # 从 cost_model 估算 D2H/H2D 成本
+        d2h_ms = 0.0
+        h2d_ms = 0.0
+        if cost_model:
+            from cache_manager import LosslessCacheManager
+            tmp_mgr = LosslessCacheManager(
+                gpu_capacity_blocks=1, cpu_capacity_blocks=0,
+                block_bytes=block_bytes, cost_model=cost_model,
+            )
+            d2h_ms = tmp_mgr.estimate_d2h_ms()
+            h2d_ms = tmp_mgr.estimate_h2d_ms()
+        # 与 FlowCache 公平：使用相同的 effective_capacity 和 cpu_capacity
+        fc_cfg = flowcache_config or {}
+        safety_margin = fc_cfg.get("safety_margin", 0.05)
+        effective_capacity = max(1, int(capacity_blocks * (1 - safety_margin)))
+        cpu_capacity = fc_cfg.get("cpu_capacity_blocks", -1)
+        if cpu_capacity < 0:
+            cpu_capacity = 2 * effective_capacity  # 与 FlowCache 默认一致
+
+        if name == "twotier_lru":
+            return TwoTierLRUCache(effective_capacity, cpu_capacity, d2h_ms, h2d_ms)
+        if name == "twotier_gdsf":
+            return TwoTierGDSFCache(effective_capacity, cpu_capacity, d2h_ms, h2d_ms)
+        if name == "twotier_sizecost":
+            return TwoTierSizeCostCache(effective_capacity, cpu_capacity, d2h_ms, h2d_ms)
+        if name == "twotier_oracle_cost":
+            return TwoTierOracleCostCache(
+                effective_capacity, cpu_capacity, future_accesses or {},
+                d2h_ms, h2d_ms,
+            )
     if name in {
         "flowcache_lossless",
         "flowcache_selective_migrate_only",
@@ -291,6 +333,16 @@ def access_baseline(cache, record: Dict, access_idx: int):
     # Belady / OracleCost 需要 access_idx
     if isinstance(cache, (BeladyOracle, OracleCostCache)):
         return cache.access(block_hash, access_idx=access_idx, prefill_ms=prefill_ms)
+    # Two-tier Oracle-Cost 需要 access_idx
+    if isinstance(cache, TwoTierOracleCostCache):
+        return cache.access(block_hash, access_idx=access_idx, prefill_ms=prefill_ms)
+    # Two-tier SizeCost 需要 size
+    if isinstance(cache, TwoTierSizeCostCache):
+        size = record.get("block_token_count", 16)
+        return cache.access(block_hash, prefill_ms=prefill_ms, size=size)
+    # Two-tier LRU / GDSF
+    if isinstance(cache, (TwoTierLRUCache, TwoTierGDSFCache)):
+        return cache.access(block_hash, prefill_ms=prefill_ms)
     # SizeCost 需要 size
     if isinstance(cache, SizeCostCache):
         size = record.get("block_token_count", 16)

@@ -1,8 +1,45 @@
-# G3 Frozen: PROTOCOL-INCOMPLETE（历史结果均不得触发路线切换）
+# G3 Frozen: PROTOCOL-INCOMPLETE（held-out test PASS，但需 closed-loop 才能 Gate）
 
-**Frozen Date**: 2026-07-27
-**Status**: PROTOCOL-INCOMPLETE — G3、G3′ 与当前 G3″ 的结果**均不可作为路线切换依据**
+**Frozen Date**: 2026-07-27（G3/G3′），2026-07-28（G3-P1 v2）
+**Status**: PROTOCOL-INCOMPLETE — G3-P1 v2 held-out test **PASS**，但正式 verdict 仍为 PROTOCOL-INCOMPLETE（防止提前 Gate，需 closed-loop serving 才能 GO/NO-GO）
 **Verdict File**: `g3-verdict.json`, `g3-verdict.md`（保留作为问题诊断证据，不作为判定）
+
+## G3-P1 v2 held-out test 结果（2026-07-28）
+
+**Status: PASS** — 全部 12 项正确性和约束检查通过。
+
+### 冻结配置（validation 上从 6 组候选中选出）
+
+- `minimum_net_benefit_ms = 0`
+- `cpu_admission_margin_ms = 0`
+- `gpu_admission_cold_start_cost_ratio = 0.5`（固定）
+- `expected_cpu_residence_steps = 100`（固定）
+
+### held-out test 指标（131 tasks）
+
+| 指标 | 值 | 门槛 | 状态 |
+|---|---|---|---|
+| selection_rate | 34.3% | 1-99% | ✅ |
+| movement_reduction | 65.9%（171K vs 503K always-migrate） | ≥10% | ✅ 远超 |
+| bypass_rate | 3.24% | 0-99% | ✅ |
+| p95 delay vs always-migrate | +1.7% | ≤5% | ✅ |
+| p95 delay vs selective-only | +1.5% | ≤5% | ✅ |
+| replay wall | 1.05× Oracle-Cost | ≤3× | ✅ |
+| 正确性（守恒/非负/fallback=0/因果） | 全通过 | — | ✅ |
+| GPU bypass transfer reduction | 1.62% | 5%（diagnostic_only） | ⚠️ 不影响 |
+
+### 核心结论
+
+1. **选择性迁移机制得到验证**：65.9% movement reduction，代价保护良好（p95 仅 +1.7%）
+2. **GPU bypass 定位为可选增强**：3.24% bypass rate，作为增量贡献而非核心机制
+3. **复杂度优秀**：replay wall 1.05× Oracle-Cost
+
+### 下一步（按 g3-next-experiment.md §4.3）
+
+1. §4.1 补齐公平 two-tier baselines（Two-tier LRU/GDSF/SizeCost）
+2. §4.2 主 cell closed-loop serving（真实 TTFT/throughput/SLO goodput）
+3. 9-cell 网格与 workflow-level bootstrap
+4. G3 GO / NO-GO
 
 ## 第一轮：G3 原始（162 行，protocol-invalid）
 

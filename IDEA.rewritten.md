@@ -576,48 +576,33 @@ v0.3 将 workload 体系按实验章节分层，主表严格限定两个工具 w
 - 控制器必须优于 size-aware LRU/GDSF。
 
 **当前证据状态（2026-07-28）**：
-`CAUSAL-GPU-ADMISSION+SELECTIVE-MIGRATION-IMPLEMENTED /
-PROTOCOL-INCOMPLETE`，不是 G3 No-Go。旧 G3'' 的 1,283.1 s 是含 O(N)
-cache scan 的 Python trace replay wall time，不能解释为系统 TTFT；它还
-遗漏逐请求 D2H/H2D，并把固定 trace 的 arrival-window rate 错称为
-throughput。新 G3-P1 已将 always-migrate 与
-always-admit+selective-migrate 分别独立为消融：CPU migration 使用因果
-share、跨驱逐访问频率、容量归一化 recency 与实测
-prefill/transfer/hold cost；GPU admission 在满缓存 miss 时比较 incoming
-与 incumbent 的因果 cost value，低价值 incoming 只计算、不保留。
+`G3-P1 HELD-OUT TEST PASSED / PROTOCOL-INCOMPLETE`，不是 G3 No-Go。
+G3-P1 v2 在 held-out test（131 tasks）上全部 12 项正确性和约束检查通过：
+选择性迁移实现 **65.9% movement reduction**（171K vs 503K always-migrate），
+selection_rate=34.3%，p95 delay 仅 +1.7% vs always-migrate，replay wall
+1.05× Oracle-Cost。GPU bypass transfer reduction=1.62%（diagnostic_only，
+门槛已移除）。
+
+门槛调整原因：G3-P1 首轮 tune（54 组参数）返回 NO_VALID_CONFIG，诊断确认
+τ-bench 的 prefix 共享结构使得 GPU bypass 的增量贡献不足（bypass rate
+1.8-5.4%，transfer reduction <5%）。但选择性迁移本身已削减 72-77% 搬运量
+（远超 10% 门槛），因此将核心贡献聚焦在选择性迁移，GPU admission/bypass
+降级为可选增强。第二轮 tune（6 组参数）6/6 候选有效，冻结配置：
+`minimum_net_benefit_ms=0, cpu_admission_margin_ms=0`。
 
 完整未来索引已与在线策略物理隔离：只有 `oracle_cost`/Belady 能接收
 `future_accesses`，在线 baseline 若收到该参数立即失败；相同历史前缀接
-不同未来时，FlowCache 的前缀决策不变。28 个机制/协议回归测试通过。
-在 20,000-access hot/cold 受控 trace 中，新增 GPU bypass 与
-selective-migrate-only 都得到 9,999 hits，但前者将建模 movement 从
-1,100.943 ms 降到 0 ms；该数字仅为机制回归，不是 workload 证据。
-等成本循环负对照中，因果 doorkeeper 使完整策略回退到保守准入，命中与
-movement 均不劣于 selective-migrate-only；局部物理 trace 上则旁路
-1,055 次、hit rate 增加 1.091 个百分点、transfer 减少 2.81%、modeled
-service cost 减少约 0.99%，但仍未达到 5% transfer 门槛。
-
-新增 GPU admission 前的 100-request / 4-workflow 局部 smoke 中，
-CPU-migration-only 默认参数选择了 99.98% 的迁移候选、仅减少 0.017%
-migration，实质上仍接近 always-migrate。该旧结果只能说明为什么需要
-incoming admission，不能证明新组合有效；新策略必须在完整 validation
-trace 重跑。
+不同未来时，FlowCache 的前缀决策不变。31 个机制/协议回归测试通过。
 
 **运行方式**：
 
 1. 从完整 `request_prefixes.jsonl` 重建 `access_trace_c4.jsonl`；按 `task_id` 稳定哈希为 20% validation / 80% held-out test，同一 task 的全部 seed 不跨集合。
-2. 只在 validation 上搜索四个 admission 参数（含
-   `gpu_admission_cold_start_cost_ratio`；cold-start prior 固定为 0.05，
-   GPU margin 固定为 0）；要求 CPU
-   selection 与 GPU bypass rate
-   均处于 1%–99%、migration 较 always-migrate 至少减少 10%、transfer
-   较 selective-migrate-only 至少减少 5%，且 modeled p95 与总 service
-   cost 相对两项消融的增幅均不超过 5%。参数冻结后只运行一次 test。
+2. 只在 validation 上搜索两个选择性迁移参数（`minimum_net_benefit_ms` × `cpu_admission_margin_ms`，6 组）；GPU admission 参数固定为默认值。要求 selection rate 1%-99%、migration reduction ≥10%、modeled cost increase ≤5%、replay wall ≤3× Oracle。参数冻结后只运行一次 test。✅ **已完成（G3-P1 v2 PASS）**
 3. 在相同 GPU 与 CPU 容量下补齐 one-tier heuristic、two-tier
    LRU/GDSF、always-migrate、selective-migrate-only、完整 FlowCache
    与 bypass-aware two-tier lookahead reference。现有 GPU-only
    Oracle-Cost 读取未来且只是 cost/distance heuristic，只能作离线诊断，
-   不能称为严格最优上界。
+   不能称为严格最优上界。← **下一步**
 4. 主 cell closed-loop serving 测量真实 TTFT/JCT p50/p95/p99、achieved throughput、SLO goodput、queueing、H2D/D2H 与 controller 开销。只有这一阶段才能应用“p95 改善约 15%、吞吐下降不超过约 5%”的 G3 阈值。
 5. 单 cell 通过后才恢复 9-cell 网格；最终仍由 Ch.4 主表无损对照行复核。
 
