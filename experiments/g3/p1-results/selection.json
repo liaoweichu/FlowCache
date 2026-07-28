@@ -1,0 +1,27 @@
+{
+  "status": "NO_VALID_CONFIG",
+  "scientific_result": false,
+  "split": {
+    "unit": "task_id",
+    "partition": "validation",
+    "fraction": 0.2,
+    "seed": 42
+  },
+  "constraints": {
+    "min_selection_rate": 0.01,
+    "max_selection_rate": 0.99,
+    "min_gpu_bypass_rate": 0.01,
+    "max_gpu_bypass_rate": 0.99,
+    "min_gpu_bypass_transfer_reduction": 0.05,
+    "min_movement_reduction": 0.1,
+    "max_modeled_delay_increase": 0.05,
+    "max_replay_ratio": 3.0
+  },
+  "selected": null,
+  "n_candidates": 54,
+  "n_valid": 0,
+  "baseline_replays": 76,
+  "baseline_replays_without_reuse": 324,
+  "summary_csv": "/root/autodl-tmp/flowcache-runs/g3-p1-20260728T052741Z/tuning/summary.csv",
+  "next": "Do not inspect test. Revisit the proxy/action model or declare selective migration unsupported by this workload."
+}

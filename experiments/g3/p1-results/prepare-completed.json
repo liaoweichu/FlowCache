@@ -1,0 +1,7 @@
+{
+  "status": "COMPLETED",
+  "stage": "prepare",
+  "run_dir": "/root/autodl-tmp/flowcache-runs/g3-p1-20260728T052741Z",
+  "completed_at_utc": "2026-07-28T05:29:06.406563+00:00",
+  "note": "Open-loop G3-P1 diagnostics only; PASS is not a scientific G3 GO decision."
+}

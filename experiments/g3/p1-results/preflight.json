@@ -1,0 +1,25 @@
+{
+  "status": "PASS",
+  "python": "3.12.3 | packaged by Anaconda, Inc. | (main, May  6 2024, 19:46:43) [GCC 11.2.0]",
+  "project_root": "/root/autodl-tmp",
+  "request_prefixes": "/root/autodl-tmp/Prefix Caching/experiments/g1prime/physical_traces/request_prefixes.jsonl",
+  "request_prefixes_bytes": 1088220364,
+  "trace": "/root/autodl-tmp/flowcache-data/access_trace_c4.jsonl",
+  "trace_exists": true,
+  "estimated_trace_bytes": 2968471958,
+  "free_disk_bytes": 75412811776,
+  "estimated_replay_memory_bytes": 17810831748,
+  "available_memory_bytes": 524382191616,
+  "protocol_cell": {
+    "capacity_gib": 2,
+    "concurrency": 4
+  },
+  "protocol_baselines": [
+    "flowcache_always_migrate",
+    "flowcache_lossless",
+    "flowcache_selective_migrate_only",
+    "gdsf",
+    "oracle_cost",
+    "sizecost"
+  ]
+}

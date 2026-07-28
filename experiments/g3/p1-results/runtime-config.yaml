@@ -1,0 +1,187 @@
+g0:
+  model_id: /root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master
+  revision: ''
+  template_hash: ca26deeb41864f91
+  config_hash: 6dee333c7bcea6b5
+  adapter_id: tau_bench_v1
+  block_size: 16
+  num_hidden_layers: 28
+  num_kv_heads: 4
+  head_dim: 128
+  dtype: bfloat16
+  dtype_bytes: 2
+datasets:
+- tau_bench
+trace_source:
+  access_trace_dir: /root/autodl-tmp/flowcache-data
+  episodes_total: 1320
+  tasks_total: 165
+  seeds_tau_bench: 8
+capacity:
+  budgets_gib:
+  - 1
+  - 2
+  - 4
+  main_cell:
+    capacity_gib: 1
+    concurrency: 4
+concurrency:
+  levels:
+  - 1
+  - 4
+  - 8
+cost_calibration:
+  output_file: cost-model.json
+  parent_lengths:
+  - 512
+  - 1024
+  - 2048
+  - 4096
+  - 8192
+  concurrency_levels:
+  - 1
+  - 4
+  - 8
+  repetitions: 100
+  r2_threshold: 0.95
+baselines:
+  lower_bound:
+  - name: no_cache
+    enabled: true
+  simple_heuristic:
+  - name: apc_lru
+    enabled: true
+  - name: gdsf
+    enabled: true
+  - name: sizecost
+    enabled: true
+  oracle:
+  - name: oracle_cost
+    enabled: true
+  tiered_ablation:
+  - name: flowcache_always_migrate
+    enabled: true
+  - name: flowcache_selective_migrate_only
+    enabled: true
+  flowcache:
+  - name: flowcache_lossless
+    enabled: true
+flowcache:
+  action_space: A0
+  controller_variant: selective_value
+  gpu_admission_policy: oracle_cost_proxy
+  reuse_estimator: heuristic
+  heuristic:
+    beta: 0.005
+    alpha: 0.5
+    position_weights:
+      early:
+        block_idx_lt: 10
+        weight: 1.5
+      mid:
+        block_idx_lt: 50
+        weight: 1.0
+      late:
+        weight: 0.7
+    horizon: 1000
+  safety_margin: 0.05
+  migrate_threshold: 0.01
+  selective_migration:
+    gpu_admission_margin_ms: 0.0
+    gpu_admission_cold_start_prior: 0.05
+    gpu_admission_cold_start_cost_ratio: 0.5
+    gpu_admission_confidence_scale: 1.0
+    minimum_net_benefit_ms: 0.0
+    cpu_admission_margin_ms: 0.0
+    age_scale_capacity_multiplier: 1.0
+    share_window_accesses: 1000
+    share_count_cap: 8
+    reuse_count_scale: 2.0
+    signal_weights:
+      share: 0.45
+      frequency: 0.35
+      position: 0.2
+    expected_cpu_residence_steps: 100
+    hold_cost_weight: 1.0
+  fallback: sizecost
+  cpu_capacity_blocks: -1
+  score_lambda: 0.1
+verdict:
+  p95_ttft_threshold: 0.15
+  throughput_drop_threshold: 0.05
+  require_measured_ttft: true
+  require_closed_loop_throughput: true
+  bootstrap_samples: 1000
+  bootstrap_unit: task_id
+  ci_level: 0.95
+  bonferroni_tests: 18
+  random_seed: 42
+grid:
+  cells:
+  - capacity_gib: 1
+    concurrency: 1
+  - capacity_gib: 1
+    concurrency: 4
+  - capacity_gib: 1
+    concurrency: 8
+  - capacity_gib: 2
+    concurrency: 1
+  - capacity_gib: 2
+    concurrency: 4
+  - capacity_gib: 2
+    concurrency: 8
+  - capacity_gib: 4
+    concurrency: 1
+  - capacity_gib: 4
+    concurrency: 4
+  - capacity_gib: 4
+    concurrency: 8
+  episodes_per_cell: 100000
+smoke_test:
+  enabled: true
+  cell:
+    capacity_gib: 1
+    concurrency: 4
+  baselines:
+  - no_cache
+  - apc_lru
+  - gdsf
+  - sizecost
+  - flowcache_always_migrate
+  - flowcache_selective_migrate_only
+  - oracle_cost
+  - flowcache_lossless
+  episodes: 100
+protocol_test:
+  cell:
+    capacity_gib: 2
+    concurrency: 4
+  baselines:
+  - gdsf
+  - sizecost
+  - flowcache_always_migrate
+  - flowcache_selective_migrate_only
+  - oracle_cost
+  - flowcache_lossless
+  episodes: 100
+  expected_controller_variant: selective_value
+  output_is_diagnostic_only: true
+quality_check:
+  episodes: 20
+  checks:
+  - task_success_rate_diff_eq_0
+  - output_token_identical_rate_eq_1
+  - tool_call_sequence_identical_rate_eq_1
+output:
+  results_dir: results/
+  figures_dir: figures/
+  verdict_md: g3-verdict.md
+  verdict_json: g3-verdict.json
+  raw_results_csv: results/raw_results.csv
+cloud_run:
+  schema: flowcache.g3-p1-cloud-run.v1
+  created_at_utc: '2026-07-28T05:29:06.387060+00:00'
+  base_config: /root/autodl-tmp/Prefix Caching/experiments/g3/config.yaml
+  base_config_sha256: 7dec05c033df88dc80738d8edf2e05175717a6bdfcabd8fe430447475ad85185
+  trace: /root/autodl-tmp/flowcache-data/access_trace_c4.jsonl
+  trace_manifest: /root/autodl-tmp/flowcache-data/access_trace_c4.jsonl.manifest.json
