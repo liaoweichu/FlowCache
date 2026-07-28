@@ -1,14 +1,16 @@
-# G3′: Lossless Residency（无损驻留）— 修复版
+# G3-P1: Selective Lossless Migration
 # ============================================================
-# 验证：在只用无损动作（GPU BF16 ↔ CPU BF16 ↔ Evict，动作空间 A₀）时，
-# 一个简单的价值感知 controller 是否已经优于最强简单淘汰策略。
+# 当前阶段验证：选择性迁移能否在相同 GPU/CPU 容量下减少无效搬运，
+# 并在计入 D2H/H2D/hold/controller 后优于 always-migrate 消融。
+# open-loop 的 arrival-window rate 仅为 offered load；不得作为 throughput gate。
 #
-# G3′ 修复（相对原 G3 的 protocol-invalid 结果）：
-#   1. 移除 replay_seeds 概念（原 seed 过滤失败导致 3 个 seed 结果完全相同）
-#   2. 按 task_id（165 组）聚类 bootstrap（原按 seed 退化）
-#   3. 降低 migrate_threshold 0.1→0.01（原阈值过高导致 CPU 层从未使用）
-#   4. 分层淘汰：CPU 满时按 R 值淘汰 CPU 块（原直接从 GPU 淘汰）
-#   5. safety_margin 0.10→0.05（CPU 层修复后可减少缩容）
+# G3-P1 相对 protocol-invalid G3 的修复：
+#   1. 移除 replay_seeds 概念，并按 task_id（165 组）聚类 bootstrap
+#   2. always-migrate 仅保留为独立消融，不再代表 FlowCache
+#   3. 使用有界、未校准的 reuse likelihood proxy 做迁移 admission
+#   4. recency 按有效 GPU 容量归一化，避免 GPU 容量大于固定 horizon
+#      时所有 LRU victim 都被判为“永不复用”
+#   5. share_count 只统计决策时可见的滑动历史窗口，禁止 future leakage
 #
 # 前置：G1′ PASSED（headroom=45.80% @ 1 GiB c=4）
 # 复用 G1′ 的物理前缀访问流，不重新运行 τ-bench 对话。
@@ -73,14 +75,25 @@ baselines:
   oracle:
     - name: oracle_cost
       enabled: true
+  tiered_ablation:
+    - name: flowcache_always_migrate
+      enabled: true
+      # 所有 miss 都进入 GPU；所有 GPU victim 都迁移到 CPU。
+    - name: flowcache_selective_migrate_only
+      enabled: true
+      # 所有 miss 都进入 GPU；仅保留上一轮 selective CPU migration。
   flowcache:
     - name: flowcache_lossless
       enabled: true
-      # 无损三层动作 A₀：GPU BF16 ↔ CPU BF16 ↔ Evict
+      # 因果 cost-aware GPU admission/bypass + selective CPU migration。
 
 # FlowCache-Lossless controller 配置（G3′ 修复后）
 flowcache:
   action_space: "A0"  # 无损：GPU BF16 ↔ CPU BF16 ↔ Evict
+  controller_variant: "selective_value"
+  # 借鉴 Oracle-Cost 的成本排序目标，但不读取 future_accesses。
+  # 只使用当前/历史访问，完整未来索引在 runner 中与在线策略物理隔离。
+  gpu_admission_policy: "oracle_cost_proxy"
   reuse_estimator: "heuristic"  # heuristic | survival（不用 GNN）
   # heuristic 估计器参数
   heuristic:
@@ -93,8 +106,39 @@ flowcache:
     horizon: 1000  # H 窗口（step）
   # G3′: safety_margin 从 0.10 降到 0.05（CPU 层修复后可减少缩容）
   safety_margin: 0.05
-  # G3′: migrate_threshold 从 0.1 降到 0.01（原阈值过高导致 CPU 层从未使用）
+  # legacy 字段，仅为旧结果兼容；selective policy 不使用固定 R 阈值
   migrate_threshold: 0.01
+  selective_migration:
+    # Incoming GPU value + displaced-victim residual 必须超过当前 GPU
+    # incumbent value + margin；否则本次 miss 正常计算但不保留缓存副本。
+    gpu_admission_margin_ms: 0.0
+    # 首次出现只有小的因果 cold-start prior；旁路不清除历史计数，
+    # 再次访问会提高 observed-reuse confidence。仅在 validation 冻结。
+    gpu_admission_cold_start_prior: 0.05
+    # 首次出现块仅在 prefill 明显低于 victim，或 victim 已有更强历史复用证据时
+    # 使用 cold-start prior；等成本且等证据的候选保持保守准入。
+    gpu_admission_cold_start_cost_ratio: 0.5
+    gpu_admission_confidence_scale: 1.0
+    # proxy_b 是 [0,1] 的未校准 likelihood proxy，不宣称概率。
+    # V_new = proxy_b*(prefill-H2D) - D2H - hold。
+    # V_new 必须严格大于此阈值才允许进入 CPU。
+    minimum_net_benefit_ms: 0.0
+    # CPU 满时，新候选还必须超过被替换 block 的 value + margin。
+    cpu_admission_margin_ms: 0.0
+    # recency = exp(-age / (effective_gpu_capacity * multiplier))。
+    age_scale_capacity_multiplier: 1.0
+    # share_count 仅由 trailing access window 的已发生访问构造。
+    share_window_accesses: 1000
+    share_count_cap: 8
+    reuse_count_scale: 2.0
+    signal_weights:
+      share: 0.45
+      frequency: 0.35
+      position: 0.20
+    # 工程初值；tune_selective_migration.py 只在 validation split 调整，
+    # 选中后写入冻结配置，held-out test 不得再次调参。
+    expected_cpu_residence_steps: 100
+    hold_cost_weight: 1.0
   # 回退策略：controller 异常时回退 SizeCost-LRU
   fallback: "sizecost"
   # CPU pinned buffer 容量（block 数；-1 = 无限制）
@@ -106,6 +150,8 @@ flowcache:
 verdict:
   p95_ttft_threshold: 0.15  # 15% 改善
   throughput_drop_threshold: 0.05  # 5% 非劣
+  require_measured_ttft: true
+  require_closed_loop_throughput: true
   bootstrap_samples: 1000
   bootstrap_unit: "task_id"  # G3′: 165 个 task 聚类（原为 seed，已修复）
   ci_level: 0.95
@@ -124,15 +170,26 @@ grid:
     - {capacity_gib: 4, concurrency: 1}
     - {capacity_gib: 4, concurrency: 4}
     - {capacity_gib: 4, concurrency: 8}
-  episodes_per_cell: 100000  # G3′: 全量（足够大以覆盖全部 ~21k request_ids）
+  episodes_per_cell: 100000  # 高于 1320，确保覆盖全部 workflow
 
 # W8 冒烟配置
 smoke_test:
   enabled: true
   cell: {capacity_gib: 1, concurrency: 4}  # 主 cell
-  baselines: [no_cache, apc_lru, gdsf, flowcache_lossless]
+  baselines: [no_cache, apc_lru, gdsf, sizecost, flowcache_always_migrate, flowcache_selective_migrate_only, oracle_cost, flowcache_lossless]
   episodes: 100
   # 用于 W8 前置验证，防止无损驻留不成立时白做量化
+
+# 下一步：在本轮 1283.1 s 异常所在的诊断 cell 做 G3-P1。
+# 先用 task-grouped validation 冻结 admission，再用
+#   --protocol-test --max-episodes 100000
+# 在 held-out test 完成该单 cell 全 trace。不要直接恢复 9-cell 网格。
+protocol_test:
+  cell: {capacity_gib: 2, concurrency: 4}
+  baselines: [gdsf, sizecost, flowcache_always_migrate, flowcache_selective_migrate_only, oracle_cost, flowcache_lossless]
+  episodes: 100
+  expected_controller_variant: "selective_value"
+  output_is_diagnostic_only: true
 
 # 质量抽检配置（closed-loop，G3.6）
 quality_check:

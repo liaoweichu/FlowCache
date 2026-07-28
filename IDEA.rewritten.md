@@ -556,39 +556,6 @@ v0.3 将 workload 体系按实验章节分层，主表严格限定两个工具 w
 
 **失败动作**：转向“何时工作流结构产生物理 KV 复用”的 benchmark/characterization 论文。
 
-### 7.X G1′: 物理前缀重编译与正确回放（2026-07-26 修正，2026-07-27 通过）
-
-**状态**：✅ **PASSED**（2026-07-27，Go/No-Go = GO）
-
-G1 判定为 fail（headroom ≈ 0%），但该判定 **protocol-invalid / inconclusive**：
-- 轨迹按单条 message 独立分词，未使用完整 chat template；
-- 把“块创建”当成“块访问”——每次 assistant 恢复生成时实际访问完整历史前缀，但轨迹只记录每块一次；
-- 容量定义脱离 24GB GPU 现实（10% budget ≈ 41.4 GiB）；
-- 并发、TTFT、bootstrap 统计单位均不正确。
-
-G1′ 用已有 1,320 条 τ-bench 轨迹重做，不重新运行 τ-bench 对话：
-- 重编译为物理精确前缀访问流（完整 chat template + 跨 message 连续分块）
-- 绝对 KV 容量（1/2/4/6 GiB，替代百分比 budget）
-- 并发模拟（c=1/4/8，测试缓存竞争）
-- 165 task group 聚类 bootstrap（替代 3 replay seed）
-- 通过条件：headroom_rel ≥ 10% AND CI lower > 0
-
-**G1′ 结果摘要**（全量 95,040 行 = 6 baselines × 4 容量 × 3 并发 × 1320 episodes）：
-
-| 容量 | c=1 | c=4 | c=8 |
-|---|---|---|---|
-| 1 GiB | 36.44% ✅ | **45.80%** ✅ (最佳) | -13.90% ⚠️ (异常) |
-| 2 GiB | 0.06% | 34.90% ✅ | 42.66% ✅ |
-| 4 GiB | 0.03% | 0.03% | 16.63% ✅ |
-| 6 GiB | 0.02% | 0.02% | 1.35% |
-
-- 5/12 cells 通过 10% 阈值且 CI lower > 0
-- 最佳 cell (1 GiB, c=4)：headroom=45.80%，CI=[18.11%, 31.23%]
-- 已知异常：(1 GiB, c=8) 出现 -13.90% 负 headroom，Oracle-Cost 在极端容量压力 + 高并发下劣于 GDSF；不影响 Go 判定
-- 关键模式：容量越小 headroom 越大；c=4 是最佳并发点；c=1 且 ≥2 GiB 时 headroom≈0%（单工作流容量充足）
-
-**G1′ 通过 → 进入 G2（P1-A 联合 R-D 控制器）；不通过 → Route B（Cacheability Gap Benchmark）**
-
 ### G2：Two-Axis Necessity
 
 - 测量 future-use/recompute value 与 $D_{b,q}$ 的 rank correlation，但不把低相关本身当作充分证据；
@@ -608,25 +575,55 @@ G1′ 用已有 1,320 条 τ-bench 轨迹重做，不重新运行 τ-bench 对�
 - 内部参考：固定质量下 p95 TTFT 改善约 15%，吞吐下降不超过约 5%；
 - 控制器必须优于 size-aware LRU/GDSF。
 
-**运行方式**：分两时点判定。W8 冒烟前置：主 cell × 4 个无损对照（No-Cache、APC-LRU、GDSF、Reuse-Only）× 约 100 workflow 子集，本质是主表的 pilot run，防止无损驻留不成立时白做量化。最终阈值判定用 Ch.4 主表的无损对照行结果做最终确认。`design_doc` 指向 `experiments/experiment-designs.md#ch4`。
+**当前证据状态（2026-07-28）**：
+`CAUSAL-GPU-ADMISSION+SELECTIVE-MIGRATION-IMPLEMENTED /
+PROTOCOL-INCOMPLETE`，不是 G3 No-Go。旧 G3'' 的 1,283.1 s 是含 O(N)
+cache scan 的 Python trace replay wall time，不能解释为系统 TTFT；它还
+遗漏逐请求 D2H/H2D，并把固定 trace 的 arrival-window rate 错称为
+throughput。新 G3-P1 已将 always-migrate 与
+always-admit+selective-migrate 分别独立为消融：CPU migration 使用因果
+share、跨驱逐访问频率、容量归一化 recency 与实测
+prefill/transfer/hold cost；GPU admission 在满缓存 miss 时比较 incoming
+与 incumbent 的因果 cost value，低价值 incoming 只计算、不保留。
 
-**失败动作**：路线 A No-Go；可保留实现作为工程基线，但不以无损 residency 单独投稿该主张。
+完整未来索引已与在线策略物理隔离：只有 `oracle_cost`/Belady 能接收
+`future_accesses`，在线 baseline 若收到该参数立即失败；相同历史前缀接
+不同未来时，FlowCache 的前缀决策不变。28 个机制/协议回归测试通过。
+在 20,000-access hot/cold 受控 trace 中，新增 GPU bypass 与
+selective-migrate-only 都得到 9,999 hits，但前者将建模 movement 从
+1,100.943 ms 降到 0 ms；该数字仅为机制回归，不是 workload 证据。
+等成本循环负对照中，因果 doorkeeper 使完整策略回退到保守准入，命中与
+movement 均不劣于 selective-migrate-only；局部物理 trace 上则旁路
+1,055 次、hit rate 增加 1.091 个百分点、transfer 减少 2.81%、modeled
+service cost 减少约 0.99%，但仍未达到 5% transfer 门槛。
 
-#### G3′ 修正（2026-07-27，protocol-invalid 重跑）
+新增 GPU admission 前的 100-request / 4-workflow 局部 smoke 中，
+CPU-migration-only 默认参数选择了 99.98% 的迁移候选、仅减少 0.017%
+migration，实质上仍接近 always-migrate。该旧结果只能说明为什么需要
+incoming admission，不能证明新组合有效；新策略必须在完整 validation
+trace 重跑。
 
-G3 原始云端运行返回 NO-GO，但诊断显示**协议无效**，verdict 作废，不触发路线切换：
+**运行方式**：
 
-1. **Seed 映射失败**：`run_g3_grid.py` 原 `replay_seeds=[0,1,2]` 与 τ-bench trace 中原始 seed 值（如 `101112`）不匹配，`filter_by_seed` 返回空集，导致 3 个 seed 行完全相同，bootstrap CI 退化为单点 `[mean, mean]`。
-2. **CPU 层从未使用**：`controller.py` 原迁移阈值 `migrate_threshold=0.1` 过高，所有 `flowcache_lossless` 行 `migrate_count=0`、`restore_count=0`，FlowCache 退化为纯 GPU 策略，叠加 `safety_margin=0.10` 缩容 10%，性能反而不如 sizecost/gdsf（主 cell 1 GiB c=4 下 p95 差 69%）。
-3. **统计单位错误**：per-seed (n=3) bootstrap 无效，应改为 per-task_id (n=165) paired bootstrap。
+1. 从完整 `request_prefixes.jsonl` 重建 `access_trace_c4.jsonl`；按 `task_id` 稳定哈希为 20% validation / 80% held-out test，同一 task 的全部 seed 不跨集合。
+2. 只在 validation 上搜索四个 admission 参数（含
+   `gpu_admission_cold_start_cost_ratio`；cold-start prior 固定为 0.05，
+   GPU margin 固定为 0）；要求 CPU
+   selection 与 GPU bypass rate
+   均处于 1%–99%、migration 较 always-migrate 至少减少 10%、transfer
+   较 selective-migrate-only 至少减少 5%，且 modeled p95 与总 service
+   cost 相对两项消融的增幅均不超过 5%。参数冻结后只运行一次 test。
+3. 在相同 GPU 与 CPU 容量下补齐 one-tier heuristic、two-tier
+   LRU/GDSF、always-migrate、selective-migrate-only、完整 FlowCache
+   与 bypass-aware two-tier lookahead reference。现有 GPU-only
+   Oracle-Cost 读取未来且只是 cost/distance heuristic，只能作离线诊断，
+   不能称为严格最优上界。
+4. 主 cell closed-loop serving 测量真实 TTFT/JCT p50/p95/p99、achieved throughput、SLO goodput、queueing、H2D/D2H 与 controller 开销。只有这一阶段才能应用“p95 改善约 15%、吞吐下降不超过约 5%”的 G3 阈值。
+5. 单 cell 通过后才恢复 9-cell 网格；最终仍由 Ch.4 主表无损对照行复核。
 
-G3′ 修复（代码已就地更新于 `experiments/g3/`，待云端重跑）：
-- 移除 seed 过滤，单次跑全部 1320 episodes；
-- `migrate_threshold` 0.1→0.01，新增 `_select_cpu_victim` 实现 CPU 层按 R 值淘汰腾位；
-- `safety_margin` 0.10→0.05；
-- 按 165 个 `task_id` 聚类 bootstrap，输出 per-task 行（8,910 行 = 9×6×165）。
+详细执行协议见 `experiments/g3-next-experiment.md` 与 `experiments/experiment-designs.md#g3`。
 
-详见 `experiments/g3/FROZEN.md`。G3′ verdict 未生成前，G3 gate 状态为 `in_progress` 而非 `failed`。
+**失败动作**：只有在协议完整、强基线齐全且 closed-loop 指标有效后仍未过门槛，才判路线 A No-Go。协议缺失、计时错误或对照资源不公平只能标记 `PROTOCOL-INCOMPLETE` 并修复，不能触发路线切换。
 
 ### G4：Quantization
 
@@ -661,7 +658,11 @@ v0.3 将原 E1–E7 七个独立实验章节合并为 Ch.1–Ch.5 五章，遵�
 - workflow 长度、深度、宽度、分支率和工具等待；
 - exact-prefix overlap、LCP tokens、next-use distance；
 - block working-set size、KV/总显存占比；
-- 6 个 baseline（LRU/GDSF/SizeCost/APC-LRU/Belady/Oracle-Cost）+ 2 个 inspired closest baseline（PBKV-inspired + ThunderAgent-inspired）+ KVFlow faithful（待 WSL2 adapter）的 headroom；headroom = Oracle-Cost − max(LRU, GDSF, SizeCost, APC-LRU)。
+- 6 个 baseline（LRU/GDSF/SizeCost/APC-LRU/Belady/Oracle-Cost）+ 2 个
+  inspired closest baseline（PBKV-inspired + ThunderAgent-inspired）+
+  KVFlow faithful（待 WSL2 adapter）的差距。Belady 用于统一 miss-cost
+  语义下的离线参照；`Oracle-Cost − best heuristic` 只称
+  cost-aware lookahead gap，不称严格 headroom 上界。
 
 **Gate 复用**：G1 判定（oracle headroom ≥ 10% + closest baseline 可比性）直接复用本章画像数据，不独立运行。
 
@@ -725,7 +726,7 @@ v0.3 将原 E1–E7 七个独立实验章节合并为 Ch.1–Ch.5 五章，遵�
 | 7 | Fidelity-Only | 核心变体 2：保真风险驱动精度 + 强启发式驻留 |
 | 8 | Decoupled-Best | 核心变体 3：最强"reuse policy + uniform quantization"解耦组合 |
 | 9 | FlowCache-Joint | 核心变体 4：待验联合 policy |
-| 10 | Oracle-Cost | 离线上界 |
+| 10 | Oracle-Cost | 读取未来的离线 lookahead 诊断（非严格最优上界） |
 
 **cell（6 个，原 18 删并发 4 档与 100% 预算档）**：
 

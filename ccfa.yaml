@@ -14,12 +14,12 @@ target_venue:
   venue_guide: "missing - no icws.md or edge.md in ccf-paper-writer/references/venue-guides/"
   template_fallback: "IEEE conference (IEEEtran.cls)"
 stage:
-  current: "g1_passed"
-  gate: "G2"
-  next_week: "W7"
+  current: "g3_protocol_repair"
+  gate: "G3"
+  next_week: "W8"
   plan: "execution-plan.md"
   route: "A"
-  updated_at: "2026-07-27"
+  updated_at: "2026-07-28"
   scope_spec: ".trae/specs/experiment-scope-redesign/spec.md"
 artifacts:
   manuscript: "manuscript/main.tex"
@@ -80,7 +80,7 @@ gates:
     passed_evidence: "KV bit-identical 220/220, identity 100/100, codec 100 block lineage 100/100, 8x4k=20.2GB<24GB"
   - id: "G1"
     description: "Opportunity"
-    status: "passed"
+    status: "not_started"
     week: "W6-W7"
     depends_on: ["G0"]
     design_doc: "experiments/experiment-designs.md#ch1"
@@ -88,8 +88,6 @@ gates:
     fallback_route: "B"
     triggers_route_switch: true
     source: "IDEA.rewritten.md Section 7"
-    passed_at: "2026-07-27"
-    passed_evidence: "G1' verdict=GO; 5/12 cells pass 10% headroom threshold with CI lower>0; best cell (1 GiB, c=4): headroom=45.80%, CI=[18.11%,31.23%]"
   - id: "G2"
     description: "Two-Axis Necessity"
     status: "not_started"
@@ -102,16 +100,20 @@ gates:
     source: "IDEA.rewritten.md Section 7"
   - id: "G3"
     description: "Lossless Residency"
-    status: "in_progress"  # G3′ 修复版待云端重跑（G3 原始 protocol-invalid）
+    status: "in_progress"
     week: "W8, W10-W11"
     depends_on: ["G0", "G1"]
-    design_doc: "experiments/experiment-designs.md#ch4"
-    smoke_check: "W8: 主 cell × 4 无损对照(No-Cache/APC-LRU/GDSF/Reuse-Only) × ~100 workflow 子集"
-    failure_action: "路线 A No-Go；可保留实现作为工程基线，但不以无损 residency 单独投稿该主张"
+    design_doc: "experiments/experiment-designs.md#g3; experiments/g3-next-experiment.md"
+    protocol_status: "PROTOCOL-INCOMPLETE"
+    implementation_status: "G3-P1_CAUSAL_GPU_ADMISSION_AND_SELECTIVE_MIGRATION_PENDING_VALIDATION"
+    protocol_evidence: "28 个回归测试通过；future index 与在线策略物理隔离；20k hot/cold 在 9,999 hits 不变时将 modeled movement 由 1,100.943ms 降至 0ms；等成本循环负对照与 selective-only 的 hits/movement 一致；局部物理工程复测 transfer -2.81%、miss cost -0.99%，完整 workload 尚未验证"
+    smoke_check: "完整 c4 trace → task_id 20% validation 冻结四个 admission 参数 → 80% held-out test；CPU selection 与 GPU bypass rate 均 1%-99%、migration reduction>=10%、transfer vs selective-only reduction>=5%、modeled cost increase<=5%"
+    next_experiment: "experiments/g3-next-experiment.md"
+    route_switch_guard: "PROTOCOL-INCOMPLETE 不触发路线切换；仅 closed-loop 指标有效且公平强基线齐全后的正式失败可触发"
+    failure_action: "协议完整且 closed-loop 指标有效后仍失败，路线 A No-Go；协议缺失只修复重跑"
     fallback_route: "B"
     triggers_route_switch: true
     source: "IDEA.rewritten.md Section 7"
-    note: "G3 原始运行 protocol-invalid（seed 映射失败 + CPU 层从未使用 + per-seed bootstrap 退化），verdict NO-GO 作废，不触发路线切换。G3′ 修复版（migrate_threshold 0.1→0.01、分层 CPU 淘汰、task_id 聚类 bootstrap、safety_margin 0.10→0.05、1320 episodes 单次跑）代码已就地更新于 experiments/g3/，待云端重跑。见 experiments/g3/FROZEN.md。"
   - id: "G4"
     description: "Quantization"
     status: "not_started"
@@ -171,19 +173,3 @@ revision_ledger:
 submission_checks:
   path: "submission/checks.md"
   status: "not_started"
-g1:
-  status: frozen_protocol_invalid
-  verdict: fail
-  successor: g1prime
-
-g1prime:
-  status: passed
-  verdict: go
-  code_complete: true
-  small_sample_verified: true
-  full_run_completed: true
-  passed_at: "2026-07-27"
-  best_cell: "1GiB_c4_headroom_45.80pct_CI_18.11_31.23"
-  passing_cells: 5
-  total_cells: 12
-  next_gate: "G2"

@@ -1,7 +1,7 @@
 """
 Heuristic Reuse Estimator
 =========================
-为 FlowCache-Lossless controller 提供 R_b（复用价值）估计。
+为 FlowCache-Lossless controller 提供 legacy heuristic/fallback 估计。
 
 不使用 GNN（G5 已删除），采用可解释的 heuristic 公式：
 
@@ -12,7 +12,9 @@ Heuristic Reuse Estimator
 - share_count: H 窗口内访问该 block 的不同 workflow 数（越大越可能复用）
 - block_idx: 前缀位置（越靠前越可能复用——system prompt 等共享根）
 
-若 heuristic 与 Oracle 仍有明显差距，W8 后升级为 survival/hazard 模型（仍非 GNN）。
+G3-P1 的 selective admission 不直接把该无界 R 当作概率，而是在
+controller.py 中用相同的决策时信号构造 [0,1] 的容量归一化 proxy；
+固定 horizon 也不再用于 selective victim admission。
 """
 
 import math
@@ -87,6 +89,33 @@ class HeuristicReuseEstimator:
         pos_w = self._position_weight(block_idx)
         return decay * share_factor * pos_w
 
+    def static_log_priority(self,
+                            last_access: int,
+                            share_count: int,
+                            block_idx: int) -> float:
+        """Return the clock-independent ordering key for non-expired blocks.
+
+        For a fixed decision clock ``t``:
+
+            R_b(t) = exp(-beta * t)
+                     * exp(beta * last_access_b)
+                     * share_factor_b
+                     * position_weight_b
+
+        The first factor is shared by every non-expired block.  Therefore the
+        lowest-R CPU victim can be maintained in a heap keyed by this log
+        priority instead of rescanning the full CPU cache on every migration.
+        Expired blocks are handled separately by the controller.
+        """
+        share_count = max(0, share_count)
+        share_factor = max(1e-12, 1.0 + self.alpha * share_count)
+        pos_w = max(1e-12, self._position_weight(block_idx))
+        return (
+            self.beta * last_access
+            + math.log(share_factor)
+            + math.log(pos_w)
+        )
+
     def estimate_batch(self, blocks: list) -> list:
         """
         批量估计多个 block 的 R 值。
@@ -143,6 +172,19 @@ class SurvivalReuseEstimator:
             return 0.0
         survival = math.exp(-self._baseline_hazard * age)
         return survival * (1.0 + 0.5 * share_count)
+
+    def static_log_priority(self,
+                            last_access: int,
+                            share_count: int,
+                            block_idx: int) -> float:
+        """Clock-independent ordering key used by the CPU victim heap."""
+        if not self._fitted:
+            est = HeuristicReuseEstimator(horizon=self.horizon)
+            return est.static_log_priority(
+                last_access, share_count, block_idx
+            )
+        share_factor = max(1e-12, 1.0 + 0.5 * max(0, share_count))
+        return self._baseline_hazard * last_access + math.log(share_factor)
 
 
 def create_estimator(estimator_type: str = "heuristic",

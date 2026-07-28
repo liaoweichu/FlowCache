@@ -12,7 +12,14 @@
 > - **v0.3（2026-07-25）：实验体系精简**——按 `.trae/specs/experiment-scope-redesign/spec.md`（状态：approved-pending-implementation）落地：13 章 → 5 章 + 2 个小判定（G0、G3 冒烟）；核心数据集 12+ → 7；workflow 样本 ~8,800 → ~4,120；E4 replay ~702 → ~100。G1/G2/G4 不再独立运行，复用正式实验数据判定。**v0.3 重构分批进行**：本次仅对齐 G1/Ch.1 与 E1 章节顶部；其余章节（G3/G4/E2–E7）保留 v0.2 形式，待对应周次前再重构
 > - **v0.3.1（2026-07-25）：τ-bench seeds 数升级**——基于 τ-bench 原论文（arXiv 2406.12045, ICLR 2025）调研，pass^k 指标用 k∈{1,2,4,8}，3 seeds 只能算 pass^3 不足以区分 consistency。τ-bench 主表样本量从 495（165 × 3 seeds）升级为 **1,320（165 × 8 seeds）**，与原论文 pass^8 完全对齐。本次仅同步更新 G1.2/G1.3/G1.11.1 与 spec v0.3 §5/§8；**G3/G4/E1/E4/E5/E6 等章节中的 "495 episodes" 与 "3 seeds" 引用暂保留 v0.2 形式**，待对应章节 v0.3 重构时统一更新为 1,320 / 8 seeds
 > - **v0.5（2026-07-26）：BFCL 全面移除**——应用户决定（IDEA.rewritten.md v0.4 已将 BFCL 标记为"已删除 + rebuttal 可补"，config.yaml 已是 τ-bench only），BFCL 不再作为数据集：①删除 G1.2/G1.11.1/G3.2/G5.2/E1.2/E2.2/E4.2/E5.2/E6.2 等数据集表中的 BFCL 行；②删除 G1.2 中 BFCL 集成方式与 8 decode seeds 依据整段；③"τ-bench + BFCL" → "τ-bench"，"1,320 + 6,400 = 7,720" → "1,320"，"τ-bench / BFCL / STB" → "τ-bench / STB"；④保留 v0.2/v0.3/v0.4 历史变更记录中 BFCL 的引用作为决策记录；⑤rebuttal 时若需补做 BFCL，按 IDEA.rewritten.md v0.4 的 migration 规则执行
-> **状态**：designed — G1/Ch.1 已按 v0.3 对齐；v0.5 已全面移除 BFCL 数据集（单数据集 τ-bench 1,320 episodes）；其余章节按 v0.2 形式待 v0.3 重构
+> - **v0.6（2026-07-27）：G3 协议修复**——现有 G3/G3′/G3″ 结果统一标记为 `PROTOCOL-INCOMPLETE`，不得触发路线切换；增加 G3-P0 单 cell 修复实验，区分 offline replay wall time、modeled cache delay、offered load 与 closed-loop TTFT/throughput；always-migrate 降级为诊断 baseline，并要求所有主比较使用相同 GPU+CPU 容量。
+> - **v0.7（2026-07-28）：G3-P1 选择性迁移**——实现 bounded likelihood proxy admission、因果 share、跨驱逐频率、独立 always-migrate 消融与 O(1)/O(log N) victim；增加 task-grouped validation/test、18 组 admission 参数扫描和近似 always/never 的 fail-closed 门槛。
+> - **v0.8（2026-07-28）：G3-P1 因果 GPU admission**——新增
+>   Oracle-Cost 启发但不读取未来的 incoming-vs-incumbent GPU
+>   admission/bypass；增加 selective-migrate-only 消融、future-index
+>   物理隔离、前缀因果不变性测试、TinyLFU-style 因果 doorkeeper，以及
+>   54 组 validation-only 联合参数扫描。
+> **状态**：designed/in-progress — G1/Ch.1 已按 v0.3 对齐；v0.5 已全面移除 BFCL；G3 已按 v0.8 接入因果 GPU admission + 选择性迁移 validation/test 协议；其余章节按 v0.2 形式待 v0.3 重构
 
 ---
 
@@ -416,7 +423,7 @@ GSM8K 在 FlowCache 中的角色**且仅是** Ch.3 fidelity 质量面的 accurac
 | GDSF | size-aware Greedy-Dual-Size-Frequency | 强启发式 |
 | SizeCost | size/recompute-cost 启发式（age + size + measured recompute cost） | 强启发式（FlowCache 第一档估计器） |
 | Oracle-Belady | 离线 Belady（未来已知）驱逐 | 上界参照 |
-| Oracle-Cost | 离线 cost-aware oracle（未来已知 + 成本模型） | 上界参照 |
+| Oracle-Cost | 离线 cost-aware lookahead heuristic（未来已知 + 成本模型） | 诊断参照；非严格最优上界 |
 | KVFlow† / PBKV† | 至少一个在公平协议下忠实运行的 closest baseline；无法忠实复现的标 `*-inspired` 并先解决可比性 | 最近工作 baseline |
 | ThunderAgent-inspired† | ICML 2026 Spotlight，纯 Python 100%，原生 Windows 可跑；API 级代理非块级缓存，提取 program-aware + 2^{-t} time decay 核心 idea | 最近工作 baseline（inspired variant） |
 | Uniform-Q8 / Uniform-Q4 | 全部 inactive block 统一 Q8 / Q4 存储（同容量规则） | 量化 baseline |
@@ -680,7 +687,7 @@ trace 来源：E1 录制的可重放 trace（τ-bench 为 rollout 录制；到�
 | GDSF | 强启发式 | size-aware |
 | SizeCost | 强启发式（age + size + measured recompute cost） | IDEA §4.3 第一档 |
 | Oracle-Belady | 上界（未来已知） | 离线计算 |
-| Oracle-Cost | 上界（未来已知 + 成本模型） | 离线计算，cost model：驱逐时选 `saved_prefill_ms / next_use_distance` 最小的块；`block_cost` 来自 step 级 `prefill_ms` 按 token 范围比例分摊（见 `experiments/e1/compare_oracle.py:build_access_trace`） |
+| Oracle-Cost | 离线 lookahead 诊断（未来已知 + 成本模型；非严格最优上界） | 驱逐时选 `saved_prefill_ms / next_use_distance` 最小的块；`block_cost` 来自 step 级 `prefill_ms` 按 token 范围比例分摊（见 `experiments/e1/compare_oracle.py:build_access_trace`） |
 | **KVFlow 或 PBKV（≥1 个）** | closest baseline 可比性判定 | 公平协议（同引擎/模型/trace/预算）下忠实运行；不可忠实复现 → 标 `*-inspired` 并记录不兼容原因清单。KVFlow faithful 已于 2026-07-26 在 AutoDL Linux 上激活（`config.yaml: kvflow_faithful.enabled: true`），adapter 实现中 |
 | **ThunderAgent-inspired** | 补充 closest baseline（workflow-aware time decay） | ICML 2026 Spotlight，纯 Python 100%，原生 Windows 可跑；ThunderAgent 是 API 级代理非块级缓存策略，提取 time decay (2^{-t}) + program-aware 调度核心 idea 实现 `baselines/thunderagent_inspired.py` |
 
@@ -703,7 +710,7 @@ trace 来源：E1 录制的可重放 trace（τ-bench 为 rollout 录制；到�
 |---|---|
 | 机会画像（与 E1 共享） | exact-prefix overlap、LCP tokens 分布、next-use distance 分布、share_count 分布、block working-set size、KV/总显存占比 |
 | 策略差距 | per-workflow miss cost（重算 ms）、p95 TTFT、token/block/byte hit rate |
-| headroom | Oracle-Cost vs 最佳简单策略的 miss-cost 相对差、p95 TTFT 相对差（主判定量） |
+| lookahead gap | Oracle-Cost vs 最佳简单策略的 miss-cost 相对差、p95 cache-delay 相对差；该值是未来信息参照差距，不宣称严格可达 headroom |
 | 可比性 | closest baseline 的运行覆盖率（多少比例 trace 可忠实重放）、与论文报告行为的定性一致性 |
 
 预算档位：10% / 25% / 50% / 100%（100% 作上界参照）。
@@ -809,103 +816,15 @@ trace 来源：E1 录制的可重放 trace（τ-bench 为 rollout 录制；到�
 
 ---
 
-## G1′: 物理前缀重编译与正确回放
-
-### G1′.1 动机
-
-G1 判定为 fail（headroom ≈ 0%），但该判定 protocol-invalid：回放协议与 FlowCache 的真实研究对象不一致。G1′ 用已有 1,320 条 τ-bench 轨迹重做，修正协议问题。
-
-### G1′.2 数据集
-
-| 数据集 | 样本数 | 说明 |
-|---|---|---|
-| τ-bench | 1,320 episodes（165 任务 × 8 seeds） | 复用 G1 录制的轨迹，不重新运行对话 |
-
-### G1′.3 容量与并发
-
-| 维度 | 档位 | 说明 |
-|---|---|---|
-| KV 容量 | 1 / 2 / 4 / 6 GiB | 绝对容量，替代 G1 的百分比 budget |
-| 并发度 | 1 / 4 / 8 | c=1 顺序基线，c=4/8 测试缓存竞争 |
-| 100% | sanity check only | 不参与 Go/No-Go 判定 |
-
-bytes_per_block = 917,504 B (896 KiB)，基于 Qwen2.5-7B（28 层 × 4 KV heads × 128 dim × 2 dtype × 16 tokens × 2 K+V）。
-
-### G1′.4 Baselines
-
-| 类型 | Baseline | 状态 |
-|---|---|---|
-| Simple heuristic | LRU, GDSF, SizeCost, APC-LRU | enabled |
-| Oracle | Belady, Oracle-Cost | enabled |
-| Closest inspired | PBKV-Inspired, ThunderAgent-Inspired | G1′ 通过后补充 |
-
-### G1′.5 统计判定
-
-- headroom_abs = Oracle-Cost miss_cost − max(LRU, GDSF, SizeCost, APC-LRU) miss_cost
-- headroom_rel = headroom_abs / Oracle-Cost miss_cost
-- bootstrap：165 task group 聚类，1000 次
-- 通过条件：∃ (capacity, concurrency) 使 headroom_rel ≥ 10% AND CI lower > 0
-
-### G1′.6 代码位置
-
-| 文件 | 职责 |
-|---|---|
-| experiments/g1prime/recompile_prefixes.py | 物理前缀重编译器 |
-| experiments/g1prime/build_physical_access_trace.py | 访问流构建 |
-| experiments/g1prime/simulate_concurrency.py | 并发模拟 |
-| experiments/g1prime/cost_model.py | 成本模型 |
-| experiments/g1prime/capacity.py | 容量定义 |
-| experiments/g1prime/run_grid.py | 全网格运行器 |
-| experiments/g1prime/verdict.py | 判定报告 |
-| experiments/g1prime/plot_headroom.py | 绘图 |
-| experiments/g1prime/config.yaml | 配置 |
-
-### G1′.7 实验结果（2026-07-27 全量运行）
-
-**判定**：✅ **GO** — 5/12 cells 通过 headroom_rel ≥ 10% AND CI lower > 0
-
-**实验规模**：95,040 行 = 6 baselines × 4 容量 × 3 并发 × 1320 episodes；每 cell 8,262,330 次 block 访问。
-
-**Headroom 全表**（headroom_rel，✅ = 通过 10% 阈值且 CI lower > 0）：
-
-| 容量 | c=1 | c=4 | c=8 |
-|---|---|---|---|
-| 1 GiB | 36.44% ✅<br>CI=[3.21%, 12.25%] | **45.80%** ✅<br>CI=[18.11%, 31.23%] | -13.90% ⚠️<br>CI=[-26.92%, -16.99%] |
-| 2 GiB | 0.06%<br>CI=[0.03%, 0.05%] | 34.90% ✅<br>CI=[2.67%, 8.69%] | 42.66% ✅<br>CI=[11.63%, 24.52%] |
-| 4 GiB | 0.03%<br>CI=[0.01%, 0.02%] | 0.03%<br>CI=[0.02%, 0.04%] | 16.63% ✅<br>CI=[0.09%, 3.86%] |
-| 6 GiB | 0.02%<br>CI=[0.01%, 0.02%] | 0.02%<br>CI=[0.01%, 0.02%] | 1.35%<br>CI=[0.01%, 0.90%] |
-
-**关键发现**：
-
-1. **容量与 headroom 反相关**：1 GiB 下 headroom 36–46%，6 GiB 下接近 0%。容量紧张时淘汰策略价值凸显，与直觉一致。
-2. **c=4 是最佳并发点**：在 1 GiB 和 2 GiB 下均为最高 headroom 且 CI 最稳健。
-3. **c=1 且 ≥2 GiB 时 headroom≈0%**：单工作流运行时容量充足，几乎所有前缀都能保留在缓存中，淘汰策略无差异。
-4. **异常点 (1 GiB, c=8)**：Oracle-Cost (1188.87 ms) 反而比 GDSF (1023.68 ms) 差 13.90%。根因分析：
-   - 极端容量压力 (1 GiB ≈ 1170 blocks) + 高并发 (c=8) 下 working set 远超容量，几乎全部 miss；
-   - Oracle-Cost 的成本感知淘汰在此情境下可能保留高成本块而淘汰即将复用的块，反而加剧抖动；
-   - 此异常 **不影响 Go 判定**（仅需一个 cell 通过即可），但需在论文中讨论 Oracle 上界在极端压力下的退化现象。
-
-**与 G1（协议无效）对比**：
-
-| 维度 | G1（已冻结） | G1′（本次） |
-|---|---|---|
-| 协议 | 按单 message 分词 | 完整 chat template + 跨 message 连续分块 |
-| 容量 | % budget（10%≈41.4 GiB） | 绝对 GiB（1/2/4/6） |
-| 并发 | 打乱 workflow 拼接 | c=1/4/8 交错调度 |
-| 统计 | 3 replay seed | 165 task × 8 seed cluster bootstrap |
-| headroom | ≈0%（协议无效） | 最高 45.80%，5 cell 通过 |
-| 判定 | fail (protocol-invalid) | **GO** |
-
-**结论**：G1′ PASSED → 进入 G2（P1-A 联合 R-D 控制器）。推荐目标操作点：**1 GiB c=4**（headroom 最大，CI 最稳健）和 **2 GiB c=8**（高并发下仍有 42.66% headroom）。
-
----
-
 # G3：Lossless Residency（无损驻留）
 
 > **周次**：W7–W8 | **依赖**：G0、G1 | **关键路径**：是
-> **失败动作**：路线 A No-Go；可保留实现作为工程基线，但不以无损 residency 单独投稿该主张
-
-> **G3′ 修正（2026-07-27）**：G3 原始云端运行返回 NO-GO，但诊断显示**协议无效**，verdict 作废，不触发路线切换。三大协议问题：(1) seed 映射失败（`replay_seeds=[0,1,2]` 与 τ-bench 原始 seed 不匹配，3 个 seed 行完全相同，bootstrap CI 退化为单点）；(2) CPU 层从未使用（`migrate_threshold=0.1` 过高，`migrate_count=0`，FlowCache 退化为纯 GPU 策略 + `safety_margin=0.10` 缩容，性能反不如 sizecost/gdsf）；(3) per-seed (n=3) bootstrap 无效。G3′ 修复版代码已就地更新于 `experiments/g3/`，待云端重跑：移除 seed 过滤跑全量 1320 episodes、`migrate_threshold` 0.1→0.01 + 分层 CPU 淘汰、`safety_margin` 0.10→0.05、按 165 个 `task_id` 聚类 bootstrap 输出 per-task 行（8,910 行 = 9×6×165）。详见 `experiments/g3/FROZEN.md`。下方 G3.2/G3.3 的"495 episodes × 3 replay 种子"为原始设计，G3′ 实际运行为"1320 episodes 单次 × 165 task 聚类"。
+> **当前状态（2026-07-28）**：
+> `causal GPU admission + selective migration implemented /
+> PROTOCOL-INCOMPLETE`。28 个回归测试通过；受控 hot/cold 回归在相同
+> 9,999 hits 下把 modeled movement 从 1,100.943 ms 降至 0 ms，但完整
+> workload 尚未验证；等成本循环负对照已消除激进旁路退化。
+> **失败动作**：只有协议完整且 closed-loop 指标有效后失败，才判路线 A No-Go；协议问题先修复，不切换路线。
 
 ## G3.1 实验目标与 Gate 关系
 
@@ -916,6 +835,28 @@ G3 验证：在**只用无损动作**（GPU BF16 ↔ CPU BF16 ↔ Evict，IDEA �
 - 不涉及任何量化精度决策（G4）；
 - 不证明复用价值与保真风险错位（G2）；
 - 不要求学习式预测器（G5 在 G3 的 controller 框架内单独判定；G3 使用 heuristic/survival 级别的 reuse 估计）。
+
+### G3.1.2 G3-P1 因果 GPU 准入与选择性迁移前置门
+
+在任何全网格或 Go/No-Go 前，必须先在 2 GiB、concurrency=4 单 cell 完成：
+
+- GPU LRU victim 与 CPU value victim 不再对整个缓存逐次线性扫描；
+- H2D/D2H 采用相应 block size 的实测中位数或非负分段插值；
+- miss、迁移、恢复和 controller 建模成本逐请求计入 `modeled cache delay`；
+- per-task 移动成本之和与 global 计数/成本一致，`fallback_count=0`；
+- open-loop 只输出 offered load，不能生成吞吐非劣结论；
+- always-migrate 只作容量扩展/压力 baseline，不以 FlowCache 方法结果命名；
+- share_count 只由截至决策时刻的 trailing window 生成，task-grouped validation/test 无交叉；
+- 只有离线 oracle 能接收 `future_accesses`；在线 baseline 接收该参数立即
+  fail-closed，并通过“相同历史、不同未来”的前缀决策不变性测试；
+- 首次/低证据 incoming 只有在成本明显低于 incumbent，或 incumbent 已有
+  更强历史复用证据时才使用低先验；等成本且等证据时保守准入；
+- test CPU-migration selection rate 与 GPU bypass rate 均须处于
+  1%–99%，migration 较 always-migrate 至少下降 10%，transfer 较
+  selective-migrate-only 至少下降 5%，且 modeled p95/总 service cost
+  相对两项消融的增幅均不超过 5%。
+
+详细命令、检查项与晋级条件见 `experiments/g3-next-experiment.md`。
 
 ## G3.2 数据集与子集定义
 
@@ -946,14 +887,18 @@ trace 与到达模型同 G1（BurstGPT 主证据 + Poisson 参照，H=1000，3 �
 | APC-LRU | 工程 baseline |
 | GDSF | 强启发式驱逐（IDEA §7 G3 明确要求的比较对象） |
 | SizeCost-LRU | size-aware LRU（IDEA §7 G3 明确要求的比较对象） |
-| **FlowCache-Lossless** | 待验：value-aware 驻留 controller（动作空间 A₀；估计器为 heuristic 或 survival/hazard，不用 GNN） |
-| Oracle-Cost | 上界参照 |
+| Two-tier LRU / GDSF | 与方法使用相同 GPU+CPU 容量的公平分层启发式 |
+| Always-Migrate Tiered-LRU | G3-P1 诊断 baseline；每个 GPU victim 都进 CPU，不得作为 FlowCache 主结果 |
+| Always-Admit + Selective-Migrate | 隔离 CPU selective migration 收益，所有 incoming miss 强制进入 GPU |
+| **FlowCache-Lossless-Causal-Admission** | 已实现、待 held-out 验证：先以因果 cost value 比较 incoming 与 GPU incumbent，再对 displaced victim 做 selective migrate/evict |
+| Two-tier Lookahead Reference | 同 GPU+CPU 资源、bypass-aware 的离线未来参照；GPU-only Oracle-Cost 只是 cost/distance heuristic，不是严格最优上界 |
 
 ## G3.5 测试指标
 
 | 类别 | 指标 |
 |---|---|
-| 主指标 | p95 TTFT（vs GDSF/SizeCost-LRU 的相对改善）、吞吐（requests/s）相对变化 |
+| P1 诊断 | offline replay wall time / µs per access、GPU admission selected/bypassed、CPU migration selected/rejected、movement reduction、restore yield、额外 miss cost、modeled cache-delay p50/p95、offered load（非吞吐）、成本守恒、fallback、future-index-used=false |
+| 正式主指标 | closed-loop p95 TTFT（vs two-tier GDSF/SizeCost-LRU 的相对改善）、achieved throughput、SLO goodput |
 | 辅助 | TTFT/JCT p50/p99、token/block/byte hit rate、saved-prefill tokens/time |
 | 开销 | 恢复时间（CPU→GPU）、迁移时间（GPU→CPU）、H2D/D2H 字节数、controller 单次决策耗时与总开销 |
 | 约束 | 任务成功率 = BF16 基线（无损路径应**零质量差异**，逐 workflow 核验）、GPU allocated/reserved、CPU pinned bytes |
@@ -961,7 +906,8 @@ trace 与到达模型同 G1（BurstGPT 主证据 + Poisson 参照，H=1000，3 �
 
 ## G3.6 运行协议
 
-- open-loop replay（系统性能）；另做一轮 closed-loop BF16 抽检（20 episodes）确认无损路径零质量差异；
+- open-loop replay 只用于策略语义、hit/miss、movement、modeled cache delay 与 policy regret；不得把到达窗口反推值称为 throughput；
+- closed-loop serving 用真实 request start/first-token/completion timestamps 测 TTFT、JCT、queueing、throughput 与 SLO goodput；另做 BF16 抽检确认无损路径零质量差异；
 - 所有策略同引擎、同模型、同 dtype、同预算、同请求顺序（IDEA §8 E4 主结论约束，本章同样遵守）；
 - controller 触发时机：请求到达、暂停、恢复、完成、显存压力变化（IDEA §4.5）；
 - 保留安全水位，避免 allocator reserved 导致临界 OOM；
@@ -981,6 +927,8 @@ IDEA §2.1 要求所有成本按父前缀长度、block 大小、batch/concurren
 
 标定结果冻结于 `experiments/g3/cost-model.json`，G3/G5/E4 共用同一成本模型，禁止各章各自标定。
 
+回放查值规则：优先 exact-size 样本中位数；区间内做分段插值；区间外的拟合值必须 clamp 到非负。任何负 transfer cost 直接判 P0 失败。
+
 ## G3.7 统计检验
 
 - 主比较：FlowCache-Lossless vs GDSF、vs SizeCost-LRU 的 per-workflow TTFT 配对差；
@@ -990,9 +938,12 @@ IDEA §2.1 要求所有成本按父前缀长度、block 大小、batch/concurren
 
 ## G3.8 判定阈值（Go/No-Go，对应 IDEA §7 G3）
 
+**协议前置条件**：真实 TTFT 与 achieved throughput/goodput 已由 closed-loop 测得；强基线齐全；所有主比较共享相同 GPU/CPU 容量；当前策略不是 always-migrate 诊断变体，也未在 test 上调参。任一前置条件缺失时状态为 `PROTOCOL-INCOMPLETE`，不得输出 GO/NO-GO。
+
 | 条件 | 阈值 |
 |---|---|
 | 开销可行性 | 恢复和迁移开销 < 所节省 prefill（聚合层面成立；逐 block 违反比例如实报告） |
+| 选择性工程门槛 | held-out test 上 CPU selection 与 GPU bypass rate 均 ∈ [1%,99%]；migration 较 always-migrate 至少减少 10%；transfer 较 selective-migrate-only 至少减少 5%；modeled p95/总 service cost 相对两项消融增幅均 ≤ 5% |
 | 主收益 | 固定质量下 p95 TTFT 改善 ≥ ~15%（内部参考阈值；主 cell：预算 25%、并发 8 必须达标，其余 cell 报告趋势） |
 | 吞吐非劣 | 吞吐下降 ≤ ~5% |
 | 优于强启发式 | controller 显著优于 SizeCost-LRU/GDSF（bootstrap CI 不含 0） |
@@ -1003,19 +954,21 @@ IDEA §2.1 要求所有成本按父前缀长度、block 大小、batch/concurren
 
 | 步骤 | 内容 | 产物 |
 |---|---|---|
-| 3.1 | 实现无损三层动作（GPU BF16 ↔ pinned CPU BF16 ↔ evict）与迁移路径实测成本模型 | cache manager 无损版 |
-| 3.2 | 实现 heuristic/survival reuse 估计（复用 G1 的 SizeCost 与 W7–W8 的 E2 中间产物） | reuse 估计器 v1 |
-| 3.3 | 实现 FlowCache-Lossless controller（含安全水位与回退） | controller v1 |
-| 3.4 | 9 cell × 数据集 × 3 种子运行 | 原始结果 |
-| 3.5 | 无损质量抽检（20 episodes closed-loop） | 质量核验记录 |
-| 3.6 | 统计判定 | `experiments/g3/g3-verdict.md` |
+| 3.0 | 已完成：O(1)/O(log N) victim、transfer cost 缓存、逐请求计费、future-index 隔离、因果 doorkeeper 与 fail-closed verdict | 28 个回归测试 |
+| 3.1 | 已实现因果 GPU admission、selective migration 及两项独立消融；在 task-grouped validation 冻结四个 admission 参数；固定基线/CPU 参数消融结果复用，将 54 组扫描由 324 降为 76 次 baseline replay | `tune_selective_migration.py` + selection report |
+| 3.2 | held-out test 跑 2 GiB/c=4 全 trace；只出诊断报告，不作 GO/NO-GO | G3-P1 单 cell open-loop 结果 |
+| 3.2b | 补齐公平 two-tier LRU/GDSF/SizeCost 与 two-tier oracle | 无损公平 baseline 组 |
+| 3.3 | 主 cell closed-loop serving 与 20-episode 无损质量核验 | 真实 TTFT/throughput/goodput |
+| 3.4 | 单 cell 通过后运行 9 cell | 原始结果 |
+| 3.5 | paired workflow bootstrap 与正式 Gate 判定 | `experiments/g3/g3-verdict.md` |
 
 ## G3.10 硬件与时间预算
 
 | 项 | 预估 |
 |---|---|
 | cache manager 无损版 + controller | 3–4 天 |
-| 全网格运行（数据量上升） | ~12–16 小时（含迁移开销实测） |
+| G3-P1 单 cell | validation 参数冻结后仅跑一次 held-out test；目标 replay wall ≤ 3× Oracle-Cost（工程阈值，非论文结论） |
+| 全网格运行 | 仅在 P0 与 closed-loop 主 cell 通过后估时 |
 | **合计** | **W7–W8 两周内**（与 E2/G5 并行） |
 
 ## G3.11 预期产物
@@ -1072,7 +1025,7 @@ IDEA §2.1 要求所有成本按父前缀长度、block 大小、batch/concurren
 
 ## G3.12 失败动作
 
-按 IDEA §7 G3：路线 A No-Go，转路线 B；实现保留为工程基线，但不以无损 residency 单独投稿该主张。更新 ccfa.yaml（G3 → failed，route → B）。
+协议或公平性缺失：标记 `PROTOCOL-INCOMPLETE`，修复后重跑，不切换路线。只有在协议完整、强基线齐全、closed-loop 指标有效且仍未满足 §G3.8 时，才按 IDEA §7 G3 判路线 A No-Go、转路线 B；实现可保留为工程基线，但不以无损 residency 单独投稿。
 
 ## G3.13 与 IDEA 各节的对应关系
 
@@ -1315,7 +1268,7 @@ GNN 是可选实现，不是论文贡献本身。
 | SizeCost（最佳确定性启发式） | G5 的比较基准 |
 | Survival/Hazard（校准） | 学习档 1：离散时间 hazard 模型，输出 P(T_b^next ≤ h) 多窗口概率 + 校准区间 |
 | GNN（条件启用） | 学习档 2：partial-DAG 编码；仅当 survival 与 oracle 仍有明显差距时启用（IDEA §4.3） |
-| Oracle-Cost | regret 计算的上界参照 |
+| Oracle-Cost | regret 的离线 lookahead 参照；非严格最优上界 |
 
 ### G5.4.1 Survival/Hazard 模型规格（预注册式）
 
@@ -1471,7 +1424,7 @@ E1 的"对照"是机会空间的上下界（与 G1 共享实现）：
 | 对照 | 角色 |
 |---|---|
 | APC-LRU / LRU / GDSF / SizeCost | 简单策略参照点 |
-| Oracle-Belady / Oracle-Cost | headroom 上界 |
+| Oracle-Belady / Oracle-Cost | 前者为统一 miss-cost 下的离线参照；后者为 cost-aware lookahead heuristic，单独报告且不称严格上界 |
 
 ## E1.5 测试指标（IDEA §8 E1 全量）
 
@@ -2041,7 +1994,7 @@ E4 同时是 G2 双轴必要性的端到端证据（joint vs Decoupled-Best 的�
 | 10 | Fidelity-Only | 保真风险驱动精度 + 强启发式驻留 |
 | 11 | **Decoupled-Best** | 最强"reuse policy + uniform quantization"解耦组合（**关键对照**） |
 | 12 | **FlowCache-Joint** | 待验联合 policy |
-| 13 | Oracle-Cost | 离线上界 |
+| 13 | Oracle-Cost | 读取未来的离线 lookahead 诊断（非严格最优上界） |
 
 **公平性规则**（IDEA §5.1/§8）：全部 13 项同引擎、同模型（Qwen2.5-7B-Instruct）、同 dtype、同请求顺序、同预算定义；量化类对照与 joint 使用同一 codec；外部引擎结果只作独立 reference 不混比。
 

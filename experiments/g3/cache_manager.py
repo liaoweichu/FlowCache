@@ -56,11 +56,18 @@ class LosslessCacheManager:
         self.cpu_capacity = cpu_capacity_blocks  # -1 = unlimited
         self.block_bytes = block_bytes
         self.cost_model = cost_model or {}
+        # The model and block size are frozen for one run.  Resolve transfer
+        # estimates once instead of re-sorting calibration samples on every
+        # migration/restoration decision.
+        self._d2h_ms_per_block = self._estimate_transfer_ms("d2h_migrate")
+        self._h2d_ms_per_block = self._estimate_transfer_ms("h2d_restore")
 
-        # GPU pool: block_hash -> metadata
-        self.gpu_cache: Dict[str, Dict] = {}
-        # CPU pool: block_hash -> metadata
-        self.cpu_cache: Dict[str, Dict] = {}
+        # GPU pool: block_hash -> metadata.  OrderedDict makes the first item
+        # the exact LRU victim, so eviction is O(1) rather than a full scan.
+        self.gpu_cache: "OrderedDict[str, Dict]" = OrderedDict()
+        # CPU insertion order is retained for diagnostics/fallbacks.  The
+        # value-aware controller maintains a separate lazy heap.
+        self.cpu_cache: "OrderedDict[str, Dict]" = OrderedDict()
 
         # 访问统计（与 baseline 一致）
         self.hits: int = 0
@@ -117,12 +124,14 @@ class LosslessCacheManager:
             "prefill_ms": 0.0,
             "block_idx": 0,
         }
+        self.gpu_cache.move_to_end(block_hash)
         self._clock += 1
 
     def touch_gpu(self, block_hash: str) -> None:
         """更新 GPU 池中 block 的 last_access。"""
         if block_hash in self.gpu_cache:
             self.gpu_cache[block_hash]["last_access"] = self._clock
+            self.gpu_cache.move_to_end(block_hash)
             self._clock += 1
 
     def evict_from_gpu(self, block_hash: str) -> None:
@@ -156,12 +165,14 @@ class LosslessCacheManager:
             "prefill_ms": 0.0,
             "block_idx": 0,
         }
+        self.cpu_cache.move_to_end(block_hash)
         self._clock += 1
 
     def touch_cpu(self, block_hash: str) -> None:
         """更新 CPU 池中 block 的 last_access。"""
         if block_hash in self.cpu_cache:
             self.cpu_cache[block_hash]["last_access"] = self._clock
+            self.cpu_cache.move_to_end(block_hash)
             self._clock += 1
 
     def evict_from_cpu(self, block_hash: str) -> None:
@@ -169,6 +180,7 @@ class LosslessCacheManager:
         if block_hash in self.cpu_cache:
             del self.cpu_cache[block_hash]
             self.cpu_evictions += 1
+            self.evictions += 1
 
     def cpu_full(self) -> bool:
         """CPU 池是否已满（-1 = 无限制，永远不满）。"""
@@ -201,6 +213,7 @@ class LosslessCacheManager:
         metadata = self.gpu_cache.pop(block_hash)
         if not self.cpu_full():
             self.cpu_cache[block_hash] = metadata
+            self.cpu_cache.move_to_end(block_hash)
         else:
             # CPU 也满了，直接淘汰
             self.cpu_evictions += 1
@@ -228,6 +241,7 @@ class LosslessCacheManager:
         # 移动 block
         metadata = self.cpu_cache.pop(block_hash)
         self.gpu_cache[block_hash] = metadata
+        self.gpu_cache.move_to_end(block_hash)
 
         self.restore_to_gpu_count += 1
         self.restore_ms_total += restore_ms
@@ -239,17 +253,60 @@ class LosslessCacheManager:
 
     def _estimate_d2h_ms(self) -> float:
         """从成本模型估算 D2H 迁移一个 block 的 ms。"""
-        d2h = self.cost_model.get("d2h_migrate", {})
-        intercept = d2h.get("intercept", 0.0)
-        slope = d2h.get("slope_per_byte", 0.0)
-        return intercept + slope * self.block_bytes
+        return self._d2h_ms_per_block
 
     def _estimate_h2d_ms(self) -> float:
         """从成本模型估算 H2D 恢复一个 block 的 ms。"""
-        h2d = self.cost_model.get("h2d_restore", {})
-        intercept = h2d.get("intercept", 0.0)
-        slope = h2d.get("slope_per_byte", 0.0)
-        return intercept + slope * self.block_bytes
+        return self._h2d_ms_per_block
+
+    def estimate_d2h_ms(self) -> float:
+        """Public read-only D2H estimate for controller admission decisions."""
+        return self._estimate_d2h_ms()
+
+    def estimate_h2d_ms(self) -> float:
+        """Public read-only H2D estimate for controller admission decisions."""
+        return self._estimate_h2d_ms()
+
+    def _estimate_transfer_ms(self, section_name: str) -> float:
+        """Estimate one transfer without allowing an invalid negative cost.
+
+        The calibration file contains exact-size measurements as well as a
+        global linear regression.  A negative fitted intercept made the old
+        one-block D2H estimate negative.  Exact measured medians now take
+        precedence; intermediate sizes use piecewise interpolation; only
+        out-of-range sizes fall back to the clamped regression.
+        """
+        section = self.cost_model.get(section_name, {})
+        samples = []
+        for sample in section.get("samples", []):
+            try:
+                nbytes = int(sample["bytes"])
+                median = float(sample["median"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if nbytes > 0 and median >= 0:
+                samples.append((nbytes, median))
+        samples.sort()
+
+        for nbytes, median in samples:
+            if nbytes == self.block_bytes:
+                return median
+
+        if len(samples) >= 2:
+            for (x0, y0), (x1, y1) in zip(samples, samples[1:]):
+                if x0 < self.block_bytes < x1:
+                    ratio = (self.block_bytes - x0) / (x1 - x0)
+                    return max(0.0, y0 + ratio * (y1 - y0))
+
+        intercept = float(section.get("intercept", 0.0) or 0.0)
+        slope = float(section.get("slope_per_byte", 0.0) or 0.0)
+        fitted = intercept + slope * self.block_bytes
+        if samples and fitted <= 0:
+            # A non-positive extrapolation is physically impossible.  Use the
+            # nearest measured point rather than reporting "negative time".
+            nearest = min(samples, key=lambda item: abs(item[0] - self.block_bytes))
+            return nearest[1]
+        return max(0.0, fitted)
 
     def estimate_prefill_ms(self, parent_length_tokens: int = 0,
                             concurrency: int = 1) -> float:
@@ -310,6 +367,8 @@ class LosslessCacheManager:
             "restore_to_gpu_count": self.restore_to_gpu_count,
             "migrate_ms_total": self.migrate_ms_total,
             "restore_ms_total": self.restore_ms_total,
+            "migrate_bytes_total": self.migrate_to_cpu_count * self.block_bytes,
+            "restore_bytes_total": self.restore_to_gpu_count * self.block_bytes,
             "gpu_size": self.gpu_size(),
             "cpu_size": self.cpu_size(),
         }

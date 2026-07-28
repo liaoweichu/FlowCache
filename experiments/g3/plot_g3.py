@@ -22,12 +22,23 @@ import yaml
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
-BASELINE_ORDER = ["no_cache", "apc_lru", "gdsf", "sizecost", "flowcache_lossless", "oracle_cost"]
+BASELINE_ORDER = [
+    "no_cache",
+    "apc_lru",
+    "gdsf",
+    "sizecost",
+    "flowcache_always_migrate",
+    "flowcache_selective_migrate_only",
+    "flowcache_lossless",
+    "oracle_cost",
+]
 BASELINE_COLORS = {
     "no_cache": "#999999",
     "apc_lru": "#66b3ff",
     "gdsf": "#3399ff",
     "sizecost": "#0066cc",
+    "flowcache_always_migrate": "#ffb3b3",
+    "flowcache_selective_migrate_only": "#ff7f7f",
     "flowcache_lossless": "#ff3333",
     "oracle_cost": "#33cc33",
 }
@@ -36,14 +47,18 @@ BASELINE_LABELS = {
     "apc_lru": "APC-LRU",
     "gdsf": "GDSF",
     "sizecost": "SizeCost-LRU",
+    "flowcache_always_migrate": "Always-Migrate",
+    "flowcache_selective_migrate_only": "Selective-Migrate-Only",
     "flowcache_lossless": "FlowCache-Lossless",
-    "oracle_cost": "Oracle-Cost",
+    "oracle_cost": "Oracle-Cost (offline lookahead)",
 }
 BASELINE_MARKERS = {
     "no_cache": "x",
     "apc_lru": "s",
     "gdsf": "^",
     "sizecost": "D",
+    "flowcache_always_migrate": "v",
+    "flowcache_selective_migrate_only": "P",
     "flowcache_lossless": "o",
     "oracle_cost": "*",
 }
@@ -56,6 +71,12 @@ def _to_float(v) -> Optional[float]:
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _to_bool(v) -> bool:
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().lower() in {"1", "true", "yes", "y"}
 
 
 def load_results(csv_path: Path) -> List[Dict]:
@@ -89,9 +110,23 @@ def aggregate(rows: List[Dict]) -> Dict:
         if key not in seen:
             seen.add(key)
             result[(cap, conc)][bl] = {
-                "p95_ttft_ms": _to_float(r.get("global_p95_ttft_ms")) or 0.0,
-                "p50_ttft_ms": _to_float(r.get("global_p50_ttft_ms") or r.get("global_p95_ttft_ms")) or 0.0,
-                "throughput_req_per_s": _to_float(r.get("global_throughput")) or 0.0,
+                "p95_ttft_ms": _to_float(
+                    r.get("global_p95_cache_delay_ms")
+                    or r.get("global_p95_ttft_ms")
+                ) or 0.0,
+                "p50_ttft_ms": _to_float(
+                    r.get("global_p50_cache_delay_ms")
+                    or r.get("global_p50_ttft_ms")
+                    or r.get("global_p95_ttft_ms")
+                ) or 0.0,
+                "throughput_req_per_s": _to_float(
+                    r.get("global_offered_load")
+                    or r.get("global_throughput")
+                ) or 0.0,
+                "ttft_metric_valid": _to_bool(r.get("ttft_metric_valid")),
+                "throughput_metric_valid": _to_bool(
+                    r.get("throughput_metric_valid")
+                ),
                 "block_hit_rate": _to_float(r.get("global_block_hit_rate")) or 0.0,
                 "miss_cost_ms": _to_float(r.get("task_miss_cost_ms")) or 0.0,
             }
@@ -120,6 +155,18 @@ def plot_g3(results_path: str, output_path: str, config: Optional[Dict] = None):
     # 收集所有并发度和容量
     concurrencies = sorted(set(c for _, c in aggregated.keys()))
     capacities = sorted(set(cap for cap, _ in aggregated.keys()))
+    all_metrics = [
+        metrics
+        for baseline_metrics in aggregated.values()
+        for metrics in baseline_metrics.values()
+    ]
+    ttft_valid = bool(all_metrics) and all(
+        metrics.get("ttft_metric_valid", False) for metrics in all_metrics
+    )
+    throughput_valid = bool(all_metrics) and all(
+        metrics.get("throughput_metric_valid", False)
+        for metrics in all_metrics
+    )
 
     n_conc = len(concurrencies)
     fig, axes = plt.subplots(2, n_conc, figsize=(5 * n_conc, 8), sharex=True)
@@ -146,7 +193,11 @@ def plot_g3(results_path: str, output_path: str, config: Optional[Dict] = None):
                              linewidth=2, markersize=7)
         ax_ttft.set_title(f"Concurrency = {conc}", fontsize=13)
         if col == 0:
-            ax_ttft.set_ylabel("p95 TTFT (ms)", fontsize=12)
+            ax_ttft.set_ylabel(
+                "p95 TTFT (ms)" if ttft_valid
+                else "Modeled p95 cache delay (ms)",
+                fontsize=12,
+            )
         ax_ttft.legend(fontsize=9)
         ax_ttft.grid(True, alpha=0.3)
         ax_ttft.set_xlabel("Capacity (GiB)", fontsize=11)
@@ -168,13 +219,22 @@ def plot_g3(results_path: str, output_path: str, config: Optional[Dict] = None):
                             label=BASELINE_LABELS.get(bl, bl),
                             linewidth=2, markersize=7)
         if col == 0:
-            ax_thr.set_ylabel("Throughput (req/s)", fontsize=12)
+            ax_thr.set_ylabel(
+                "Achieved throughput (req/s)" if throughput_valid
+                else "Offered load (req/s; trace-fixed)",
+                fontsize=12,
+            )
         ax_thr.legend(fontsize=9)
         ax_thr.grid(True, alpha=0.3)
         ax_thr.set_xlabel("Capacity (GiB)", fontsize=11)
 
-    plt.suptitle("G3: Lossless Residency — p95 TTFT & Throughput vs Capacity",
-                 fontsize=14, fontweight="bold", y=1.02)
+    title_metrics = (
+        "p95 TTFT & Throughput"
+        if ttft_valid and throughput_valid
+        else "Modeled Cache Delay & Offered Load (Diagnostic)"
+    )
+    plt.suptitle(f"G3: Lossless Residency — {title_metrics} vs Capacity",
+                  fontsize=14, fontweight="bold", y=1.02)
     plt.tight_layout()
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
