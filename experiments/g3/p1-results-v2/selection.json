@@ -1,0 +1,52 @@
+{
+  "status": "SELECTED",
+  "scientific_result": false,
+  "split": {
+    "unit": "task_id",
+    "partition": "validation",
+    "fraction": 0.2,
+    "seed": 42
+  },
+  "constraints": {
+    "min_selection_rate": 0.01,
+    "max_selection_rate": 0.99,
+    "min_gpu_bypass_rate": 0.0,
+    "max_gpu_bypass_rate": 0.99,
+    "min_gpu_bypass_transfer_reduction": 0.0,
+    "min_movement_reduction": 0.1,
+    "max_modeled_delay_increase": 0.05,
+    "max_replay_ratio": 3.0
+  },
+  "selected": {
+    "valid": true,
+    "failure_reasons": "",
+    "selection_rate": 0.2622065616673761,
+    "movement_reduction": 0.738500483486765,
+    "selective_migrations": 33263.0,
+    "always_migrations": 127201.0,
+    "gpu_bypass_rate": 0.03392260852484777,
+    "gpu_bypass_transfer_reduction": 0.016600116565332973,
+    "flowcache_transfer_ms": 3390.7862275955267,
+    "selective_migration_only_transfer_ms": 3448.0238250107504,
+    "selective_p95_cache_delay_ms": 7556.304325349629,
+    "always_p95_cache_delay_ms": 7347.4795909714885,
+    "selective_modeled_service_cost_ms": 13000041.528628964,
+    "always_modeled_service_cost_ms": 12728917.813387292,
+    "selective_migration_only_p95_cache_delay_ms": 7345.298391068354,
+    "selective_migration_only_modeled_service_cost_ms": 12725012.447925342,
+    "replay_ratio_vs_oracle": 1.0831458142402859,
+    "candidate_id": "candidate-001",
+    "minimum_net_benefit_ms": 0.0,
+    "cpu_admission_margin_ms": 0.0,
+    "gpu_admission_margin_ms": 0.0,
+    "gpu_admission_cold_start_cost_ratio": 0.5,
+    "expected_cpu_residence_steps": 100,
+    "raw_results": "/root/autodl-tmp/flowcache-data/runs/g3-p1-v2-20260728T063735Z/tuning/candidate-001.csv"
+  },
+  "n_candidates": 6,
+  "n_valid": 6,
+  "baseline_replays": 16,
+  "baseline_replays_without_reuse": 36,
+  "summary_csv": "/root/autodl-tmp/flowcache-data/runs/g3-p1-v2-20260728T063735Z/tuning/summary.csv",
+  "next": "Copy only the selected admission parameters into the frozen config, then run --task-split test exactly once."
+}

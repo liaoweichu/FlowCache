@@ -1,0 +1,176 @@
+{
+  "status": "FAIL",
+  "scope": "G3-P1 selective-migration engineering check; not scientific GO/NO-GO",
+  "checks": {
+    "required_baselines": {
+      "pass": true,
+      "found": [
+        "flowcache_always_migrate",
+        "flowcache_lossless",
+        "flowcache_selective_migrate_only",
+        "gdsf",
+        "oracle_cost",
+        "sizecost"
+      ],
+      "missing": []
+    },
+    "single_cell": {
+      "pass": true,
+      "cells": [
+        [
+          "2",
+          "4"
+        ]
+      ]
+    },
+    "transfer_cost_conservation": {
+      "pass": true,
+      "details": {
+        "flowcache_always_migrate": {
+          "pass": true,
+          "task_sum_ms": 33612.436214869376,
+          "global_ms": 33612.436214869376,
+          "abs_error_ms": 0.0
+        },
+        "flowcache_selective_migrate_only": {
+          "pass": true,
+          "task_sum_ms": 16070.812194782775,
+          "global_ms": 16070.812194782775,
+          "abs_error_ms": 0.0
+        },
+        "flowcache_lossless": {
+          "pass": true,
+          "task_sum_ms": 15810.31880772207,
+          "global_ms": 15810.31880772207,
+          "abs_error_ms": 0.0
+        }
+      }
+    },
+    "nonnegative_cost": {
+      "pass": true,
+      "details": {
+        "flowcache_always_migrate": {
+          "pass": true,
+          "negative_cost_count": 0.0
+        },
+        "flowcache_selective_migrate_only": {
+          "pass": true,
+          "negative_cost_count": 0.0
+        },
+        "flowcache_lossless": {
+          "pass": true,
+          "negative_cost_count": 0.0
+        }
+      }
+    },
+    "zero_fallback": {
+      "pass": true,
+      "details": {
+        "flowcache_always_migrate": {
+          "pass": true,
+          "fallback_count": 0.0
+        },
+        "flowcache_selective_migrate_only": {
+          "pass": true,
+          "fallback_count": 0.0
+        },
+        "flowcache_lossless": {
+          "pass": true,
+          "fallback_count": 0.0
+        }
+      }
+    },
+    "diagnostic_scope": {
+      "pass": true,
+      "latency_metric_scope": "modeled_cache_delay",
+      "controller_variant": "selective_value",
+      "gpu_admission_policy": "oracle_cost_proxy",
+      "online_feature_scope": "current_and_past_only",
+      "future_access_index_used": "False",
+      "share_count_feature_scope": "causal_past_window_including_current",
+      "task_split": "test",
+      "expected_task_split": "test"
+    },
+    "selection_accounting": {
+      "pass": true,
+      "candidates": 499800.0,
+      "selected": 171292.0,
+      "rejected": 328508.0,
+      "migrate_count": 171292.0
+    },
+    "gpu_admission_accounting": {
+      "pass": true,
+      "candidates": 394883.0,
+      "selected": 382092.0,
+      "bypassed": 12791.0,
+      "bypass_rate": 0.032391873035810606
+    },
+    "nondegenerate_gpu_admission": {
+      "pass": true,
+      "bypass_rate": 0.032391873035810606,
+      "accepted_range": [
+        0.01,
+        0.99
+      ]
+    },
+    "nondegenerate_selection": {
+      "pass": true,
+      "selection_rate": 0.34272108843537413,
+      "accepted_range": [
+        0.01,
+        0.99
+      ],
+      "reason_if_failed": "policy is operationally too close to never-migrate or always-migrate; inspect value distribution on validation data"
+    },
+    "movement_reduction_vs_always": {
+      "pass": true,
+      "selective_migrations": 171292.0,
+      "always_migrations": 502746.0,
+      "relative_reduction": 0.6592871947265617,
+      "minimum_required_reduction": 0.1,
+      "selective_restore_per_migration": 0.6871774513695911,
+      "always_restore_per_migration": 0.24002975657687978
+    },
+    "gpu_bypass_increment_vs_selective_migration_only": {
+      "pass": false,
+      "diagnostic_only": true,
+      "flowcache_transfer_ms": 15810.31880772207,
+      "selective_migration_only_transfer_ms": 16070.812194782775,
+      "relative_transfer_reduction": 0.01620909907374016,
+      "minimum_required_reduction": 0.05,
+      "flowcache_hits": 28702.0,
+      "note": "Scientific acceptance requires paired task-level cost/hit analysis; this check only rejects a movement regression."
+    },
+    "modeled_cost_guard_vs_always": {
+      "pass": true,
+      "diagnostic_only": true,
+      "selective_p95_cache_delay_ms": 8553.08620724827,
+      "always_p95_cache_delay_ms": 8413.856379396748,
+      "selective_modeled_service_cost_ms": 62968100.42516875,
+      "always_modeled_service_cost_ms": 61793990.134533204,
+      "maximum_relative_increase": 0.05
+    },
+    "modeled_cost_guard_vs_selective_migration_only": {
+      "pass": true,
+      "diagnostic_only": true,
+      "flowcache_p95_cache_delay_ms": 8553.08620724827,
+      "selective_migration_only_p95_cache_delay_ms": 8422.436541353818,
+      "flowcache_modeled_service_cost_ms": 62968100.42516875,
+      "selective_migration_only_modeled_service_cost_ms": 62005486.20746791,
+      "maximum_relative_increase": 0.05
+    },
+    "replay_complexity": {
+      "pass": true,
+      "flowcache_elapsed_s": 52.967474,
+      "always_elapsed_s": 53.67138,
+      "selective_migration_only_elapsed_s": 47.217925,
+      "oracle_elapsed_s": 50.413304,
+      "selective_ratio": 1.0506646023438577,
+      "always_ratio": 1.0646273055223676,
+      "selective_migration_only_ratio": 0.9366163542861623,
+      "engineering_threshold": 3.0
+    }
+  },
+  "next_if_pass": "Run the full single-cell trace, add fair two-tier LRU/GDSF/oracle, then measure closed-loop serving on the main cell.",
+  "next_if_fail": "Fix correctness/complexity failures first. If only selection rate or movement reduction fails, tune admission parameters on a task-grouped validation split, freeze them, and rerun test."
+}
