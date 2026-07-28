@@ -213,6 +213,53 @@ quality_check:
     - output_token_identical_rate_eq_1
     - tool_call_sequence_identical_rate_eq_1
 
+# §4.2 Closed-loop serving 配置
+# 使用 vLLM 真实 GPU serving 测量 TTFT/JCT/throughput/goodput
+# 代码在 closed_loop/ 子目录，云端执行见 closed_loop/CLOUD_RUN.md
+closed_loop:
+  enabled: true
+  # 主 cell（与 G3-P1 一致：2 GiB, c=4）
+  cell:
+    capacity_gib: 2.0         # GPU KV cache ≈ 2 GiB
+    concurrency: 4            # max_num_seqs = 4
+    cpu_capacity_gib: 2.0     # CPU tier = 2 GiB（与 GPU 等量，公平比较）
+  # vLLM 参数
+  vllm:
+    model_id: "/root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master"
+    gpu_memory_utilization: 0.70   # RTX 4090 24GB → ~2 GiB KV cache
+    block_size: 16
+    max_model_len: 8192
+    dtype: "bfloat16"
+    max_new_tokens: 64        # 聚焦 TTFT，短生成
+  # 策略（4 个，每个创建独立 vLLM 实例）
+  strategies:
+    - no_cache               # 下界：无前缀缓存
+    - apc_lru                # vLLM 原生前缀缓存（GPU-only LRU）
+    - twotier_lru            # SimpleCPUOffloadConnector（always migrate）
+    - flowcache_lossless     # FlowCacheConnector（selective migrate）
+  # FlowCache 选择性迁移参数（与 G3-P1 冻结值一致）
+  flowcache:
+    migration_mode: "threshold"    # threshold | ratio
+    minimum_net_benefit_ms: 0.0    # V_b > 0 才迁移
+    migrate_ratio: 0.5            # ratio 模式下迁移比例
+    d2h_ms_per_block: 0.10        # D2H 成本（ms/block，云端标定）
+    h2d_ms_per_block: 0.15        # H2D 成本（ms/block，云端标定）
+    prefill_ms_per_block: 5.0     # 估计 prefill 成本（ms/block，Qwen2.5-7B BS=16）
+    share_window_accesses: 1000   # 因果 share_count 滑动窗口
+    share_count_cap: 8            # share_count 上限
+  # SLO
+  slo:
+    ttft_threshold_ms: 2000       # TTFT SLO = 2s
+  # 判定条件（G3 正式门槛）
+  verdict:
+    p95_ttft_improvement_pct: 15.0   # flowcache vs twotier_lru
+    throughput_drop_threshold_pct: 5.0
+    bootstrap_samples: 1000
+    bootstrap_unit: "task_id"        # 165 个 task 聚类
+    ci_level: 0.95
+  # 输出路径
+  output_dir: "results/closed-loop/"
+
 # 输出路径（相对于 experiments/g3/ 目录）
 output:
   results_dir: "results/"

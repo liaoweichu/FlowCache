@@ -1,0 +1,11 @@
+# §4.2 Closed-Loop Serving Requirements
+# Install with: pip install -r requirements.txt
+
+# vLLM v0.7+ (KVConnectorBase_V1 with SimpleCPUOffloadConnector)
+vllm>=0.7.0
+
+# PyYAML (config parsing)
+pyyaml>=6.0
+
+# Note: torch is installed as a dependency of vllm
+# Note: transformers is installed as a dependency of vllm
