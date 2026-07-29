@@ -428,8 +428,17 @@ def _make_flowcache_connector_cls():
             )
 
             # Per-request block hash cache (for request_finished lookup)
-            self._request_block_hashes: Dict[str, List[str]] = {}
+            self._request_block_hashes: Dict[str, List[Any]] = {}
             self._request_workflow_ids: Dict[str, str] = {}
+
+            # Monkey-patch SimpleCPUOffloadScheduler.prepare_store_specs so
+            # FlowCache can filter the blocks that SimpleCPUOffload would
+            # migrate to CPU. Without this patch, request_finished() is the
+            # only override point, but SimpleCPUOffloadScheduler.request_finished()
+            # only cleans metadata and never schedules migration; the real
+            # migration decision happens in _prepare_eager_store_specs().
+            if self.scheduler_manager is not None:
+                self._patch_prepare_store_specs()
 
             logger.info(
                 "FlowCacheConnector: selective_migration=True, "
@@ -441,6 +450,105 @@ def _make_flowcache_connector_cls():
                 self._policy.minimum_net_benefit_ms,
                 self._policy.migrate_ratio,
             )
+
+        # --- Selective-migration patch for SimpleCPUOffloadScheduler ---
+
+        def _patch_prepare_store_specs(self) -> None:
+            """Patch scheduler_manager.prepare_store_specs to filter migrations.
+
+            SimpleCPUOffloadScheduler performs migration in
+            _prepare_eager_store_specs(), not in request_finished(). To make
+            selective migration effective we wrap prepare_store_specs and drop
+            low-value blocks from the store list before the store event is
+            created.
+            """
+            sm = self.scheduler_manager
+            if sm is None or hasattr(sm, "_flowcache_store_specs_patched"):
+                return
+            sm._flowcache_store_specs_patched = True
+            orig_prepare = sm.prepare_store_specs
+
+            def _wrapped_prepare(scheduler_output: "SchedulerOutput"):
+                return self._selective_store_specs(orig_prepare, scheduler_output)
+
+            sm.prepare_store_specs = _wrapped_prepare
+
+        def _selective_store_specs(
+            self,
+            orig_prepare: Any,
+            scheduler_output: "SchedulerOutput",
+        ) -> Tuple[List[int], List[int], List[str]]:
+            """Wrap prepare_store_specs and filter low-value blocks."""
+            store_gpu, store_cpu, store_req_ids = orig_prepare(scheduler_output)
+            if (
+                not store_gpu
+                or not self._selective_enabled
+                or self._policy is None
+                or self._tracker is None
+            ):
+                return store_gpu, store_cpu, store_req_ids
+
+            sm = self.scheduler_manager
+            if sm is None:
+                return store_gpu, store_cpu, store_req_ids
+
+            from vllm.v1.core.kv_cache_utils import get_block_hash
+
+            keep_gpu: List[int] = []
+            keep_cpu: List[int] = []
+            free_cpu_blocks: List[Any] = []
+            dropped_gpu: List[int] = []
+
+            for gpu_id, cpu_id in zip(store_gpu, store_cpu):
+                # vLLM v0.26.0+: BlockPool.blocks is a list indexed by block_id.
+                gpu_block = (
+                    sm._gpu_block_pool.blocks[gpu_id]
+                    if 0 <= gpu_id < len(sm._gpu_block_pool.blocks)
+                    else None
+                )
+                if gpu_block is None or gpu_block.block_hash is None:
+                    keep_gpu.append(gpu_id)
+                    keep_cpu.append(cpu_id)
+                    continue
+
+                # Strip group id to match tracker keys (bytes)
+                base_hash = get_block_hash(gpu_block.block_hash)
+                # Tracker keys are the raw block-hash bytes from request.block_hashes
+                v = self._policy.tracker.compute_migration_value(
+                    base_hash,
+                    self._policy.d2h_ms,
+                    self._policy.h2d_ms,
+                    self._policy.hold_cost_ms,
+                )
+                if v > self._policy.minimum_net_benefit_ms:
+                    keep_gpu.append(gpu_id)
+                    keep_cpu.append(cpu_id)
+                else:
+                    cpu_block = (
+                        sm.cpu_block_pool.blocks[cpu_id]
+                        if 0 <= cpu_id < len(sm.cpu_block_pool.blocks)
+                        else None
+                    )
+                    if cpu_block is not None:
+                        free_cpu_blocks.append(cpu_block)
+                    dropped_gpu.append(gpu_id)
+
+            if dropped_gpu:
+                # Release CPU blocks that were allocated but will not be
+                # transferred; reset their hashes so they are not mistaken for
+                # valid cached data by the load path.
+                for blk in free_cpu_blocks:
+                    blk.reset_hash()
+                sm.cpu_block_pool.free_blocks(free_cpu_blocks)
+                sm._in_flight_store_gpu_blocks.difference_update(dropped_gpu)
+                logger.debug(
+                    "FlowCacheConnector: dropped %d low-value blocks from store",
+                    len(dropped_gpu),
+                )
+
+            if not keep_gpu:
+                return [], [], []
+            return keep_gpu, keep_cpu, store_req_ids
 
         # --- Intercept request lifecycle for tracking ---
 
@@ -599,9 +707,47 @@ class FlowCacheConnector:
 
     vLLM instantiates connectors by calling the class with (vllm_config,
     role, kv_cache_config). We forward to the lazily-created real class.
+
+    vLLM also queries class-level methods (e.g. requires_piecewise_for_cudagraph)
+    before instantiation. We lazily create the real class and delegate those
+    calls as well.
     """
 
     _real_cls = None
+
+    @classmethod
+    def _ensure_real_cls(cls):
+        if cls._real_cls is None:
+            cls._real_cls = _make_flowcache_connector_cls()
+        return cls._real_cls
+
+    @classmethod
+    def get_required_kvcache_layout(cls, vllm_config: "VllmConfig") -> str | None:
+        real_cls = cls._ensure_real_cls()
+        return real_cls.get_required_kvcache_layout(vllm_config)
+
+    @classmethod
+    def requires_piecewise_for_cudagraph(cls, extra_config: dict[str, Any]) -> bool:
+        real_cls = cls._ensure_real_cls()
+        return real_cls.requires_piecewise_for_cudagraph(extra_config)
+
+    @classmethod
+    def build_kv_connector_stats(cls, data: dict[str, Any] | None = None):
+        real_cls = cls._ensure_real_cls()
+        return real_cls.build_kv_connector_stats(data)
+
+    @classmethod
+    def build_prom_metrics(
+        cls,
+        vllm_config: "VllmConfig",
+        metric_types: Any,
+        labelnames: list[str],
+        per_engine_labelvalues: dict[int, list[object]],
+    ) -> Any | None:
+        real_cls = cls._ensure_real_cls()
+        return real_cls.build_prom_metrics(
+            vllm_config, metric_types, labelnames, per_engine_labelvalues
+        )
 
     def __new__(
         cls,
@@ -609,6 +755,5 @@ class FlowCacheConnector:
         role: Any,
         kv_cache_config: Any,
     ):
-        if cls._real_cls is None:
-            cls._real_cls = _make_flowcache_connector_cls()
-        return cls._real_cls(vllm_config, role, kv_cache_config)
+        real_cls = cls._ensure_real_cls()
+        return real_cls(vllm_config, role, kv_cache_config)

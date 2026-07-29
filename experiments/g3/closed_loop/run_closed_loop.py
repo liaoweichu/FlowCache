@@ -1,10 +1,9 @@
 """§4.2 Closed-loop serving CLI runner.
 
-Runs the 4-strategy closed-loop serving experiment:
-  1. no_cache          — lower bound (no prefix caching)
-  2. apc_lru           — vLLM native prefix caching (GPU-only LRU)
-  3. twotier_lru       — SimpleCPUOffloadConnector (always migrate)
-  4. flowcache_lossless — FlowCacheConnector (selective migrate)
+Runs the 3-strategy closed-loop serving experiment:
+  1. apc_lru           — vLLM native prefix caching (GPU-only LRU)
+  2. twotier_lru       — SimpleCPUOffloadConnector (always migrate, control)
+  3. flowcache_lossless — FlowCacheConnector (selective migrate, treatment)
 
 Main cell: 2 GiB KV, c=4, Qwen2.5-7B-Instruct BF16.
 
@@ -13,17 +12,20 @@ G3 pass criteria (closed-loop):
   - Throughput drop ≤ 5% (flowcache vs twotier_lru)
   - Bootstrap CI excludes 0 (flowcache vs twotier_lru, per-task)
 
+Note: no_cache (lower bound) was trimmed — verdict only requires
+flowcache_lossless vs twotier_lru, and apc_lru is kept for narrative.
+
 Usage:
-  # Full run (all 4 strategies, all episodes)
+  # Full run (all 3 strategies, all episodes)
   python run_closed_loop.py \\
     --model /root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master \\
     --trace-dir experiments/e1/traces/bf16/tau_bench \\
     --output-dir results/closed-loop
 
-  # Smoke test (100 requests, 2 strategies)
+  # Smoke test (50 requests, 2 strategies)
   python run_closed_loop.py \\
     --model ... --trace-dir ... \\
-    --strategies no_cache,flowcache_lossless \\
+    --strategies apc_lru,flowcache_lossless \\
     --max-requests 100
 """
 
@@ -76,8 +78,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--strategies",
-        default="no_cache,apc_lru,twotier_lru,flowcache_lossless",
-        help="Comma-separated strategy names (default: all 4).",
+        default="apc_lru,twotier_lru,flowcache_lossless",
+        help="Comma-separated strategy names (default: 3 strategies, no_cache trimmed).",
     )
     p.add_argument(
         "--max-episodes", type=int, default=None,
@@ -108,8 +110,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="KV cache block size (default: 16).",
     )
     p.add_argument(
-        "--max-model-len", type=int, default=8192,
-        help="Max model context length (default: 8192).",
+        "--max-model-len", type=int, default=24576,
+        help="Max model context length (default: 24576, covers tau-bench max prompt).",
     )
     p.add_argument(
         "--slo-threshold-ms", type=float, default=2000.0,
@@ -151,6 +153,17 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument(
         "--smoke", action="store_true",
         help="Smoke test: 50 requests, 2 strategies only.",
+    )
+    p.add_argument(
+        "--arrival-replay", action="store_true",
+        help="Enable arrival-time replay (submit by trace arrival_time_ms). "
+             "τ-bench inter-arrival ≥1s, so this is very slow and throughput "
+             "becomes arrival-rate-limited. Default: batch submit.",
+    )
+    p.add_argument(
+        "--time-scale", type=float, default=1.0,
+        help="Arrival time replay speedup factor (default: 1.0 = real time). "
+             "10.0 = 10x faster (arrivals compressed).",
     )
     p.add_argument(
         "-v", "--verbose", action="store_true",
@@ -351,7 +364,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Smoke test overrides
     if args.smoke:
         args.max_requests = args.max_requests or 50
-        args.strategies = "no_cache,flowcache_lossless"
+        args.strategies = "apc_lru,flowcache_lossless"
         logger.info("SMOKE MODE: max_requests=%d, strategies=%s",
                      args.max_requests, args.strategies)
 
@@ -419,6 +432,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 requests=requests,
                 output_dir=output_dir,
                 max_new_tokens=args.max_new_tokens,
+                arrival_time_replay=args.arrival_replay,
+                time_scale=args.time_scale,
             )
             all_metrics[sname] = metrics
         except Exception as e:

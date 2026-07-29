@@ -61,45 +61,35 @@ cost_calibration:
   r2_threshold: 0.95
 
 # Baselines（复用 experiments/e1/compare_oracle.py 的类）
+# G3′′′ 精简：裁剪离线 oracles、冗余消融、不公平 GPU-only 与下界。
+# 保留：apc_lru（vLLM 原生 GPU-only 参照）、§4.1 公平 two-tier、FlowCache 主方法。
+# 离线 oracles（oracle_cost / twotier_oracle_cost）需 future_accesses，不可部署，仅诊断用，已裁剪。
+# flowcache_always_migrate 与 twotier_lru 语义等价（见 FROZEN.md），已裁剪。
+# flowcache_selective_migrate_only 的 GPU admission 增量已被降级为可选增强，已裁剪。
+# no_cache / gdsf / sizecost 不参与 verdict 主比较，已裁剪。
 baselines:
-  lower_bound:
-    - name: no_cache
-      enabled: true
+  lower_bound: []  # 已裁剪：closed-loop 下界由 apc_lru 充当
   simple_heuristic:
     - name: apc_lru
       enabled: true
-    - name: gdsf
-      enabled: true
-    - name: sizecost
-      enabled: true
-  oracle:
-    - name: oracle_cost
-      enabled: true
+      # vLLM 原生前缀缓存（GPU-only LRU），用于展示 GPU-only 与 two-tier 的差距
+  oracle: []  # 已裁剪：离线 oracle 不可部署
   # §4.1 公平 two-tier baselines：相同 GPU+CPU 容量，确保比较公平
   two_tier_fair:
     - name: twotier_lru
       enabled: true
-      # Two-tier LRU：GPU LRU + CPU LRU，满时总是迁移
+      # Two-tier LRU：GPU LRU + CPU LRU，满时总是迁移（控制组）
     - name: twotier_gdsf
       enabled: true
       # Two-tier GDSF：GPU GDSF + CPU GDSF
     - name: twotier_sizecost
       enabled: true
       # Two-tier SizeCost-LRU
-    - name: twotier_oracle_cost
-      enabled: true
-      # Two-tier Oracle-Cost（离线诊断上界，读取 future_accesses）
-  tiered_ablation:
-    - name: flowcache_always_migrate
-      enabled: true
-      # 所有 miss 都进入 GPU；所有 GPU victim 都迁移到 CPU。
-    - name: flowcache_selective_migrate_only
-      enabled: true
-      # 所有 miss 都进入 GPU；仅保留上一轮 selective CPU migration。
+  tiered_ablation: []  # 已裁剪：消融已完成（见 FROZEN.md）
   flowcache:
     - name: flowcache_lossless
       enabled: true
-      # 因果 cost-aware GPU admission/bypass + selective CPU migration。
+      # 因果 cost-aware GPU admission/bypass + selective CPU migration（主方法）
 
 # FlowCache-Lossless controller 配置（G3′ 修复后）
 flowcache:
@@ -190,7 +180,7 @@ grid:
 smoke_test:
   enabled: true
   cell: {capacity_gib: 1, concurrency: 4}  # 主 cell
-  baselines: [no_cache, apc_lru, gdsf, sizecost, twotier_lru, twotier_gdsf, twotier_sizecost, flowcache_always_migrate, flowcache_selective_migrate_only, oracle_cost, twotier_oracle_cost, flowcache_lossless]
+  baselines: [apc_lru, twotier_lru, twotier_gdsf, twotier_sizecost, flowcache_lossless]
   episodes: 100
   # 用于 W8 前置验证，防止无损驻留不成立时白做量化
 
@@ -200,7 +190,7 @@ smoke_test:
 # 在 held-out test 完成该单 cell 全 trace。不要直接恢复 9-cell 网格。
 protocol_test:
   cell: {capacity_gib: 2, concurrency: 4}
-  baselines: [gdsf, sizecost, twotier_lru, twotier_gdsf, twotier_sizecost, flowcache_always_migrate, flowcache_selective_migrate_only, oracle_cost, twotier_oracle_cost, flowcache_lossless]
+  baselines: [twotier_lru, twotier_gdsf, twotier_sizecost, flowcache_lossless]
   episodes: 100
   expected_controller_variant: "selective_value"
   output_is_diagnostic_only: true
@@ -228,15 +218,15 @@ closed_loop:
     model_id: "/root/autodl-tmp/models/Qwen2.5-7B-Instruct/snapshots/master"
     gpu_memory_utilization: 0.70   # RTX 4090 24GB → ~2 GiB KV cache
     block_size: 16
-    max_model_len: 8192
+    max_model_len: 24576      # 根据 τ-bench trace 最大 prompt 长度（23223 tokens）+ max_new_tokens 余量设置
     dtype: "bfloat16"
     max_new_tokens: 64        # 聚焦 TTFT，短生成
-  # 策略（4 个，每个创建独立 vLLM 实例）
+  # 策略（3 个，每个创建独立 vLLM 实例）
+  # 已裁剪：no_cache 下界诊断（verdict 不需要，节省 ~25% 实验时间）
   strategies:
-    - no_cache               # 下界：无前缀缓存
     - apc_lru                # vLLM 原生前缀缓存（GPU-only LRU）
-    - twotier_lru            # SimpleCPUOffloadConnector（always migrate）
-    - flowcache_lossless     # FlowCacheConnector（selective migrate）
+    - twotier_lru            # SimpleCPUOffloadConnector（always migrate，控制组）
+    - flowcache_lossless     # FlowCacheConnector（selective migrate，处理组）
   # FlowCache 选择性迁移参数（与 G3-P1 冻结值一致）
   flowcache:
     migration_mode: "threshold"    # threshold | ratio

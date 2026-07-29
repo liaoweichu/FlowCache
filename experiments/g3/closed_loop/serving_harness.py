@@ -3,11 +3,11 @@
 Replays τ-bench request traces through vLLM with different cache strategies,
 measuring real TTFT, JCT, throughput, and SLO goodput.
 
-Strategies:
-  1. no_cache          — vLLM with enable_prefix_caching=False
-  2. apc_lru           — vLLM with enable_prefix_caching=True (native LRU)
-  3. twotier_lru       — vLLM + SimpleCPUOffloadConnector (always migrate)
-  4. flowcache_lossless — vLLM + FlowCacheConnector (selective migrate)
+Strategies (no_cache lower bound trimmed — verdict only requires
+flowcache_lossless vs twotier_lru, apc_lru kept for narrative):
+  1. apc_lru           — vLLM with enable_prefix_caching=True (native LRU)
+  2. twotier_lru       — vLLM + SimpleCPUOffloadConnector (always migrate)
+  3. flowcache_lossless — vLLM + FlowCacheConnector (selective migrate)
 
 Main cell: 2 GiB KV cache, c=4 concurrency, Qwen2.5-7B-Instruct BF16.
 
@@ -257,18 +257,25 @@ class MetricsCollector:
                 step_id=req.step_id if req else 0,
             )
 
-            # Extract metrics from vLLM RequestOutput
-            try:
-                m = output.metrics
-                # vLLM metrics: arrival_time, first_token_time, finished_time
-                # (all in seconds, monotonic clock)
-                if hasattr(m, "arrival_time") and hasattr(m, "first_token_time"):
-                    if m.first_token_time and m.arrival_time is not None:
-                        rm.ttft = (m.first_token_time - m.arrival_time) * 1000.0  # ms
-                    if hasattr(m, "finished_time") and m.finished_time:
-                        rm.jct = (m.finished_time - m.arrival_time) * 1000.0  # ms
-            except (AttributeError, TypeError):
-                pass
+            # Extract metrics from vLLM RequestOutput (vLLM 0.26+)
+            #
+            # All real inference timings use engine-core MONOTONIC clock:
+            #   scheduled_ts → first_token_ts → last_token_ts
+            # These are in the same time domain and can be subtracted.
+            #
+            # first_token_latency is wall-clock (time.time() - arrival_time)
+            # and includes queue wait; do NOT use it for TTFT.
+            m = output.metrics
+            if m is not None:
+                sts = getattr(m, "scheduled_ts", 0.0)
+                fts = getattr(m, "first_token_ts", 0.0)
+                lts = getattr(m, "last_token_ts", 0.0)
+                # TTFT = prefill time (seconds, monotonic)
+                if fts > 0 and sts > 0:
+                    rm.ttft = (fts - sts) * 1000.0  # s → ms
+                # JCT = total compute time (prefill + decode)
+                if lts > 0 and sts > 0:
+                    rm.jct = (lts - sts) * 1000.0  # s → ms
 
             # Token counts
             try:
@@ -277,10 +284,10 @@ class MetricsCollector:
             except (AttributeError, IndexError):
                 pass
 
-            # Cached tokens (prefix cache hits)
+            # Cached tokens (prefix cache hits) — at RequestOutput level
             try:
-                if hasattr(output, "metrics") and hasattr(output.metrics, "num_cached_tokens"):
-                    rm.cached_tokens = output.metrics.num_cached_tokens or 0
+                if hasattr(output, "num_cached_tokens"):
+                    rm.cached_tokens = output.num_cached_tokens or 0
             except AttributeError:
                 pass
 
@@ -403,7 +410,7 @@ class ServingHarness:
         gpu_memory_utilization: float = 0.70,
         max_num_seqs: int = 4,
         block_size: int = 16,
-        max_model_len: int = 8192,
+        max_model_len: int = 24576,
         cpu_capacity_bytes: int = 2 * (1024**3),
         dtype: str = "bfloat16",
         flowcache_config: Optional[Dict[str, Any]] = None,
@@ -426,6 +433,8 @@ class ServingHarness:
         output_dir: Path,
         max_requests: Optional[int] = None,
         max_new_tokens: int = 64,
+        arrival_time_replay: bool = False,
+        time_scale: float = 1.0,
     ) -> StrategyMetrics:
         """Run one strategy and return metrics.
 
@@ -433,8 +442,14 @@ class ServingHarness:
             strategy: cache strategy to use
             requests: serving requests (will be truncated if max_requests)
             output_dir: directory for output CSV files
-            max_requests: limit number of requests (for smoke tests)
             max_new_tokens: max generation length per request
+            arrival_time_replay: if True, submit requests by their trace
+                arrival_time_ms (sequential replay) instead of batch
+                submission. Note: τ-bench inter-arrival ≥1s, so replay is
+                very slow and throughput becomes arrival-rate-limited.
+                Default False (batch submit) for saturated-capacity benchmark.
+            time_scale: multiplier for arrival intervals (>1 = faster).
+                1.0 = real time, 10.0 = 10x speedup.
         """
         if max_requests:
             requests = requests[:max_requests]
@@ -448,9 +463,6 @@ class ServingHarness:
         llm = self._create_llm(strategy)
 
         try:
-            # Prepare chat messages
-            messages_list = [req.messages for req in requests]
-
             # Sampling parameters — short generation for TTFT measurement
             from vllm import SamplingParams
             sampling_params = SamplingParams(
@@ -460,18 +472,26 @@ class ServingHarness:
                 seed=42,
             )
 
-            logger.info("Sending %d requests to vLLM...", len(requests))
             t_start = time.perf_counter()
 
-            # Use llm.chat() for chat-template-aware prefix caching
-            outputs = llm.chat(
-                messages_list,
-                sampling_params=sampling_params,
-            )
+            if arrival_time_replay and len(requests) > 1:
+                outputs = self._run_arrival_replay(
+                    llm, requests, sampling_params, time_scale,
+                )
+            else:
+                # Fallback: batch submission (smoke test only)
+                messages_list = [req.messages for req in requests]
+                logger.info(
+                    "Batch-submitting %d requests to vLLM...", len(requests),
+                )
+                outputs = llm.chat(
+                    messages_list,
+                    sampling_params=sampling_params,
+                )
 
             wall_time = time.perf_counter() - t_start
             logger.info(
-                "vLLM completed %d requests in %.1fs (wall)", len(outputs), wall_time
+                "vLLM completed %d requests in %.1fs (wall)", len(outputs), wall_time,
             )
 
             # Collect metrics
@@ -526,6 +546,99 @@ class ServingHarness:
             torch.cuda.empty_cache()
             logger.info("vLLM instance cleaned up")
 
+    def _run_arrival_replay(
+        self,
+        llm,
+        requests: List[ServingRequest],
+        sampling_params,
+        time_scale: float = 1.0,
+    ) -> list:
+        """Submit requests by trace arrival time, stepping the engine inline.
+
+        Instead of batch-submitting all requests at once (which causes all
+        requests to queue simultaneously and distorts prefill timing), this
+        method replays requests at their original arrival times. The engine
+        is stepped inline so that submitted requests are processed while
+        later requests wait for their arrival slot.
+
+        Args:
+            llm: vLLM LLM instance
+            requests: serving requests sorted by arrival_time_ms
+            sampling_params: vLLM SamplingParams
+            time_scale: multiplier for arrival intervals (>1 = faster)
+
+        Returns:
+            list of RequestOutput in original request order
+        """
+        t0 = time.perf_counter()
+        first_arrival_ms = requests[0].arrival_time_ms
+
+        # request_id → original index in requests list
+        rid_to_idx: dict[str, int] = {}
+        finished: list = []
+        next_submit = 0
+
+        logger.info(
+            "Arrival-time replay: %d requests, time_scale=%.1fx, "
+            "span=%.1fs",
+            len(requests),
+            time_scale,
+            (requests[-1].arrival_time_ms - first_arrival_ms) / 1000.0,
+        )
+
+        while next_submit < len(requests) or llm.llm_engine.has_unfinished_requests():
+            # --- Submit all requests whose arrival time has passed ---
+            now = time.perf_counter()
+            elapsed_ms = (now - t0) * 1000.0 * time_scale
+
+            while next_submit < len(requests):
+                req = requests[next_submit]
+                relative_arrival = req.arrival_time_ms - first_arrival_ms
+                if relative_arrival > elapsed_ms:
+                    break
+                rids = llm.enqueue_chat(
+                    [req.messages],
+                    sampling_params=sampling_params,
+                    use_tqdm=False,
+                )
+                for rid in rids:
+                    rid_to_idx[rid] = next_submit
+                next_submit += 1
+
+            # --- Step the engine to process queued requests ---
+            if llm.llm_engine.has_unfinished_requests():
+                step_outputs = llm.llm_engine.step()
+                for o in step_outputs:
+                    if o.finished:
+                        finished.append(o)
+            elif next_submit < len(requests):
+                # No active requests but more to come — wait for next arrival
+                next_req = requests[next_submit]
+                wait_ms = (
+                    (next_req.arrival_time_ms - first_arrival_ms) - elapsed_ms
+                ) / time_scale
+                if wait_ms > 0:
+                    time.sleep(min(wait_ms / 1000.0, 0.5))
+
+        # --- Reorder outputs to match original request order ---
+        output_by_rid: dict[str, object] = {}
+        for o in finished:
+            rid = getattr(o, "request_id", None) or getattr(o, "id", "")
+            if rid:
+                output_by_rid[rid] = o
+
+        outputs = []
+        for rid, idx in rid_to_idx.items():
+            o = output_by_rid.get(rid)
+            if o is not None:
+                outputs.append(o)
+
+        logger.info(
+            "Arrival replay done: %d/%d requests completed",
+            len(outputs), len(requests),
+        )
+        return outputs
+
     def _create_llm(self, strategy: Strategy):
         """Create a vLLM LLM instance configured for the given strategy."""
         from vllm import LLM
@@ -559,11 +672,11 @@ class ServingHarness:
             from vllm.config import KVTransferConfig
             kt_cfg = KVTransferConfig(
                 kv_connector="SimpleCPUOffloadConnector",
-                kv_connector_module=(
+                kv_connector_module_path=(
                     "vllm.distributed.kv_transfer.kv_connector.v1."
                     "simple_cpu_offload_connector"
                 ),
-                kv_role="producer",
+                kv_role="kv_producer",
                 kv_connector_extra_config={
                     "cpu_bytes_to_use": str(self.cpu_capacity_bytes),
                 },
@@ -609,8 +722,8 @@ class ServingHarness:
             }
             kt_cfg = KVTransferConfig(
                 kv_connector="FlowCacheConnector",
-                kv_connector_module="closed_loop.flowcache_connector",
-                kv_role="producer",
+                kv_connector_module_path="closed_loop.flowcache_connector",
+                kv_role="kv_producer",
                 kv_connector_extra_config=fc_cfg,
             )
             common_kwargs["kv_transfer_config"] = kt_cfg

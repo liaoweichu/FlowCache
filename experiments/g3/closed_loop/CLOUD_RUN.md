@@ -110,7 +110,7 @@ python experiments/g3/closed_loop/run_closed_loop.py \
   --max-num-seqs 4 \
   --cpu-capacity-gib 2.0 \
   --block-size 16 \
-  --max-model-len 8192 \
+  --max-model-len 24576 \
   --max-new-tokens 64 \
   --slo-threshold-ms 2000 \
   --bootstrap-samples 1000 \
