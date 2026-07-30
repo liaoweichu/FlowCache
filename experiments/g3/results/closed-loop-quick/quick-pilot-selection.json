@@ -1,0 +1,78 @@
+{
+  "tasks": {
+    "airline-0": {
+      "domain": "airline",
+      "workflows": [
+        "airline-0_seed161718",
+        "airline-0_seed456"
+      ],
+      "n_requests": 60,
+      "n_workflows": 2
+    },
+    "airline-10": {
+      "domain": "airline",
+      "workflows": [
+        "airline-10_seed123",
+        "airline-10_seed42"
+      ],
+      "n_requests": 21,
+      "n_workflows": 2
+    },
+    "airline-11": {
+      "domain": "airline",
+      "workflows": [
+        "airline-11_seed42",
+        "airline-11_seed131415"
+      ],
+      "n_requests": 60,
+      "n_workflows": 2
+    },
+    "airline-12": {
+      "domain": "airline",
+      "workflows": [
+        "airline-12_seed192021",
+        "airline-12_seed789"
+      ],
+      "n_requests": 30,
+      "n_workflows": 2
+    },
+    "retail-0": {
+      "domain": "retail",
+      "workflows": [
+        "retail-0_seed131415",
+        "retail-0_seed456"
+      ],
+      "n_requests": 38,
+      "n_workflows": 2
+    },
+    "retail-100": {
+      "domain": "retail",
+      "workflows": [
+        "retail-100_seed789",
+        "retail-100_seed161718"
+      ],
+      "n_requests": 50,
+      "n_workflows": 2
+    },
+    "retail-101": {
+      "domain": "retail",
+      "workflows": [
+        "retail-101_seed456",
+        "retail-101_seed123"
+      ],
+      "n_requests": 46,
+      "n_workflows": 2
+    },
+    "retail-102": {
+      "domain": "retail",
+      "workflows": [
+        "retail-102_seed101112",
+        "retail-102_seed456"
+      ],
+      "n_requests": 42,
+      "n_workflows": 2
+    }
+  },
+  "total_workflows": 16,
+  "total_requests": 347
+}

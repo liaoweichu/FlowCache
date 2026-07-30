@@ -1,0 +1,81 @@
+{
+  "experiment": "g3_closed_loop_pilot",
+  "ttft_metric_valid": true,
+  "throughput_metric_valid": true,
+  "pass_criteria": {
+    "p95_ttft_improvement_pct": ">= 15%",
+    "throughput_drop_pct": "<= 5%",
+    "bootstrap_ci_excludes_zero": true
+  },
+  "checks": {
+    "p95_ttft_improvement": {
+      "control_p95_ms": 801.2285679578781,
+      "treatment_p95_ms": 840.5266143381596,
+      "improvement_pct": -4.904723564767776,
+      "threshold_pct": 15.0,
+      "pass": false
+    },
+    "throughput_drop": {
+      "control_throughput": 5.577800885784219,
+      "treatment_throughput": 4.768870317812137,
+      "drop_pct": 14.50267918372187,
+      "threshold_pct": 5.0,
+      "pass": false
+    },
+    "bootstrap_ci_ttft": {
+      "p95_diff_ms": -39.29804638028145,
+      "ci_low_ms": -192.06233136355877,
+      "ci_high_ms": 102.86731645464897,
+      "n_tasks": 8,
+      "ci_excludes_zero": false,
+      "pass": false
+    }
+  },
+  "verdict": "PILOT_FAIL",
+  "strategy_summaries": {
+    "twotier_lru": {
+      "strategy": "twotier_lru",
+      "total_requests": 347,
+      "successful_requests": 347,
+      "failed_requests": 0,
+      "ttft_p50": 105.44119030237198,
+      "ttft_p95": 801.2285679578781,
+      "ttft_p99": 1151.4294762164354,
+      "ttft_mean": 230.06778779394003,
+      "jct_p50": 441.8497998267412,
+      "jct_p95": 1694.8681753128767,
+      "jct_p99": 2196.069296449423,
+      "jct_mean": 702.195719034768,
+      "throughput_req_per_s": 5.577800885784219,
+      "total_time_s": 62.21089764684439,
+      "slo_threshold_ms": 2000.0,
+      "goodput_rate": 1.0,
+      "avg_cached_tokens": 4065.936599423631,
+      "total_cached_tokens": 1410880,
+      "total_prompt_tokens": 1738458,
+      "total_output_tokens": 5537
+    },
+    "flowcache_lossless": {
+      "strategy": "flowcache_lossless",
+      "total_requests": 347,
+      "successful_requests": 347,
+      "failed_requests": 0,
+      "ttft_p50": 98.40843640267849,
+      "ttft_p95": 840.5266143381596,
+      "ttft_p99": 1399.0016113966703,
+      "ttft_mean": 239.44175042083182,
+      "jct_p50": 452.5480177253485,
+      "jct_p95": 2329.673942178488,
+      "jct_p99": 3085.5083726346493,
+      "jct_mean": 823.1851089455896,
+      "throughput_req_per_s": 4.768870317812137,
+      "total_time_s": 72.76356387883425,
+      "slo_threshold_ms": 2000.0,
+      "goodput_rate": 1.0,
+      "avg_cached_tokens": 3806.2478386167145,
+      "total_cached_tokens": 1320768,
+      "total_prompt_tokens": 1738458,
+      "total_output_tokens": 5537
+    }
+  }
+}

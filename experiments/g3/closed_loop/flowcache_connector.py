@@ -265,9 +265,11 @@ class FlowCacheMigrationPolicy:
             return [], list(block_ids)
 
         if self.mode == "ratio":
-            # Migrate top-K by value
+            # Migrate top-K by value.
+            # When migrate_ratio is 0, K=0 → migrate nothing.
+            # When migrate_ratio is 1, K=len(values) → migrate all.
             values.sort(key=lambda x: -x[0])
-            k = max(1, int(len(values) * self.migrate_ratio))
+            k = int(len(values) * self.migrate_ratio)
             migrate_set = set(vid for _, vid, _ in values[:k])
         else:
             # Threshold: migrate if V_b > minimum_net_benefit_ms
@@ -541,6 +543,12 @@ def _make_flowcache_connector_cls():
                     blk.reset_hash()
                 sm.cpu_block_pool.free_blocks(free_cpu_blocks)
                 sm._in_flight_store_gpu_blocks.difference_update(dropped_gpu)
+                # Release GPU touch references (fix GPU ref leak)
+                for gid in dropped_gpu:
+                    if 0 <= gid < len(sm._gpu_block_pool.blocks):
+                        gb = sm._gpu_block_pool.blocks[gid]
+                        if hasattr(gb, '_touch_count') and gb._touch_count > 0:
+                            gb._touch_count -= 1
                 logger.debug(
                     "FlowCacheConnector: dropped %d low-value blocks from store",
                     len(dropped_gpu),
@@ -606,12 +614,13 @@ def _make_flowcache_connector_cls():
             This is the KEY override. The parent (SimpleCPUOffloadConnector)
             stores ALL blocks to CPU. FlowCache filters block_ids by R-value:
               - High-R blocks → store to CPU (migrate)
-              - Low-R blocks → evict directly (no D2H cost)
+              - Low-R (new) blocks → evict directly (no D2H cost)
+              - Cache-hit blocks → always migrate (proven reuse value)
 
-            Note: `block_ids` contains ALL blocks (prefix + generated),
-            but `block_hashes` only covers PREFIX blocks. We only evaluate
-            the prefix blocks for R-value; generated blocks are unique to
-            this request and never worth migrating.
+            block_ids = [prefix_0 ... prefix_N, generated_0 ... generated_M].
+            We evaluate only prefix blocks that have hashes in the tracker
+            (= newly computed). Cache-hit prefix blocks (no hash tracked)
+            are migrated unconditionally. Generated blocks are not migrated.
             """
             if not self._selective_enabled or self._policy is None:
                 return super().request_finished(request, block_ids)
@@ -620,37 +629,51 @@ def _make_flowcache_connector_cls():
             block_hashes = self._request_block_hashes.get(req_id, [])
 
             if not block_hashes:
-                # No prefix block hashes available — can't evaluate R-value
-                logger.debug(
-                    "FlowCacheConnector: block_hashes unavailable for "
-                    "req_id=%s, migrating all %d blocks",
-                    req_id, len(block_ids),
-                )
+                # No hashes at all — migrate everything (fallback to parent)
                 result = super().request_finished(request, block_ids)
                 self._cleanup_request(req_id)
                 return result
 
-            # Only evaluate PREFIX blocks for selective migration.
+            # Determine prefix count from request metadata
             # block_ids = [prefix_blocks..., generated_blocks...]
-            # block_hashes = [prefix_block_hashes...]
-            # The first len(block_hashes) block_ids correspond to prefix.
-            n_prefix = min(len(block_hashes), len(block_ids))
+            # Use num_prompt_tokens or num_computed_tokens to split.
+            prompt_tokens = getattr(request, 'num_prompt_tokens', 0)
+            block_size = getattr(request, 'block_size', 16)
+            if hasattr(self, '_vllm_config'):
+                block_size = self._vllm_config.scheduler_config.block_size
+            n_prefix = prompt_tokens // max(1, block_size)
+            n_prefix = min(n_prefix, len(block_ids))
             prefix_ids = block_ids[:n_prefix]
-            prefix_hashes = block_hashes[:n_prefix]
 
+            # Split prefix blocks: hashed (newly computed) vs unhashed (cache hits).
+            # Cache-hit blocks have proven reuse value → always migrate.
+            hash_set = set(block_hashes)
+            hashed_ids: List[int] = []
+            cached_ids: List[int] = []
+            for bid, bhash in zip(prefix_ids, block_hashes[:len(prefix_ids)]):
+                if bhash and bhash in hash_set:
+                    hashed_ids.append(bid)
+                else:
+                    cached_ids.append(bid)
+            # Remaining prefix blocks beyond block_hashes length are cache hits
+            if len(prefix_ids) > len(block_hashes):
+                cached_ids.extend(prefix_ids[len(block_hashes):])
+
+            # Evaluate newly-computed blocks for selective migration
             migrate_ids, evict_ids = self._policy.select_blocks_for_migration(
-                block_hashes=prefix_hashes,
-                block_ids=prefix_ids,
+                block_hashes=[h for h in block_hashes[:len(hashed_ids)] if h],
+                block_ids=hashed_ids,
             )
 
-            if not migrate_ids:
-                # No blocks worth migrating — skip D2H entirely
+            # Always migrate cache-hit blocks (they've proven their value)
+            final_migrate = list(cached_ids) + migrate_ids
+
+            if not final_migrate:
                 self._cleanup_request(req_id)
                 return False, None
 
-            # Store only high-R blocks to CPU via parent
-            result = super().request_finished(request, migrate_ids)
-
+            # Store high-R + cache-hit blocks to CPU via parent
+            result = super().request_finished(request, final_migrate)
             self._cleanup_request(req_id)
             return result
 

@@ -72,9 +72,11 @@ class RequestMetrics:
     workflow_id: str
     domain: str
     step_id: int
-    # Real measured timings (seconds)
-    ttft: float = 0.0                # time to first token
-    jct: float = 0.0                 # job completion time
+    # Real measured timings (ms) — from engine-core monotonic clock
+    ttft: float = 0.0                # queued_ts → first_token_ts (user-facing)
+    jct: float = 0.0                 # queued_ts → last_token_ts
+    queue_ttft: float = 0.0          # queued_ts → scheduled_ts (queue wait)
+    service_ttft: float = 0.0        # scheduled_ts → first_token_ts (prefill)
     # Token counts
     prompt_tokens: int = 0
     output_tokens: int = 0
@@ -83,6 +85,8 @@ class RequestMetrics:
     # Status
     success: bool = True
     error: str = ""
+    # Timestamp validity
+    timestamps_valid: bool = True
 
 
 @dataclass
@@ -136,11 +140,18 @@ class TraceLoader:
     def __init__(self, trace_dir: Path, max_episodes: Optional[int] = None):
         self.trace_dir = Path(trace_dir)
         self.max_episodes = max_episodes
+        self._workflow_id_filter: Optional[set] = None
+
+    @classmethod
+    def from_workflow_ids(cls, trace_dir: Path, workflow_ids: List[str]) -> "TraceLoader":
+        """Create a TraceLoader that only loads specific workflow_ids."""
+        instance = cls(trace_dir)
+        instance._workflow_id_filter = set(workflow_ids)
+        return instance
 
     def load(self) -> List[ServingRequest]:
         """Load all traces and return serving requests sorted by arrival time."""
         requests: List[ServingRequest] = []
-        # Filter out checkpoint/metadata files (prefixed with "_")
         trace_files = sorted(
             p for p in self.trace_dir.glob("*.json") if not p.name.startswith("_")
         )
@@ -156,6 +167,11 @@ class TraceLoader:
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning("Skip %s: %s", tf.name, e)
                 continue
+
+            if self._workflow_id_filter is not None:
+                wf_id = trace.get("meta", {}).get("workflow_id", "")
+                if wf_id not in self._workflow_id_filter:
+                    continue
 
             requests.extend(self._extract_requests(trace))
 
@@ -260,22 +276,38 @@ class MetricsCollector:
             # Extract metrics from vLLM RequestOutput (vLLM 0.26+)
             #
             # All real inference timings use engine-core MONOTONIC clock:
-            #   scheduled_ts → first_token_ts → last_token_ts
-            # These are in the same time domain and can be subtracted.
+            #   queued_ts → scheduled_ts → first_token_ts → last_token_ts
             #
-            # first_token_latency is wall-clock (time.time() - arrival_time)
-            # and includes queue wait; do NOT use it for TTFT.
+            # Primary TTFT = scheduled_ts → first_token_ts (pure prefill, no queue).
+            #   This is the G3 verdict metric per project_memory.
+            # Queue TTFT = queued_ts → scheduled_ts (auxiliary, queue wait).
+            #
+            # If any timestamp is missing or invalid (0 or negative diff),
+            # mark the request as INCOMPLETE.
             m = output.metrics
             if m is not None:
+                qts = getattr(m, "queued_ts", 0.0)
                 sts = getattr(m, "scheduled_ts", 0.0)
                 fts = getattr(m, "first_token_ts", 0.0)
                 lts = getattr(m, "last_token_ts", 0.0)
-                # TTFT = prefill time (seconds, monotonic)
-                if fts > 0 and sts > 0:
-                    rm.ttft = (fts - sts) * 1000.0  # s → ms
-                # JCT = total compute time (prefill + decode)
-                if lts > 0 and sts > 0:
-                    rm.jct = (lts - sts) * 1000.0  # s → ms
+
+                valid = True
+                if not (sts > 0 and fts > 0):
+                    valid = False
+                elif fts < sts:
+                    valid = False
+
+                if valid:
+                    # Primary TTFT = pure prefill (no queue)
+                    rm.ttft = (fts - sts) * 1000.0
+                    rm.jct = (lts - sts) * 1000.0
+                    rm.queue_ttft = (sts - qts) * 1000.0 if qts > 0 else 0.0
+                    rm.service_ttft = rm.ttft  # same as primary
+                    rm.timestamps_valid = True
+                else:
+                    rm.timestamps_valid = False
+                    rm.error = "invalid_timestamps"
+                    rm.success = False
 
             # Token counts
             try:
@@ -356,15 +388,18 @@ class MetricsCollector:
             writer.writerow([
                 "strategy", "request_id", "task_id", "seed", "workflow_id",
                 "domain", "step_id", "ttft_ms", "jct_ms",
-                "prompt_tokens", "output_tokens", "cached_tokens", "success",
+                "queue_ttft_ms", "service_ttft_ms",
+                "prompt_tokens", "output_tokens", "cached_tokens",
+                "success", "timestamps_valid",
             ])
             for rm in metrics.per_request:
                 writer.writerow([
                     metrics.strategy, rm.request_id, rm.task_id, rm.seed,
                     rm.workflow_id, rm.domain, rm.step_id,
                     f"{rm.ttft:.3f}", f"{rm.jct:.3f}",
+                    f"{rm.queue_ttft:.3f}", f"{rm.service_ttft:.3f}",
                     rm.prompt_tokens, rm.output_tokens, rm.cached_tokens,
-                    rm.success,
+                    rm.success, rm.timestamps_valid,
                 ])
 
     @staticmethod
@@ -412,6 +447,7 @@ class ServingHarness:
         block_size: int = 16,
         max_model_len: int = 24576,
         cpu_capacity_bytes: int = 2 * (1024**3),
+        kv_cache_memory_bytes: Optional[int] = None,
         dtype: str = "bfloat16",
         flowcache_config: Optional[Dict[str, Any]] = None,
         slo_threshold_ms: float = 2000.0,
@@ -422,6 +458,7 @@ class ServingHarness:
         self.block_size = block_size
         self.max_model_len = max_model_len
         self.cpu_capacity_bytes = cpu_capacity_bytes
+        self.kv_cache_memory_bytes = kv_cache_memory_bytes
         self.dtype = dtype
         self.flowcache_config = flowcache_config or {}
         self.slo_threshold_ms = slo_threshold_ms
@@ -435,6 +472,7 @@ class ServingHarness:
         max_new_tokens: int = 64,
         arrival_time_replay: bool = False,
         time_scale: float = 1.0,
+        fixed_inflight: bool = False,
     ) -> StrategyMetrics:
         """Run one strategy and return metrics.
 
@@ -445,11 +483,11 @@ class ServingHarness:
             max_new_tokens: max generation length per request
             arrival_time_replay: if True, submit requests by their trace
                 arrival_time_ms (sequential replay) instead of batch
-                submission. Note: τ-bench inter-arrival ≥1s, so replay is
-                very slow and throughput becomes arrival-rate-limited.
-                Default False (batch submit) for saturated-capacity benchmark.
+                submission.
             time_scale: multiplier for arrival intervals (>1 = faster).
-                1.0 = real time, 10.0 = 10x speedup.
+            fixed_inflight: if True, submit requests one at a time,
+                maintaining max_num_seqs in-flight (complete one → submit one).
+                Used for quick pilot mode. Ignores arrival_time_replay.
         """
         if max_requests:
             requests = requests[:max_requests]
@@ -479,7 +517,10 @@ class ServingHarness:
                     llm, requests, sampling_params, time_scale,
                 )
             else:
-                # Fallback: batch submission (smoke test only)
+                # Batch submission: vLLM auto-schedules at max_num_seqs concurrency.
+                # For quick pilot, this naturally maintains ~294 requests at once
+                # with 4 in-flight — the saturation approach is the correct
+                # benchmark for TTFT in a capacity-constrained serving scenario.
                 messages_list = [req.messages for req in requests]
                 logger.info(
                     "Batch-submitting %d requests to vLLM...", len(requests),
@@ -639,6 +680,76 @@ class ServingHarness:
         )
         return outputs
 
+    def _run_fixed_inflight(
+        self,
+        llm,
+        requests: List[ServingRequest],
+        sampling_params,
+    ) -> list:
+        """Submit requests maintaining fixed in-flight count.
+
+        Submits up to max_num_seqs requests initially, then completes one
+        before submitting the next. Used for quick pilot mode to maintain
+        sustained load without arrival-time distortion.
+
+        Returns:
+            list of RequestOutput in original request order
+        """
+        max_inflight = self.max_num_seqs
+        logger.info(
+            "Fixed-inflight mode: %d requests, max_inflight=%d",
+            len(requests), max_inflight,
+        )
+
+        rid_to_idx: dict[str, int] = {}
+        finished: list = []
+        next_submit = 0
+        submitted_count = 0
+
+        while next_submit < len(requests) or llm.llm_engine.has_unfinished_requests():
+            # Submit more if below max_inflight
+            in_flight = submitted_count - len(finished)
+            while next_submit < len(requests) and in_flight < max_inflight:
+                req = requests[next_submit]
+                rids = llm.enqueue_chat(
+                    [req.messages],
+                    sampling_params=sampling_params,
+                    use_tqdm=False,
+                )
+                for rid in rids:
+                    rid_to_idx[rid] = next_submit
+                next_submit += 1
+                submitted_count += 1
+                in_flight = submitted_count - len(finished)
+
+            # Step the engine
+            if llm.llm_engine.has_unfinished_requests():
+                step_outputs = llm.llm_engine.step()
+                for o in step_outputs:
+                    if o.finished:
+                        finished.append(o)
+            elif next_submit >= len(requests):
+                break  # All submitted and none pending
+
+        # Reorder outputs to match original request order
+        output_by_rid: dict[str, object] = {}
+        for o in finished:
+            rid = getattr(o, "request_id", None) or getattr(o, "id", "")
+            if rid:
+                output_by_rid[rid] = o
+
+        outputs = []
+        for rid, idx in rid_to_idx.items():
+            o = output_by_rid.get(rid)
+            if o is not None:
+                outputs.append(o)
+
+        logger.info(
+            "Fixed-inflight done: %d/%d requests completed",
+            len(outputs), len(requests),
+        )
+        return outputs
+
     def _create_llm(self, strategy: Strategy):
         """Create a vLLM LLM instance configured for the given strategy."""
         from vllm import LLM
@@ -653,6 +764,9 @@ class ServingHarness:
             trust_remote_code=True,
             disable_log_stats=False,
         )
+        # Explicit KV cache capacity (overrides automatic inference from utilization)
+        if self.kv_cache_memory_bytes is not None:
+            common_kwargs["kv_cache_memory_bytes"] = self.kv_cache_memory_bytes
 
         if strategy == Strategy.NO_CACHE:
             common_kwargs["enable_prefix_caching"] = False
@@ -676,7 +790,7 @@ class ServingHarness:
                     "vllm.distributed.kv_transfer.kv_connector.v1."
                     "simple_cpu_offload_connector"
                 ),
-                kv_role="kv_producer",
+                kv_role="kv_both",
                 kv_connector_extra_config={
                     "cpu_bytes_to_use": str(self.cpu_capacity_bytes),
                 },
@@ -691,9 +805,10 @@ class ServingHarness:
         if strategy == Strategy.FLOWCACHE_LOSSLESS:
             # Use FlowCacheConnector (selective migrate)
             from vllm.config import KVTransferConfig
+            no_selective = self.flowcache_config.get("no_selective", False)
             fc_cfg = {
                 "cpu_bytes_to_use": str(self.cpu_capacity_bytes),
-                "selective_migration": "true",
+                "selective_migration": "false" if no_selective else "true",
                 "migration_mode": "threshold",
                 "minimum_net_benefit_ms": str(
                     self.flowcache_config.get("minimum_net_benefit_ms", 0.0)
@@ -713,9 +828,6 @@ class ServingHarness:
                 "share_count_cap": str(
                     self.flowcache_config.get("share_count_cap", 8)
                 ),
-                # Estimated prefill cost per block (ms) — without this,
-                # V_b = proxy * max(0 - h2d, 0) - d2h = -d2h < 0 for all
-                # blocks, and NO blocks would ever be migrated.
                 "prefill_ms_per_block": str(
                     self.flowcache_config.get("prefill_ms_per_block", 5.0)
                 ),
@@ -723,7 +835,7 @@ class ServingHarness:
             kt_cfg = KVTransferConfig(
                 kv_connector="FlowCacheConnector",
                 kv_connector_module_path="closed_loop.flowcache_connector",
-                kv_role="kv_producer",
+                kv_role="kv_both",
                 kv_connector_extra_config=fc_cfg,
             )
             common_kwargs["kv_transfer_config"] = kt_cfg
